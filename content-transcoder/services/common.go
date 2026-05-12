@@ -1,0 +1,103 @@
+package services
+
+import (
+	"crypto/sha1"
+	"fmt"
+	"os"
+	"path"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
+)
+
+const (
+	OutputFlag         = "output"
+	DebugFlag          = "debug"
+	CleanOnStartupFlag = "clean-on-startup"
+)
+
+func RegisterCommonFlags(f []cli.Flag) []cli.Flag {
+	return append(f,
+		cli.StringFlag{
+			Name:   OutputFlag + ", o",
+			Usage:  "output (local path)",
+			Value:  "out",
+			EnvVar: "OUTPUT",
+		},
+		cli.BoolFlag{
+			Name:   DebugFlag,
+			Usage:  "enable debug logging",
+			EnvVar: "DEBUG",
+		},
+		cli.BoolFlag{
+			Name:   CleanOnStartupFlag,
+			Usage:  "clean output directory on startup",
+			EnvVar: "CLEAN_ON_STARTUP",
+		},
+	)
+}
+
+func ConfigureDebug(c *cli.Context) {
+	if c.Bool(DebugFlag) {
+		log.SetLevel(log.DebugLevel)
+		log.Debug("debug logging enabled")
+	}
+}
+
+func DistributeByHash(dirs []string, hash string) (string, error) {
+	sort.Strings(dirs)
+	hex := fmt.Sprintf("%x", sha1.Sum([]byte(hash)))[0:5]
+	num64, err := strconv.ParseInt(hex, 16, 64)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to parse hex from hex=%v infohash=%v", hex, hash)
+	}
+	num := int(num64 * 1000)
+	total := 1048575 * 1000
+	interval := total / len(dirs)
+	for i := 0; i < len(dirs); i++ {
+		if num < (i+1)*interval {
+			return dirs[i], nil
+		}
+	}
+	return "", errors.Wrapf(err, "failed to distribute infohash=%v", hash)
+}
+
+func GetDir(location string, hash string) (string, error) {
+	if strings.HasSuffix(location, "*") {
+		prefix := strings.TrimSuffix(location, "*")
+		dir, lp := path.Split(prefix)
+
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			return "", err
+		}
+		var dirs []string
+		for _, f := range files {
+			if f.IsDir() && strings.HasPrefix(f.Name(), lp) {
+				dirs = append(dirs, f.Name())
+			}
+		}
+		if len(dirs) == 0 {
+			p := prefix + "1"
+			err := os.MkdirAll(p, 0755)
+			if err != nil {
+				return "", err
+			}
+			return p + string(os.PathSeparator) + hash, nil
+		} else if len(dirs) == 1 {
+			return dir + dirs[0] + string(os.PathSeparator) + hash, nil
+		} else {
+			d, err := DistributeByHash(dirs, hash)
+			if err != nil {
+				return "", err
+			}
+			return dir + d + string(os.PathSeparator) + hash, nil
+		}
+	} else {
+		return location + "/" + hash, nil
+	}
+}

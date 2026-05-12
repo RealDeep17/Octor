@@ -1,0 +1,147 @@
+package models
+
+import (
+	"context"
+	"fmt"
+	"github.com/go-pg/pg/v10"
+	"github.com/pkg/errors"
+	"strings"
+	"time"
+)
+
+type MediaInfo struct {
+	tableName struct{} `pg:"media_info"`
+
+	ResourceID string    `pg:"resource_id,pk"`
+	Status     int16     `pg:"status,use_zero"`
+	MediaType  *int16    `pg:"media_type"`
+	Error      *string   `pg:"error"`
+	CreatedAt  time.Time `pg:"created_at,default:now()"`
+	UpdatedAt  time.Time `pg:"updated_at,default:now()"`
+
+	// Relations
+	Movies     []*Movie   `pg:"rel:has-many,fk:resource_id"`
+	SeriesList []*Series  `pg:"rel:has-many,fk:resource_id"`
+	Episodes   []*Episode `pg:"rel:has-many,fk:resource_id"`
+}
+
+type MediaInfoStatus int16
+
+const (
+	MediaInfoStatusProcessing MediaInfoStatus = iota
+	MediaInfoStatusDone
+	MediaInfoStatusNoMedia
+	MediaInfoStatusError
+	MediaInfoStatusForbidden
+)
+
+type MediaInfoMediaType int16
+
+const (
+	MediaInfoMediaTypeMovieSingle MediaInfoMediaType = iota
+	MediaInfoMediaTypeSeriesSplitScenes
+	MediaInfoMediaTypeSeriesSingleSeason
+	MediaInfoMediaTypeSeriesMultipleSeasons
+	MediaInfoMediaTypeSeriesCompilation
+	// MovieMultiple is a torrent that bundles several distinct films
+	// (e.g. a "Home Alone Trilogy" pack). Each file is its own movie
+	// with its own title and year — the enricher splits them into
+	// separate movie rows so each can be matched against TMDB.
+	MediaInfoMediaTypeMovieMultiple
+)
+
+func (s MediaInfoMediaType) String() string {
+	switch s {
+	case MediaInfoMediaTypeMovieSingle:
+		return "MovieSingle"
+	case MediaInfoMediaTypeSeriesSplitScenes:
+		return "SeriesSplitScenes"
+	case MediaInfoMediaTypeSeriesSingleSeason:
+		return "SeriesSingleSeason"
+	case MediaInfoMediaTypeSeriesMultipleSeasons:
+		return "SeriesMultipleSeasons"
+	case MediaInfoMediaTypeSeriesCompilation:
+		return "SeriesCompilation"
+	case MediaInfoMediaTypeMovieMultiple:
+		return "MovieMultiple"
+	default:
+		return "Unknown"
+	}
+}
+
+func TryInsertOrLockMediaInfo(ctx context.Context, db *pg.DB, resourceID string, expire time.Duration, force bool) (*MediaInfo, error) {
+	// Attempt to insert a new media_info with "processing" status
+	info := MediaInfo{
+		ResourceID: resourceID,
+		Status:     int16(MediaInfoStatusProcessing),
+	}
+
+	_, err := db.Model(&info).Context(ctx).Insert()
+	if err == nil {
+		// Insert successful — this worker owns the processing
+		return &info, nil
+	}
+
+	// If it's not a duplicate error — return immediately
+	if !strings.Contains(err.Error(), "duplicate key") {
+		return nil, err
+	}
+
+	if force {
+		return &info, nil
+	}
+
+	// Record already exists — attempt to lock it
+	tx, err := db.BeginContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Close() }()
+
+	var existing MediaInfo
+
+	err = tx.Model(&existing).
+		Context(ctx).
+		Where("resource_id = ?", resourceID).
+		Where("status NOT IN (?)", pg.In([]int16{
+			int16(MediaInfoStatusProcessing),
+			int16(MediaInfoStatusNoMedia),
+			int16(MediaInfoStatusError),
+			int16(MediaInfoStatusForbidden),
+		})).
+		Where("updated_at < now() - INTERVAL ?", fmt.Sprintf("%d seconds", int(expire.Seconds()))).
+		For("UPDATE SKIP LOCKED").
+		Limit(1).
+		Select()
+
+	if err != nil {
+		if errors.Is(err, pg.ErrNoRows) {
+			// Lock failed or record is too fresh — skip processing
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Update status to "processing"
+	existing.Status = int16(MediaInfoStatusProcessing)
+
+	_, err = tx.Model(&existing).
+		Context(ctx).
+		Column("status").
+		WherePK().
+		Update()
+	if err != nil {
+		return nil, err
+	}
+
+	return &existing, tx.Commit()
+}
+
+func UpdateMediaInfo(ctx context.Context, db *pg.DB, info *MediaInfo) error {
+	_, err := db.Model(info).
+		Context(ctx).
+		Column("status", "media_type", "error").
+		WherePK().
+		Update()
+	return err
+}

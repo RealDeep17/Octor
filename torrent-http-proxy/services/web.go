@@ -1,0 +1,475 @@
+package services
+
+import (
+	"fmt"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
+
+	"github.com/pkg/errors"
+	"github.com/urfave/cli"
+)
+
+type SourceType string
+
+const (
+	Internal SourceType = "internal"
+	External SourceType = "external"
+)
+
+type Web struct {
+	host             string
+	port             int
+	ln               net.Listener
+	r                *Resolver
+	pr               *HTTPProxy
+	parser           *URLParser
+	bucket           *HybridBucketPool
+	clickHouse       *ClickHouse
+	baseURL          string
+	claims           *Claims
+	ah               *AccessHistory
+	bandwidthLimit   bool
+	sl               *SessionLimiter
+	enforceSessionIP bool
+}
+
+const (
+	webHostFlag              = "host"
+	webPortFlag              = "port"
+	torrentHTTPProxyHostFlag = "torrent-http-proxy-host"
+	torrentHTTPProxyPortFlag = "torrent-http-proxy-port"
+	useBandwidthLimitFlag    = "use-bandwidth-limit"
+	enforceSessionIPFlag     = "enforce-session-ip"
+)
+
+var (
+	promHTTPProxyRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "webtor_http_proxy_request_duration_seconds",
+		Help: "HTTP Proxy request duration in seconds",
+	}, []string{"source", "role", "name", "status"})
+	promHTTPProxyRequestTTFB = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "webtor_http_proxy_request_ttfb_seconds",
+		Help: "HTTP Proxy request ttfb in seconds",
+	}, []string{"source", "role", "name", "status"})
+	promHTTPProxyRequestSize = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "webtor_http_proxy_request_size_bytes",
+		Help: "HTTP Proxy request size bytes",
+	}, []string{"domain", "role", "source", "name", "status"})
+	promHTTPProxyRequestCurrent = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "webtor_http_proxy_request_current",
+		Help: "HTTP Proxy request current",
+	}, []string{"source", "role", "name"})
+	promHTTPProxyRequestTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "webtor_http_proxy_request_total",
+		Help: "HTTP Proxy dial total",
+	}, []string{"source", "role", "name", "status"})
+)
+
+func init() {
+	prometheus.MustRegister(promHTTPProxyRequestDuration)
+	prometheus.MustRegister(promHTTPProxyRequestTTFB)
+	prometheus.MustRegister(promHTTPProxyRequestSize)
+	prometheus.MustRegister(promHTTPProxyRequestCurrent)
+	prometheus.MustRegister(promHTTPProxyRequestTotal)
+}
+
+func NewWeb(c *cli.Context, parser *URLParser, r *Resolver, pr *HTTPProxy, claims *Claims, bp *HybridBucketPool, ch *ClickHouse, ah *AccessHistory, sl *SessionLimiter) *Web {
+	return &Web{
+		host:           c.String(webHostFlag),
+		port:           c.Int(webPortFlag),
+		baseURL:        fmt.Sprintf("http://%s:%d", c.String(torrentHTTPProxyHostFlag), c.Int(torrentHTTPProxyPortFlag)),
+		parser:         parser,
+		r:              r,
+		pr:             pr,
+		claims:         claims,
+		bucket:         bp,
+		clickHouse:     ch,
+		ah:             ah,
+		bandwidthLimit:   c.Bool(useBandwidthLimitFlag),
+		sl:               sl,
+		enforceSessionIP: c.Bool(enforceSessionIPFlag),
+	}
+}
+
+func RegisterWebFlags(f []cli.Flag) []cli.Flag {
+	return append(f,
+		cli.StringFlag{
+			Name:   webHostFlag,
+			Usage:  "listening host",
+			Value:  "",
+			EnvVar: "WEB_HOST",
+		},
+		cli.IntFlag{
+			Name:   webPortFlag,
+			Usage:  "http listening port",
+			Value:  8080,
+			EnvVar: "WEB_PORT",
+		},
+		cli.StringFlag{
+			Name:   torrentHTTPProxyHostFlag,
+			Usage:  "torrent http proxy host",
+			EnvVar: "TORRENT_HTTP_PROXY_SERVICE_HOST",
+		},
+		cli.IntFlag{
+			Name:   torrentHTTPProxyPortFlag,
+			Usage:  "torrent http proxy port",
+			Value:  8080,
+			EnvVar: "TORRENT_HTTP_PROXY_SERVICE_PORT",
+		},
+		cli.BoolFlag{
+			Name:   useBandwidthLimitFlag,
+			Usage:  "use bandwidth limit",
+			EnvVar: "USE_BANDWIDTH_LIMIT",
+		},
+		cli.BoolTFlag{
+			Name:   enforceSessionIPFlag,
+			Usage:  "reject requests whose client IP doesn't match the remoteAddress claim in the JWT (normalized to /24 for v4, /64 for v6). Disable to unblock mobile users if false positives appear.",
+			EnvVar: "ENFORCE_SESSION_IP",
+		},
+	)
+}
+
+// sameSubnet reports whether two IP strings share the same subnet prefix
+// (/24 for IPv4, /64 for IPv6). Returns true when either side is unparseable
+// so we fail open rather than 429 a legitimate user on a malformed claim.
+func sameSubnet(a, b string) bool {
+	ipA := parseClientIP(a)
+	ipB := parseClientIP(b)
+	if ipA == nil || ipB == nil {
+		return true
+	}
+	if v4a, v4b := ipA.To4(), ipB.To4(); v4a != nil && v4b != nil {
+		return v4a.Mask(net.CIDRMask(24, 32)).Equal(v4b.Mask(net.CIDRMask(24, 32)))
+	}
+	if ipA.To4() != nil || ipB.To4() != nil {
+		return false // one is v4, other is v6
+	}
+	return ipA.Mask(net.CIDRMask(64, 128)).Equal(ipB.Mask(net.CIDRMask(64, 128)))
+}
+
+func parseClientIP(s string) net.IP {
+	s = strings.TrimSpace(s)
+	if host, _, err := net.SplitHostPort(s); err == nil {
+		s = host
+	}
+	return net.ParseIP(s)
+}
+
+func (s *Web) getIP(r *http.Request) string {
+	forwarded := r.Header.Get("X-FORWARDED-FOR")
+	if forwarded != "" {
+		return strings.Split(forwarded, ",")[0]
+	}
+	return r.RemoteAddr
+}
+
+func (s *Web) proxyHTTP(w http.ResponseWriter, r *http.Request, src *Source, logger *logrus.Entry) {
+	wi := NewResponseWrtierInterceptor(w)
+	w = wi
+	apiKey := r.URL.Query().Get("api-key")
+	claims, err := s.claims.Get(r.URL.Query().Get("token"), apiKey)
+	if err != nil {
+		// Demote the two known-noisy classes to Debug so dashboards aren't
+		// dominated by stale-embed traffic (cosmic-crab.buzz and similar
+		// hot-link sites with cached/truncated tokens). They generate ~5%
+		// of all thp log lines and are not actionable from our side. The
+		// 403 still goes back to the client; we just stop shouting about
+		// it.
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "Token is expired") ||
+			strings.Contains(errMsg, "invalid number of segments") {
+			logger.WithError(err).Debug("failed to get claims (expired/malformed)")
+		} else {
+			logger.WithError(err).Warn("failed to get claims")
+		}
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	// If the token carries a `hash` claim, it's bound to that specific torrent
+	// and any mismatch is treated as forgery (prevents replay across content).
+	if boundHash, _ := claims["hash"].(string); boundHash != "" && boundHash != src.InfoHash {
+		logger.WithFields(logrus.Fields{
+			"infohash":   src.InfoHash,
+			"bound_hash": boundHash,
+		}).Warn("token hash mismatch")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	source := Internal
+	if r.Header.Get("X-FORWARDED-FOR") != "" {
+		source = External
+	}
+
+	ads := false
+
+	role := "nobody"
+	if r, ok := claims["role"].(string); ok {
+		role = r
+	}
+	if r, ok := claims["ads"].(bool); ok {
+		ads = r
+	}
+	domain := "default"
+	if d, ok := claims["domain"].(string); ok {
+		domain = d
+	}
+
+	sessionID := ""
+	if sid, ok := claims["sessionID"].(string); ok {
+		sessionID = sid
+	}
+
+	if s.enforceSessionIP && source == External && sessionID != "" {
+		if bound, ok := claims["remoteAddress"].(string); ok && bound != "" {
+			reqIP := s.getIP(r)
+			if !sameSubnet(bound, reqIP) {
+				logger.WithFields(logrus.Fields{
+					"session_id": sessionID,
+					"session_ip": bound,
+					"request_ip": reqIP,
+					"infohash":   src.InfoHash,
+					"path":       src.Path,
+				}).Warn("session IP mismatch")
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+		}
+	}
+
+	if s.sl != nil && s.sl.Enabled() && source == External {
+		release, reason := s.sl.Acquire(sessionID, src.InfoHash, src.Path, s.getIP(r))
+		if release == nil {
+			logger.WithFields(logrus.Fields{
+				"session_id": sessionID,
+				"infohash":   src.InfoHash,
+				"path":       src.Path,
+				"request_ip": s.getIP(r),
+				"reason":     reason,
+			}).Warn("session limiter rejected")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		defer release()
+	}
+
+	promHTTPProxyRequestCurrent.WithLabelValues(string(source), role, src.GetEdgeName()).Inc()
+	defer func() {
+		if s.clickHouse != nil && wi.bytesWritten > 0 && wi.GroupedStatusCode() == 200 {
+			err := s.clickHouse.Add(&StatRecord{
+				ApiKey:        apiKey,
+				BytesWritten:  uint64(wi.bytesWritten),
+				Domain:        domain,
+				Duration:      uint64(time.Since(wi.start).Milliseconds()),
+				Edge:          src.GetEdgeName(),
+				GroupedStatus: uint64(wi.GroupedStatusCode()),
+				InfoHash:      src.InfoHash,
+				OriginalPath:  src.OriginPath,
+				Path:          src.Path,
+				Role:          role,
+				SessionID:     sessionID,
+				Source:        string(source),
+				Status:        uint64(wi.statusCode),
+				TTFB:          uint64(wi.ttfb.Milliseconds()),
+				Timestamp:     time.Now(),
+				Ads:           ads,
+			})
+			if err != nil {
+				logger.WithError(err).Warn("failed to store data to ClickHouse")
+			}
+		}
+		promHTTPProxyRequestDuration.WithLabelValues(string(source), role, src.GetEdgeName(), strconv.Itoa(wi.GroupedStatusCode())).Observe(time.Since(wi.start).Seconds())
+		if wi.bytesWritten > 0 {
+			promHTTPProxyRequestTTFB.WithLabelValues(string(source), role, src.GetEdgeName(), strconv.Itoa(wi.GroupedStatusCode())).Observe(wi.ttfb.Seconds())
+		}
+		promHTTPProxyRequestCurrent.WithLabelValues(string(source), role, src.GetEdgeName()).Dec()
+		promHTTPProxyRequestTotal.WithLabelValues(string(source), role, src.GetEdgeName(), strconv.Itoa(wi.GroupedStatusCode())).Inc()
+		promHTTPProxyRequestSize.WithLabelValues(
+			domain,
+			role,
+			string(source),
+			src.GetEdgeName(),
+			strconv.Itoa(wi.GroupedStatusCode()),
+		).Add(float64(wi.bytesWritten))
+		rate, _ := claims["rate"].(string)
+		l := logger.WithFields(logrus.Fields{
+			"domain":     domain,
+			"role":       role,
+			"source":     string(source),
+			"edge":       src.GetEdgeName(),
+			"infohash":   src.InfoHash,
+			"path":       src.Path,
+			"ttfb":       wi.ttfb.Seconds(),
+			"duration":   time.Since(wi.start).Seconds(),
+			"status":     strconv.Itoa(wi.statusCode),
+			"rate":       rate,
+			"session_id": sessionID,
+			"referer":    r.Referer(),
+		})
+		if wi.GroupedStatusCode() == 500 {
+			l.Error("failed to serve request")
+		} else if wi.GroupedStatusCode() == 200 {
+			l.Info("request served successfully")
+		} else {
+			l.Warn("bad request")
+		}
+	}()
+
+	headers := map[string]string{
+		"X-Source-Url":  s.baseURL + "/" + src.InfoHash + src.Path + "?" + src.Query,
+		"X-Proxy-Url":   s.baseURL,
+		"X-Info-Hash":   src.InfoHash,
+		"X-Path":        src.Path,
+		"X-Origin-Path": src.OriginPath,
+		"X-Full-Path":   "/" + src.InfoHash + "/" + url.PathEscape(strings.TrimPrefix(src.Path, "/")),
+		"X-Token":       src.Token,
+		"X-Api-Key":     apiKey,
+		"X-Session-ID":  sessionID,
+	}
+
+	rate, ok := claims["rate"].(string)
+	if ok {
+		headers["X-Download-Rate"] = rate
+	}
+
+	if s.bandwidthLimit && source == External {
+		b, err := s.bucket.Get(claims)
+		if err != nil {
+			logger.WithError(err).Errorf("failed to get bucket")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if b != nil {
+			w = NewThrottledRequestWrtier(w, b)
+		}
+	}
+
+	for k, v := range headers {
+		r.Header.Set(k, v)
+	}
+
+	pr, err := s.pr.Get(src, claims, logger)
+
+	if err != nil {
+		logger.WithError(err).Errorf("failed to get proxy")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if pr == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		return
+	}
+	if s.pr.maxRetries > 0 {
+		r = WithRetryContext(r, &RetryContext{
+			Src:               src,
+			Claims:            claims,
+			Logger:            logger,
+			SvcLoc:            s.pr.r.svcLoc,
+			Cfg:               s.pr.r.cfg,
+			Transport:         s.pr.transport,
+			ExternalTransport: s.pr.externalTransport,
+			MaxRetries:        s.pr.maxRetries,
+			RetryDelay:        s.pr.retryDelay,
+		})
+	}
+	r = WithRulesContext(r, &RulesContext{
+		Claims:       claims,
+		PrimaryToken: r.URL.Query().Get("token"),
+		InfoHash:     src.InfoHash,
+	})
+	r = WithFileKey(r, src.InfoHash, src.Path)
+	pr.ServeHTTP(w, r)
+}
+
+func (s *Web) Serve() error {
+	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return errors.Wrap(err, "failed to web listen to tcp connection")
+	}
+	s.ln = ln
+	mux := http.NewServeMux()
+
+	var ip net.IP
+	ifaces, _ := net.Interfaces()
+	for _, i := range ifaces {
+		addrs, _ := i.Addrs()
+		for _, addr := range addrs {
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+		}
+	}
+
+	mux.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "Current ip:\t%v\n", ip.String())
+		_, _ = fmt.Fprintf(w, "Remote addr:\t%v\n", r.RemoteAddr)
+	})
+
+	mux.HandleFunc("/speedtest", s.handleSpeedtest)
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" ||
+			strings.HasPrefix(r.URL.Path, "/favicon") ||
+			strings.HasPrefix(r.URL.Path, "/ads.txt") ||
+			strings.HasPrefix(r.URL.Path, "/robots.txt") {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.WriteHeader(200)
+			return
+		}
+		logger := logrus.WithFields(logrus.Fields{
+			"URL":  r.URL.String(),
+			"Host": r.Host,
+		})
+
+		src, err := s.parser.Parse(r.URL)
+
+		if err != nil {
+			logger.WithError(err).Error("failed to parse url")
+			w.WriteHeader(500)
+			return
+		}
+
+		logger = logger.WithFields(logrus.Fields{
+			"InfoHash": src.InfoHash,
+			"Path":     src.Path,
+		})
+
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		newPath := ""
+
+		if src.Mod != nil {
+			newPath = src.Mod.Path
+		} else {
+			newPath = src.Path
+		}
+		r.URL.Path = newPath
+
+		s.proxyHTTP(w, r, src, logger)
+
+	})
+	logrus.Infof("serving Web at %v", addr)
+	srv := &http.Server{
+		Handler:        mux,
+		MaxHeaderBytes: 50 << 20,
+	}
+	return srv.Serve(ln)
+}
+
+func (s *Web) Close() {
+	if s.ln != nil {
+		_ = s.ln.Close()
+	}
+}

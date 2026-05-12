@@ -1,0 +1,468 @@
+package main
+
+import (
+	"io/fs"
+	"net/http"
+
+	"github.com/webtor-io/web-ui/handlers/about"
+	wa "github.com/webtor-io/web-ui/handlers/action"
+	wau "github.com/webtor-io/web-ui/handlers/auth"
+	hi18n "github.com/webtor-io/web-ui/handlers/i18n"
+	"github.com/webtor-io/web-ui/handlers/discover"
+	"github.com/webtor-io/web-ui/handlers/discover_ai"
+	"github.com/webtor-io/web-ui/handlers/discover_watchlist"
+	"github.com/webtor-io/web-ui/handlers/donate"
+	we "github.com/webtor-io/web-ui/handlers/embed"
+	wee "github.com/webtor-io/web-ui/handlers/embed/example"
+	"github.com/webtor-io/web-ui/handlers/embed_domain"
+	"github.com/webtor-io/web-ui/handlers/event"
+	"github.com/webtor-io/web-ui/handlers/ext"
+	"github.com/webtor-io/web-ui/handlers/geo"
+	wi "github.com/webtor-io/web-ui/handlers/index"
+	"github.com/webtor-io/web-ui/handlers/instructions"
+	wj "github.com/webtor-io/web-ui/handlers/job"
+	"github.com/webtor-io/web-ui/handlers/legal"
+	"github.com/webtor-io/web-ui/handlers/library"
+	wm "github.com/webtor-io/web-ui/handlers/migration"
+	p "github.com/webtor-io/web-ui/handlers/profile"
+	wr "github.com/webtor-io/web-ui/handlers/resource"
+	sess "github.com/webtor-io/web-ui/handlers/session"
+	"github.com/webtor-io/web-ui/handlers/sitemap"
+	"github.com/webtor-io/web-ui/handlers/speedtest"
+	sta "github.com/webtor-io/web-ui/handlers/static"
+	"github.com/webtor-io/web-ui/handlers/streaming/backends"
+	"github.com/webtor-io/web-ui/handlers/stremio"
+	"github.com/webtor-io/web-ui/handlers/stremio/settings"
+	"github.com/webtor-io/web-ui/handlers/stremio/stremio_addon_url"
+	"github.com/webtor-io/web-ui/handlers/support"
+	"github.com/webtor-io/web-ui/handlers/tests"
+	ush "github.com/webtor-io/web-ui/handlers/user_subtitle"
+	uvsh "github.com/webtor-io/web-ui/handlers/user_video_status"
+	vh "github.com/webtor-io/web-ui/handlers/vault"
+	wh "github.com/webtor-io/web-ui/handlers/watch_history"
+	"github.com/webtor-io/web-ui/handlers/webdav"
+	jj "github.com/webtor-io/web-ui/jobs"
+	as "github.com/webtor-io/web-ui/services/abuse_store"
+	at "github.com/webtor-io/web-ui/services/access_token"
+	ci "github.com/webtor-io/web-ui/services/cache_index"
+	"github.com/webtor-io/web-ui/services/common"
+	"github.com/webtor-io/web-ui/services/geoip"
+	si18n "github.com/webtor-io/web-ui/services/i18n"
+	lr "github.com/webtor-io/web-ui/services/link_resolver"
+	"github.com/webtor-io/web-ui/services/notification"
+	ac "github.com/webtor-io/web-ui/services/anthropic_client"
+	rec "github.com/webtor-io/web-ui/services/recommendations"
+	rum "github.com/webtor-io/web-ui/services/request_url_mapper"
+	"github.com/webtor-io/web-ui/services/turnstile"
+	"github.com/webtor-io/web-ui/services/umami"
+	ua "github.com/webtor-io/web-ui/services/url_alias"
+	usv "github.com/webtor-io/web-ui/services/user_subtitle"
+	uvss "github.com/webtor-io/web-ui/services/user_video_status"
+	"github.com/webtor-io/web-ui/services/vault"
+
+	"github.com/gin-contrib/multitemplate"
+	"github.com/gin-gonic/gin"
+	"github.com/webtor-io/web-ui/services/api"
+	"github.com/webtor-io/web-ui/services/auth"
+	"github.com/webtor-io/web-ui/services/embed"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
+	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/services/claims"
+	"github.com/webtor-io/web-ui/services/job"
+	"github.com/webtor-io/web-ui/services/template"
+	w "github.com/webtor-io/web-ui/services/web"
+
+	stremios "github.com/webtor-io/web-ui/services/stremio"
+)
+
+func makeServeCMD() cli.Command {
+	serveCMD := cli.Command{
+		Name:    "serve",
+		Aliases: []string{"s"},
+		Usage:   "Serves web server",
+		Action:  serve,
+	}
+	configureServe(&serveCMD)
+	return serveCMD
+}
+
+func configureServe(c *cli.Command) {
+	c.Flags = cs.RegisterPGFlags(c.Flags)
+	c.Flags = cs.RegisterNATSFlags(c.Flags)
+	c.Flags = cs.RegisterProbeFlags(c.Flags)
+	c.Flags = cs.RegisterS3ClientFlags(c.Flags)
+	c.Flags = api.RegisterFlags(c.Flags)
+	c.Flags = w.RegisterFlags(c.Flags)
+	c.Flags = common.RegisterFlags(c.Flags)
+	c.Flags = auth.RegisterFlags(c.Flags)
+	c.Flags = claims.RegisterClientFlags(c.Flags)
+	c.Flags = sess.RegisterFlags(c.Flags)
+	c.Flags = sta.RegisterFlags(c.Flags)
+	c.Flags = cs.RegisterRedisClientFlags(c.Flags)
+	c.Flags = as.RegisterFlags(c.Flags)
+	c.Flags = cs.RegisterPprofFlags(c.Flags)
+	c.Flags = umami.RegisterFlags(c.Flags)
+	c.Flags = geoip.RegisterFlags(c.Flags)
+	c.Flags = event.RegisterFlags(c.Flags)
+	c.Flags = library.RegisterFlags(c.Flags)
+	c.Flags = embed.RegisterFlags(c.Flags)
+	c.Flags = rum.RegisterFlags(c.Flags)
+	c.Flags = stremios.RegisterClientFlags(c.Flags)
+	c.Flags = ac.RegisterFlags(c.Flags)
+	c.Flags = configureEnricher(c.Flags)
+	c.Flags = configureRecommendations(c.Flags)
+	c.Flags = jj.RegisterFlags(c.Flags)
+	c.Flags = ci.RegisterFlags(c.Flags)
+	c.Flags = turnstile.RegisterFlags(c.Flags)
+	c.Flags = vault.RegisterApiFlags(c.Flags)
+	c.Flags = vault.RegisterFlags(c.Flags)
+	c.Flags = usv.RegisterFlags(c.Flags)
+}
+
+func serve(c *cli.Context) error {
+	// Setting HTTP Client
+	cl := http.DefaultClient
+
+	// Setting DB
+	pg := cs.NewPG(c)
+	defer pg.Close()
+
+	// Setting Migrations
+	err := pgMigrate(c)
+	if err != nil {
+		return err
+	}
+
+	// Setting template renderer
+	re := multitemplate.NewRenderer()
+
+	// Setting TemplateManager
+	// Setting i18n (must be before template manager for helper registration)
+	locales, _ := fs.Sub(localeFS, "locales")
+	i18nSvc := si18n.New(locales)
+
+	tm := template.NewManager[*w.Context](re).
+		WithHelper(w.NewHelper(c)).
+		WithHelper(umami.NewHelper(c)).
+		WithHelper(geoip.NewHelper()).
+		WithHelper(rec.NewHelper(c)).
+		WithHelper(si18n.NewHelper(i18nSvc)).
+		WithHelper(turnstile.NewHelper(c)).
+		WithHelper(stremios.NewHelper())
+
+	var servers []cs.Servable
+	// Setting Probe
+	probe := cs.NewProbe(c)
+	if probe != nil {
+		servers = append(servers, probe)
+		defer probe.Close()
+	}
+
+	// Setting Pprof
+	pprof := cs.NewPprof(c)
+	if pprof != nil {
+		servers = append(servers, pprof)
+		defer pprof.Close()
+	}
+	// Setting Gin
+	r := gin.Default()
+	r.Use(w.ErrorLogger())
+	r.RedirectTrailingSlash = false
+	r.HTMLRender = re
+
+	// Setting Web
+	web, err := w.New(c, r)
+	if err != nil {
+		return err
+	}
+	servers = append(servers, web)
+	defer web.Close()
+
+	// Setting i18n handler (HTTP middleware + Gin middleware)
+	hi18n.RegisterHandler(r, web, i18nSvc)
+
+	// Setting URL Alias
+	ual := ua.New(pg, r)
+	ual.RegisterHandler(r)
+
+	err = sess.RegisterHandler(c, r, []string{
+		"/auth/dashboard",
+		"/s/",
+		"/token/",
+		"/webdav/",
+		"/transcoder-session/",
+	})
+	if err != nil {
+		return err
+	}
+
+	// Setting Auth
+	a := auth.New(c, cl, pg)
+
+	if a != nil {
+		err := a.Init()
+		if err != nil {
+			return err
+		}
+		a.RegisterHandler(r)
+	}
+
+	// Setting Access Token
+	ats := at.New(pg)
+	ats.RegisterHandler(r)
+
+	// Setting Claims Client
+	cpCl := claims.NewClient(c)
+	if cpCl != nil {
+		defer cpCl.Close()
+	}
+
+	// Setting NATS
+	nats := cs.NewNATS(c)
+	if nats != nil {
+		defer nats.Close()
+	}
+
+	// Setting UserClaims
+	uc := claims.New(c, cpCl, pg)
+	if uc != nil {
+		// Setting UserClaimsHandler
+		uc.RegisterHandler(r)
+	}
+
+	// Setting S3 Client
+	s3Cl := cs.NewS3Client(c, cl)
+
+	// Setting GeoIP
+	gapi := geoip.New(c, cl)
+
+	if gapi != nil {
+		err = geo.RegisterHandler(gapi, r)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Setting Api
+	sapi := api.New(c, cl)
+
+	// Setting ApiClaimsHandler
+	sapi.RegisterHandler(r)
+
+	// Setting Static
+	err = sta.RegisterHandler(c, r)
+	if err != nil {
+		return err
+	}
+
+	// Setting Migration from v1 to v2
+	wm.RegisterHandler(r)
+
+	// Setting Redis
+	redis := cs.NewRedisClient(c)
+	defer redis.Close()
+
+	// Setting AuthHandlers
+	if a != nil {
+		wau.RegisterHandler(r, tm)
+	}
+
+	// Setting shared Anthropic client (nil when ANTHROPIC_API_KEY is unset).
+	// Consumed by both AI recommendations and AI enrichment.
+	anthropicCl := ac.New(c)
+
+	// Setting Enricher
+	en := makeEnricher(c, cl, pg, sapi, anthropicCl)
+
+	// Setting UserSubtitle service. Returns nil when the deployment is not
+	// configured with USER_SUBTITLE_S3_BUCKET; jobs and handlers then treat
+	// the feature as disabled.
+	userSubtitleSvc := usv.New(c, s3Cl, pg)
+
+	// Setting JobQueues
+	queues := job.NewQueues(job.NewStorage(redis, gin.Mode()))
+
+	jobs := jj.New(c, queues, tm, sapi, en, i18nSvc, userSubtitleSvc)
+
+	// Setting JobHandler
+	wj.RegisterHandler(r, queues)
+
+	// Setting AbuseStore
+	asc := as.New(c)
+
+	// Setting Turnstile
+	ts := turnstile.New(c)
+
+	if asc != nil {
+		defer asc.Close()
+		// Setting Support
+		support.RegisterHandler(r, tm, asc, ts)
+
+		// Setting Legal
+		legal.RegisterHandler(r, tm)
+	}
+
+	// Setting About
+	about.RegisterHandler(r, tm)
+
+	// Setting Speedtest
+	speedtest.RegisterHandler(r, tm, sapi, pg)
+
+	// Setting DomainSettings
+	ds, err := embed.NewDomainSettings(c, pg, uc)
+	if err != nil {
+		return err
+	}
+
+	// Setting Vault API
+	vaultApi := vault.NewApi(c, cl)
+
+	// Setting Vault
+	v := vault.New(c, vaultApi, uc, cl, pg, sapi)
+
+	// Setting Notification
+	ns := notification.New(c, pg.Get())
+
+	// Setting VaultHandler
+	if v != nil {
+		vh.RegisterHandler(r, v, tm, pg)
+	}
+
+	// Setting ResourceHandler
+	wr.RegisterHandler(c, r, tm, sapi, jobs, pg, v, en)
+
+	// Setting IndexHandler
+	wi.RegisterHandler(r, tm, pg)
+
+	// Setting UserVideoStatus service
+	uvs := uvss.New(pg.Get())
+
+	// Setting UserVideoStatusHandler (manual mark/unmark)
+	uvsh.RegisterHandler(r, uvs)
+
+	// Setting WatchHistoryHandler
+	wh.RegisterHandler(r, pg, uvs)
+
+	// Setting SitemapHandler
+	sitemap.RegisterHandler(c, r)
+
+	// Setting ActionHandler
+	wa.RegisterHandler(r, tm, jobs, sapi)
+
+	// Setting ProfileHandler
+	p.RegisterHandler(c, r, tm, ats, ual, pg, uc, v)
+
+	// Setting EmbedDomainHandler
+	err = embed_domain.RegisterHandler(c, r, pg)
+	if err != nil {
+		return err
+	}
+
+	// Setting EmbedExamplesHandler
+	wee.RegisterHandler(r, tm)
+
+	// Setting EmbedHandler
+	we.RegisterHandler(c, cl, r, tm, jobs, ds, sapi)
+
+	// Setting ExtHandler
+	ext.RegisterHandler(r, tm)
+
+	// Setting Donate
+	donate.RegisterHandler(r)
+
+	// Setting Discover
+	discover.RegisterHandler(r, tm, pg)
+
+	// Setting AI Recommendations (Discover)
+	//
+	// rec.New returns nil when the feature flag is off or
+	// ANTHROPIC_API_KEY is empty. In that case we skip handler
+	// registration entirely — the routes simply don't exist and gin
+	// returns its default 404, which the Discover frontend reads as
+	// "feature disabled" and hides the section.
+	recSvc := rec.New(c, anthropicCl, pg, redis, en, en)
+	if recSvc != nil {
+		discover_ai.RegisterHandler(r, recSvc)
+	}
+
+	// Setting Discover Watchlist
+	discover_watchlist.RegisterHandler(r, pg, en)
+
+	// Setting Library
+	library.RegisterHandler(c, r, tm, sapi, pg, jobs, cl, s3Cl, en)
+
+	// Setting UserSubtitle handler. When AWS_USER_SUBTITLE_BUCKET is not
+	// set the service is nil; RegisterHandler skips its routes and the UI
+	// hides the feature.
+	ush.RegisterHandler(r, tm, userSubtitleSvc, sapi)
+
+	// Setting CacheIndex
+	cacheIndex := ci.New(c, pg)
+
+	// Setting RequestURLMapper
+	requestURLMapper, err := rum.NewRequestURLMapper(c)
+	if err != nil {
+		return err
+	}
+
+	// Setting StremioBuilder
+	stremioAddonCl := stremios.NewClient(c)
+	sb := stremios.NewBuilder(c, pg, stremioAddonCl, sapi, requestURLMapper)
+
+	// Setting AddonValidator with custom client and cli context
+	av := stremios.NewAddonValidator(c, stremioAddonCl)
+
+	// Setting LinkResolver
+	linkResolver := lr.New(cl, pg, sapi, cacheIndex)
+
+	// Setting Stremio
+	stremio.RegisterHandler(c, r, ats, sb, pg, linkResolver)
+
+	// Setting Handler
+	err = stremio_addon_url.RegisterHandler(c, av, r, pg)
+	if err != nil {
+		return err
+	}
+
+	// Setting Stremio Settings
+	settings.RegisterHandler(r, ats, pg)
+
+	// Setting Streaming Backends
+	backends.RegisterHandler(r, ats, pg, linkResolver)
+
+	// Setting WebDAV
+	webdav.RegisterHandler(c, r, pg, ats, sapi, jobs)
+
+	// Setting Tests
+	tests.RegisterHandler(r, tm)
+
+	// Setting Instructions
+	instructions.RegisterHandler(r, tm, v)
+
+	// Setting Events
+	if nats != nil {
+		eh := event.New(c, nats, pg, v, uc, ns)
+		if eh != nil {
+			servers = append(servers, eh)
+			defer eh.Close()
+		}
+	}
+
+	// Render templates
+	err = tm.Init()
+	if err != nil {
+		return err
+	}
+
+	// Setting Serve
+	serve := cs.NewServe(servers...)
+
+	// And SERVE!
+	err = serve.Serve()
+	if err != nil {
+		log.WithError(err).Error("got server error")
+	}
+	return err
+}

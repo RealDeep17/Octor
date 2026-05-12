@@ -1,0 +1,7 @@
+#!/command/with-contenv sh
+set -a
+source /etc/webtor/common.env
+WEB_PORT=$TORRENT_WEB_SEEDER_SERVICE_PORT
+USE_STAT=false
+set +a
+/app/torrent-web-seeder 2>&1 | s6-log p"[torrent-web-seeder]" 1
