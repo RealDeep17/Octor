@@ -1,0 +1,26 @@
+# Monolith Data & Config
+data/
+postgres/
+custom.env
+*.env
+etc/webtor/secrets/*.env
+
+# Go build artifacts
+web-ui-src/server
+web-ui-src/.go-cache/
+**/vendor/
+
+# Node dependencies & builds
+node_modules/
+**/node_modules/
+web-ui-src/web-ui-new/
+web-ui-src/pub/
+
+# System & IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.bak
+*.orig
+build.log

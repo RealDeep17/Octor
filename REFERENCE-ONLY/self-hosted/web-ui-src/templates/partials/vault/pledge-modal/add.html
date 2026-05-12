@@ -1,0 +1,54 @@
+{{ define "vault/pledge-modal/add" }}
+<h3 class="text-xl font-bold tracking-tight flex items-center gap-2 w-full">
+	<svg class="w-5 h-5 text-w-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+	{{ t .Ctx.Lang "vault.keepAvailable" }}
+</h3>
+	{{ if eq .Data.Status "success" }}
+		{{ template "vault/pledge-modal/add/success" . }}
+	{{ else if eq .Data.Status "error" }}
+		<p class="pt-4 pb-2 text-sm text-w-sub">
+			{{ t .Ctx.Lang "vault.error" }}
+		</p>
+		{{ if .Data.ErrKey }}
+			<div class="progress-alert progress-alert-oneline closeable mb-4">
+				<pre>{{ t .Ctx.Lang .Data.ErrKey }}</pre>
+			</div>
+		{{ end }}
+		<div class="modal-action justify-center">
+			<form method="dialog">
+				<button class="btn btn-soft" data-umami-event="vault-pledge-error-confirmed">{{ t .Ctx.Lang "vault.ok" }}</button>
+			</form>
+		</div>
+	{{ else if .Data.Funded }}
+		{{ template "vault/pledge-modal/add/success" . }}
+	{{ else }}
+		<p class="pt-4 pb-2 text-sm text-w-sub">
+			This self-hosted Vault keeps the torrent warm on your server and stores it locally when peers are available.
+		</p>
+		<div class="bg-base-200/50 rounded-xl p-4 my-3">
+			<table class="table w-full text-sm">
+				<tbody>
+					<tr>
+						<td class="text-left font-semibold text-w-sub">{{ t .Ctx.Lang "vault.torrentSize" }}</td>
+						<td class="text-right text-w-text">{{ printf "%.2f" .Data.TorrentSizeGB }}</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<div class="text-left w-full mt-1 mb-2">
+			<a href="{{ langPath .Ctx.Lang "/instructions/vault" }}" class="text-sm text-w-muted hover:text-w-sub link link-hover" data-umami-event="instruction-vault" target="_blank">{{ t .Ctx.Lang "vault.whatIs" }}</a>
+		</div>
+
+		<div class="modal-action justify-center">
+			<form action="{{ langPath .Ctx.Lang "/vault/add" }}" method="post" data-async-target="#pledge-modal" data-async-push-state="false">
+				<input type="hidden" name="resource_id" value="{{ .Data.ResourceID }}" />
+				<button type="submit" class="btn btn-soft" data-umami-event="vault-store-confirmed">
+					{{ t .Ctx.Lang "vault.storeInVault" }}
+				</button>
+			</form>
+			<form method="dialog">
+				<button class="btn btn-ghost border border-w-line text-w-sub hover:border-w-pink hover:text-base-content" data-umami-event="vault-cancelled">{{ t .Ctx.Lang "vault.cancel" }}</button>
+			</form>
+		</div>
+	{{ end }}
+{{ end }}

@@ -1,0 +1,63 @@
+{{ define "title" }}
+    {{ t $.Lang "instructions.vault.title" }}
+{{ end }}
+{{ define "main" }}
+<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
+  <div class="max-w-[900px] mx-auto">
+    <div class="hidden sm:inline-flex badge badge-lg bg-w-cyan/10 border-w-cyan/30 text-w-cyan gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      {{ t $.Lang "instructions.guide" }}
+    </div>
+
+    <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">{{ t $.Lang "instructions.vault.title" }}</h1>
+
+    <p class="hidden sm:block text-[1.05rem] text-w-sub leading-relaxed mb-10">{{ t $.Lang "vault.signInCard.intro" }}</p>
+
+    <ul class="list-disc pl-6 space-y-2 mb-4 text-[1.05rem] text-w-sub leading-relaxed">
+        <li>{{ t $.Lang "vault.signInCard.feature1" }}</li>
+        <li>{{ t $.Lang "vault.signInCard.feature2" }}</li>
+        <li>{{ t $.Lang "vault.signInCard.feature3" }}</li>
+        <li>{{ t $.Lang "vault.signInCard.feature4" }}</li>
+    </ul>
+
+    <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">{{ t $.Lang "instructions.vault.vpTitle" }}</h2>
+
+    <ul class="list-disc pl-6 space-y-2 mb-4 text-[1.05rem] text-w-sub leading-relaxed">
+        <li>{{ tHTML $.Lang "instructions.vault.vpUnit" }}</li>
+        <li>{{ t $.Lang "instructions.vault.vpSource" }}</li>
+    </ul>
+
+    {{ with .Data.Vault }}
+    <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">{{ t $.Lang "instructions.vault.howTitle" }}</h2>
+
+    <ol class="list-decimal pl-6 space-y-2 mb-4 text-[1.05rem] text-w-sub leading-relaxed">
+        <li>{{ tHTML $.Lang "instructions.vault.howStep1" }}</li>
+        <li>{{ t $.Lang "instructions.vault.howStep2" }}</li>
+        <li>{{ tpHTML $.Lang "instructions.vault.howStep3" "FreezePeriod" (.FreezePeriod | duration) }}</li>
+        <li>{{ tpHTML $.Lang "instructions.vault.howStep4" "TransferTimeout" (.TransferTimeoutPeriod | duration) }}</li>
+    </ol>
+
+    <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">{{ t $.Lang "instructions.vault.claimTitle" }}</h2>
+
+    <ul class="list-disc pl-6 space-y-2 mb-4 text-[1.05rem] text-w-sub leading-relaxed">
+        <li>{{ t $.Lang "instructions.vault.claimItem1" }}</li>
+        <li>{{ tpHTML $.Lang "instructions.vault.claimItem2" "ExpirePeriod" (.ExpirePeriod | duration) }}</li>
+        <li>{{ t $.Lang "instructions.vault.claimItem3" }}</li>
+    </ul>
+
+    <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">{{ t $.Lang "instructions.vault.expireTitle" }}</h2>
+
+    <ul class="list-disc pl-6 space-y-2 mb-4 text-[1.05rem] text-w-sub leading-relaxed">
+        <li>{{ tpHTML $.Lang "instructions.vault.expireItem1" "ExpirePeriod" (.ExpirePeriod | duration) }}</li>
+        <li>{{ t $.Lang "instructions.vault.expireItem2" }}</li>
+    </ul>
+    {{ end }}
+
+    <div class="bg-base-300/50 border border-w-line rounded-xl p-4 mt-6 text-sm text-w-sub">
+      <strong>{{ t $.Lang "instructions.important" }}</strong> {{ t $.Lang "instructions.vault.disclaimer" }}
+    </div>
+  </div>
+</section>
+{{ end }}

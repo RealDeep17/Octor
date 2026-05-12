@@ -1,0 +1,23 @@
+#!/command/with-contenv /bin/sh
+set -a
+source /etc/webtor/common.env
+[ -f /etc/webtor/custom.env ] && source /etc/webtor/custom.env
+export PORT=50099
+set +a
+echo "[init] waiting for postgres..."
+for i in $(seq 1 30); do
+    if pg_isready -h ${PG_HOST:-localhost} -p ${PG_PORT:-5432} -U postgres >/dev/null 2>&1; then
+        if psql -U postgres -lqt | cut -d \| -f 1 | grep -qw app; then
+            echo "[init] ensuring claims provider functions..."
+            psql -U postgres -d app -c "CREATE OR REPLACE FUNCTION public.get_member_claims_by_email(p_email text) RETURNS TABLE(email text, patreon_user_id text, tier_id integer, tier_name text, download_rate bigint, vault_points bigint, embed_noads boolean, site_noads boolean) LANGUAGE sql STABLE AS \$\$ SELECT p_email, 'premium_user'::text, 2::integer, 'premium'::text, NULL::bigint, NULL::bigint, true, true; \$\$;"
+            psql -U postgres -d app -c "CREATE OR REPLACE FUNCTION public.get_member_claims_by_patreon_id(p_patreon_id text) RETURNS TABLE(email text, patreon_user_id text, tier_id integer, tier_name text, download_rate bigint, vault_points bigint, embed_noads boolean, site_noads boolean) LANGUAGE sql STABLE AS \$\$ SELECT ''::text, p_patreon_id, 2::integer, 'premium'::text, NULL::bigint, NULL::bigint, true, true; \$\$;"
+            psql -U postgres -d app -c "GRANT ALL ON FUNCTION public.get_member_claims_by_email(text) TO app;"
+            psql -U postgres -d app -c "GRANT ALL ON FUNCTION public.get_member_claims_by_patreon_id(text) TO app;"
+            psql -U postgres -d app -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO app;"
+            psql -U postgres -d app -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO app;"
+            break
+        fi
+    fi
+    sleep 1
+done
+/app/claims-provider serve 2>&1 | s6-log p"[claims-provider]" 1
