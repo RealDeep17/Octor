@@ -1,0 +1,17 @@
+claims-provider
+content-transcoder
+external-proxy
+generate-api-key-and-secret
+magnet2torrent
+metadata-proxy
+nginx-vod
+postgres
+redis
+rest-api
+srt2vtt
+torrent-archiver
+torrent-http-proxy
+torrent-store
+torrent-web-seeder
+torrent-web-seeder-cleaner
+web-ui

@@ -1,0 +1,15 @@
+.git
+.github
+.idea
+.vscode
+.claude
+node_modules
+assets/dist
+*.md
+docs/
+.env*
+.air.toml
+.dockerignore
+.gitignore
+.playwright-mcp
+web-ui

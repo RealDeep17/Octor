@@ -1,0 +1,14 @@
+#!/command/with-contenv /bin/sh
+set -a
+source /etc/webtor/common.env
+[ -f /etc/webtor/custom.env ] && source /etc/webtor/custom.env
+GRPC_PORT=$CLAIMS_PROVIDER_SERVICE_PORT
+set +a
+echo "[init] waiting for postgres..."
+for i in $(seq 1 30); do
+    if pg_isready -h ${PG_HOST:-localhost} -p ${PG_PORT:-5432} -U postgres >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+/app/claims-provider serve 2>&1 | s6-log p"[claims-provider]" 1

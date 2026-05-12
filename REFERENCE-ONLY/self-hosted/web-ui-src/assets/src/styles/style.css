@@ -1,0 +1,653 @@
+@import 'tailwindcss';
+
+@plugin 'daisyui' {
+  exclude: properties;
+  themes: night;
+}
+
+@config '../../../tailwind.config.js';
+
+/* ===== Video card grid (library + discover) =====
+   Shared visual primitives for video cards. Used by both
+   templates/partials/library/video_list.html (Go templates) and
+   assets/src/js/lib/discover/components/ItemGrid.jsx (Preact).
+   Change here → both pages stay in sync.
+   See docs/uikit.html section 7 "Video Card" for examples. */
+
+.w-card-frame {
+  background-color: #1a2235; /* w-card */
+  border: 1px solid rgba(255, 255, 255, 0.07); /* w-line */
+  border-radius: 0.75rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  transition: border-color 0.3s, opacity 0.3s;
+  container-type: inline-size;
+}
+.w-card-frame:hover {
+  border-color: rgba(108, 92, 231, 0.3); /* w-purple/30 */
+}
+.w-card-frame.is-watched {
+  opacity: 0.7;
+}
+
+/* Card title — auto-color on parent .group hover */
+.w-card-title {
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.15s;
+}
+.group:hover .w-card-title {
+  color: #a29bfe; /* w-purpleL */
+}
+
+/* Active overlay badge on a poster — has text label.
+   Add positioning utility (top-2 right-2 / left-2) and color
+   utility (text-green-400 / text-yellow-400) inline. */
+.w-card-badge {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 9999px;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.w-card-badge:hover {
+  background-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Ghost overlay — icon-only, hover-revealed on desktop, faded on touch.
+   Add positioning + hover color utility (hover:text-green-400) inline. */
+.w-card-badge-ghost {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  color: #94a3b8; /* w-sub */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.group:hover .w-card-badge-ghost {
+  opacity: 1;
+}
+.w-card-badge-ghost:hover {
+  background-color: rgba(0, 0, 0, 0.9);
+}
+@media (hover: none) {
+  .w-card-badge-ghost {
+    opacity: 0.5;
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+}
+
+/* Container-query responsive: hide badge text labels and show compact
+   stars when the card is narrower than 210px. In the current grid layout
+   (max-w-900px, 2–4 cols) cards are ~140–213px, so badges stay icon-only
+   and stars stay compact on most configurations — preventing overlap. */
+@container (max-width: 209px) {
+  .w-card-badge-label {
+    display: none;
+  }
+  .w-card-badge {
+    padding: 0.375rem;
+  }
+  .w-card-stars-full {
+    display: none;
+  }
+}
+@container (min-width: 210px) {
+  .w-card-stars-compact {
+    display: none;
+  }
+}
+
+@utility loading-elipsis {
+  &::after {
+    overflow: hidden;
+    animation: ellipsis steps(4, end) 1500ms infinite;
+    content: '...';
+    width: 0;
+    display: inline-block;
+    vertical-align: bottom;
+  }
+}
+
+@utility popin {
+  animation: popin 200ms;
+}
+
+@property --promo-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@utility promo {
+  @apply p-4 pr-8 mb-6 w-full max-w-[680px] mx-auto block text-center text-white relative z-10;
+  font-size: 0.9375rem;
+  border-radius: var(--rounded-box, 1rem);
+  position: relative;
+  overflow: hidden;
+  background: #0a0a14;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: var(--rounded-box, 1rem);
+    background: conic-gradient(
+      from var(--promo-angle),
+      #e84393, #6c5ce7, #00cec9, #fdcb6e, #e84393
+    );
+    animation: promo-spin 3s linear infinite;
+    z-index: -2;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border-radius: calc(var(--rounded-box, 1rem) - 2px);
+    background: #0a0a14;
+    z-index: -1;
+  }
+}
+
+@keyframes promo-spin {
+  to { --promo-angle: 360deg; }
+}
+
+/* Promo close button */
+.promo-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.375rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  border-radius: 9999px;
+  z-index: 10;
+  transition: color 0.2s, background-color 0.2s;
+}
+.promo-close:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Compact promo for inner pages */
+.promo-compact #promo-banner {
+  max-width: 100%;
+}
+.promo-compact .promo {
+  padding: 0.5rem 2.25rem 0.5rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  max-width: 100%;
+}
+.promo-compact .promo-close {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+@utility progress-alert {
+  @apply shadow-lg py-4 rounded-box popin;
+  background-color: #111827;
+  border: 1px solid rgba(255,255,255,0.07);
+  position: relative;
+
+  pre {
+    @apply px-5 py-1 leading-7 whitespace-pre-wrap flex items-start text-sm;
+    color: #94a3b8;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+    &::before {
+      content: '';
+      @apply w-1.5 h-1.5 rounded-full shrink-0 mt-[0.720rem] mx-2.25;
+      background-color: #64748b;
+    }
+
+    &.continue {
+      &::before {
+        content: none;
+      }
+      @apply pl-[2.125rem];
+    }
+
+    &.error-summary,
+    &.warn-summary {
+      @apply px-5 py-1.5 rounded-lg mx-5 mt-1;
+      background-color: rgba(232, 67, 147, 0.1);
+      color: #fd79a8;
+      &::before { content: none; }
+    }
+
+    &.done-summary,
+    &.download-summary,
+    &.redirect-summary {
+      @apply px-5 py-1.5 rounded-lg mx-5 mt-1;
+      background-color: rgba(0, 206, 201, 0.1);
+      color: #00cec9;
+      &::before { content: none; }
+    }
+
+    &.inprogress,
+    &.statusupdate {
+      color: #00cec9;
+      &::before {
+        background-color: #00cec9;
+        animation: dot-pulse 1.5s ease-in-out infinite;
+      }
+    }
+
+    &.statusupdate {
+      span.task-status {
+        @apply pl-1;
+        color: #64748b;
+        &::before { content: '('; }
+        &::after { content: ')'; }
+      }
+    }
+
+    &.done {
+      color: #00cec9;
+      &::before {
+        content: '✓';
+        background: none;
+        width: auto;
+        height: auto;
+        border-radius: 0;
+        margin-top: 0;
+        animation: none;
+        color: #00cec9;
+        font-weight: 700;
+        line-height: 1.75rem;
+      }
+      span.task-status { display: none; }
+    }
+
+    &.error {
+      color: #fd79a8;
+      &::before {
+        content: '✕';
+        background: none;
+        width: auto;
+        height: auto;
+        border-radius: 0;
+        margin-top: 0;
+        animation: none;
+        color: #e84393;
+        font-weight: 700;
+        line-height: 1.75rem;
+      }
+      span.task-status { display: none; }
+    }
+
+    &.skip {
+      color: #fbbf24;
+      &::before {
+        content: '»';
+        background: none;
+        width: auto;
+        height: auto;
+        border-radius: 0;
+        margin-top: 0;
+        animation: none;
+        color: #fbbf24;
+        font-weight: 700;
+        line-height: 1.75rem;
+      }
+      span.task-status { display: none; }
+    }
+
+    &.warn {
+      color: #fd79a8;
+      &::before {
+        content: '⚠';
+        background: none;
+        width: auto;
+        height: auto;
+        border-radius: 0;
+        margin-top: 0;
+        animation: none;
+        color: #fd79a8;
+        font-weight: 700;
+        line-height: 1.75rem;
+        font-size: 0.75rem;
+      }
+      span.task-status { display: none; }
+    }
+  }
+
+  .close {
+    @apply btn btn-sm;
+    background-color: rgba(0, 206, 201, 0.10) !important;
+    border-color: rgba(0, 206, 201, 0.30) !important;
+    color: #00cec9 !important;
+  }
+  .close:hover {
+    background-color: rgba(0, 206, 201, 0.20) !important;
+    border-color: rgba(0, 206, 201, 0.45) !important;
+    color: #00cec9 !important;
+  }
+
+  .alert-close-wrapper {
+    @apply gap-2 px-5;
+  }
+
+  &.progress-alert-oneline {
+    @apply flex items-center;
+    pre { @apply flex-grow; }
+    .close { @apply mr-4; }
+  }
+}
+
+@layer utilities {
+
+  @keyframes ellipsis {
+    to {
+      width: 2.25em;
+    }
+  }
+
+  @keyframes dot-pulse {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.8;
+    }
+    50% {
+      transform: scale(1.5);
+      opacity: 1.0;
+    }
+  }
+
+  @keyframes popin {
+    from {
+      transform: scaleX(0.95);
+      opacity: 0;
+    }
+
+    to {
+      transform: scaleX(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes vault-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.45; }
+  }
+
+  .vault-pulse {
+    animation: vault-pulse 1.8s ease-in-out infinite;
+  }
+
+  /* Progress row hosts an absolutely-positioned percent indicator that rides
+     the right edge of the gradient fill. position:relative on the <tr> makes
+     the indicator escape its host <td> and align to the row width. */
+  tr[data-vault-progress] {
+    position: relative;
+  }
+
+  .vault-progress-pct {
+    position: absolute;
+    bottom: 1px;
+    transform: translateX(-100%);
+    padding: 0 0.4rem;
+    font-size: 0.6rem;
+    font-weight: 500;
+    line-height: 1;
+    color: #a29bfe;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+    transition: left 250ms ease-out;
+  }
+
+  /* Below FLIP_PCT the fill is too narrow to host the indicator on its left
+     side (it would clip past the row's left edge), so it sits to the right of
+     the gradient edge instead. */
+  .vault-progress-pct.vault-progress-pct--right {
+    transform: translateX(0);
+  }
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:focus {
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+
+/* ===== Override DaisyUI night theme to match redesign ===== */
+[data-theme="night"] {
+  --color-base-100: oklch(16.630% 0.0262 269.371) !important;   /* #0a0e1a */
+  --color-base-200: oklch(21.008% 0.0318 264.665) !important;   /* #111827 */
+  --color-base-300: oklch(25.395% 0.0380 266.275) !important;   /* #1a2235 */
+  --color-base-content: oklch(96.826% 0.0069 247.896) !important; /* #f1f5f9 */
+  --color-accent: oklch(64.306% 0.2118 355.207) !important;      /* #e84393 */
+  --color-accent-content: oklch(100% 0 0) !important;             /* white */
+}
+
+/* ===== Redesign utilities ===== */
+
+.gradient-text,
+.gradient-stat {
+  background: linear-gradient(135deg, #e84393 0%, #a29bfe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  /* tracking-tighter collapses the inline box short of the last glyph's
+     right edge, so background-clip:text cuts the final letter (visible
+     on Cyrillic "е" in hero "торренты в браузере"). Tiny trailing pad
+     gives the gradient paint room for the whole glyph. */
+  padding-right: 0.08em;
+}
+
+.hero-glow {
+  background: radial-gradient(circle, rgba(232,67,147,0.1) 0%, rgba(108,92,231,0.05) 40%, transparent 70%);
+}
+
+.cta-glow {
+  background: radial-gradient(circle, rgba(232,67,147,0.18) 0%, rgba(232,67,147,0.06) 40%, transparent 70%);
+}
+
+.upload-dashed {
+  border: 2px dashed rgba(232, 67, 147, 0.3);
+  transition: all 0.3s;
+}
+.upload-dashed:hover,
+.upload-dashed-active {
+  border-color: #e84393;
+  background: rgba(232, 67, 147, 0.06);
+}
+
+/* "My Subtitles" selected row: highlight the whole <li> in the purple
+   tone that matches btn-soft-purple, and undo the generic
+   text-primary/underline applied to .subtitle by markTrack — inside
+   this list the active state is row-level, not inline text. */
+#my-subtitles ul > li:has(.subtitle[data-default="true"]) {
+  background-color: rgba(108, 92, 231, 0.12);
+  box-shadow: inset 3px 0 0 #6c5ce7;
+}
+#my-subtitles .subtitle.text-primary,
+#my-subtitles .subtitle.underline {
+  color: inherit;
+  text-decoration: none;
+}
+#my-subtitles ul > li:has(.subtitle[data-default="true"]) .subtitle > div:first-child {
+  color: #a29bfe;
+}
+
+.btn-pink {
+  background-color: #e84393 !important;
+  border-color: #e84393 !important;
+  color: #fff !important;
+}
+.btn-pink:hover {
+  background-color: #fd79a8 !important;
+  border-color: #fd79a8 !important;
+  box-shadow: 0 0 24px rgba(232, 67, 147, 0.35);
+}
+
+.btn-soft {
+  background-color: rgba(232, 67, 147, 0.10) !important;
+  border-color: rgba(232, 67, 147, 0.30) !important;
+  color: #fd79a8 !important;
+}
+.btn-soft:hover {
+  background-color: rgba(232, 67, 147, 0.20) !important;
+  border-color: rgba(232, 67, 147, 0.45) !important;
+  color: #fd79a8 !important;
+}
+
+.btn-soft-cyan {
+  background-color: rgba(0, 206, 201, 0.10) !important;
+  border-color: rgba(0, 206, 201, 0.30) !important;
+  color: #00cec9 !important;
+}
+.btn-soft-cyan:hover {
+  background-color: rgba(0, 206, 201, 0.20) !important;
+  border-color: rgba(0, 206, 201, 0.45) !important;
+  color: #00cec9 !important;
+}
+
+.btn-soft-purple {
+  background-color: rgba(108, 92, 231, 0.10) !important;
+  border-color: rgba(108, 92, 231, 0.30) !important;
+  color: #a29bfe !important;
+}
+.btn-soft-purple:hover {
+  background-color: rgba(108, 92, 231, 0.20) !important;
+  border-color: rgba(108, 92, 231, 0.45) !important;
+  color: #a29bfe !important;
+}
+
+.toggle-soft:checked,
+.toggle-soft[aria-checked=true] {
+  --input-color: #fd79a8 !important;
+  background-color: rgba(232, 67, 147, 0.15) !important;
+  border-color: rgba(232, 67, 147, 0.30) !important;
+}
+
+/* Force custom text colors over DaisyUI component defaults */
+[data-theme="night"] .badge.text-w-pinkL {
+  color: #fd79a8 !important;
+}
+[data-theme="night"] .badge.text-w-muted {
+  color: #64748b !important;
+}
+[data-theme="night"] .badge.text-w-cyan {
+  color: #00cec9 !important;
+}
+[data-theme="night"] .text-w-pinkL {
+  color: #fd79a8;
+}
+[data-theme="night"] .text-w-sub {
+  color: #94a3b8;
+}
+
+/* Menu link hover: override DaisyUI menu active/hover color */
+.navbar-redesign .menu a:hover {
+  color: #f1f5f9 !important;
+  background-color: rgba(255,255,255,0.05) !important;
+}
+
+/* Ghost button hover: override DaisyUI btn-ghost hover color */
+.btn-ghost.text-w-sub:hover,
+.btn-ghost.text-w-muted:hover {
+  color: #f1f5f9 !important;
+}
+
+/* Dark-theme-specific overrides */
+[data-theme="night"] .collapse-webtor {
+  background-color: #1a2235 !important;
+}
+
+.collapse-webtor > .collapse-content {
+  position: relative;
+  z-index: 1;
+}
+
+[data-theme="night"] .navbar-redesign {
+  background-color: rgba(10, 14, 26, 0.9);
+}
+
+[data-theme="night"] .stat {
+  border-color: rgba(255,255,255,0.07) !important;
+}
+
+/* Collapse arrow color */
+[data-theme="night"] .collapse-plus > .collapse-title::after {
+  color: #64748b;
+}
+
+
+/* Toast notifications */
+.toast-alert {
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #fff;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateX(1rem);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.toast-alert.toast-show {
+  opacity: 1;
+  transform: translateX(0);
+}
+.toast-alert-success,
+.toast-alert-info {
+  background-color: rgba(0, 206, 201, 0.15);
+  border: 1px solid rgba(0, 206, 201, 0.30);
+  color: #00cec9;
+}
+.toast-alert-error {
+  background-color: rgba(232, 67, 147, 0.15);
+  border: 1px solid rgba(232, 67, 147, 0.30);
+  color: #fd79a8;
+}
+
+/* Hide empty pledge/library button containers to prevent flex gap */
+#pledge-button:not(:has(*)),
+#library-button:not(:has(*)) {
+  display: none;
+}
+
+/* Progress inside modal: hide cancel (modal has its own X), remove bottom margin.
+   Scoped to btn-sm without border to spare the wget/curl/URL chips (btn-xs + border). */
+.modal-box .btn-sm.btn-ghost.closeable-close:not(.border) {
+  display: none !important;
+}
+.modal-box .progress-alert {
+  margin-bottom: 0 !important;
+}

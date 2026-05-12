@@ -1,0 +1,71 @@
+package library
+
+import (
+	"net/http"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/urfave/cli"
+	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/handlers/library/helpers"
+	"github.com/webtor-io/web-ui/jobs"
+	"github.com/webtor-io/web-ui/services/api"
+	"github.com/webtor-io/web-ui/services/enrich"
+	"github.com/webtor-io/web-ui/services/template"
+	"github.com/webtor-io/web-ui/services/web"
+)
+
+const (
+	awsPosterCacheBucket = "aws-poster-cache-bucket"
+)
+
+func RegisterFlags(f []cli.Flag) []cli.Flag {
+	return append(f,
+		cli.StringFlag{
+			Name:   awsPosterCacheBucket,
+			Usage:  "aws poster cache bucket",
+			EnvVar: "AWS_POSTER_CACHE_BUCKET",
+		},
+	)
+}
+
+type Handler struct {
+	tb                  template.Builder[*web.Context]
+	api                 *api.Api
+	pg                  *cs.PG
+	jobs                *j.Jobs
+	cl                  *http.Client
+	s3Cl                *cs.S3Client
+	enricher            *enrich.Enricher
+	posterCacheS3Bucket string
+}
+
+func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs, cl *http.Client, s3Cl *cs.S3Client, en *enrich.Enricher) {
+	h := &Handler{
+		tb: tm.MustRegisterViews("library/*").
+			WithHelper(helpers.NewStarsHelper()).
+			WithHelper(helpers.NewMenuHelper()).
+			WithHelper(helpers.NewSortHelper()).
+			WithHelper(helpers.NewVideoContentHelper()).
+			WithLayout("main"),
+		api:                 api,
+		pg:                  pg,
+		jobs:                jobs,
+		cl:                  cl,
+		s3Cl:                s3Cl,
+		enricher:            en,
+		posterCacheS3Bucket: c.String(awsPosterCacheBucket),
+	}
+	lg := r.Group("/lib")
+	lg.GET("/", h.index)
+	lg.GET("/:type", h.index)
+	plg := lg.Group("")
+	plg.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"GET"},
+	}))
+	plg.GET("/:type/poster/:imdb_id/:file", h.poster)
+	plg.GET("/episode/still/:video_id/:season/:episode/:file", h.still)
+	lg.POST("/add", h.add)
+	lg.POST("/remove", h.remove)
+}

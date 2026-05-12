@@ -1,0 +1,22 @@
+#!/command/with-contenv /bin/sh
+set -a
+source /etc/webtor/common.env
+WEB_PORT=$TORRENT_WEB_SEEDER_SERVICE_PORT
+USE_STAT=false
+DATA_DIR=/data
+# Maximize peer connections for sustained high throughput (avoids burst-then-drop)
+ESTABLISHED_CONNS_PER_TORRENT=500
+HALF_OPEN_CONNS_PER_TORRENT=200
+TORRENT_PEERS_HIGH_WATER=500
+TORRENT_PEERS_LOW_WATER=200
+TOTAL_HALF_OPEN_CONNS=500
+PIECE_HASHERS_PER_TORRENT=16
+set +a
+echo "[init] waiting for postgres..."
+for i in $(seq 1 30); do
+    if pg_isready -h ${PG_HOST:-localhost} -p ${PG_PORT:-5432} -U postgres >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+/app/torrent-web-seeder 2>&1 | s6-log p"[torrent-web-seeder]" 1

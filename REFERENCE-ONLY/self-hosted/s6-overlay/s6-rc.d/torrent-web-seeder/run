@@ -1,0 +1,14 @@
+#!/command/with-contenv /bin/sh
+set -a
+source /etc/webtor/common.env
+WEB_PORT=$TORRENT_WEB_SEEDER_SERVICE_PORT
+USE_STAT=false
+set +a
+echo "[init] waiting for postgres..."
+for i in $(seq 1 30); do
+    if pg_isready -h ${PG_HOST:-localhost} -p ${PG_PORT:-5432} -U postgres >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+/app/torrent-web-seeder 2>&1 | s6-log p"[torrent-web-seeder]" 1
