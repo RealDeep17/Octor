@@ -1,0 +1,209 @@
+package profile
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+
+	"github.com/go-pg/pg/v10"
+	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
+	"github.com/urfave/cli"
+	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/models"
+	at "github.com/webtor-io/web-ui/services/access_token"
+	"github.com/webtor-io/web-ui/services/auth"
+	"github.com/webtor-io/web-ui/services/claims"
+	"github.com/webtor-io/web-ui/services/common"
+	"github.com/webtor-io/web-ui/services/i18n"
+	"github.com/webtor-io/web-ui/services/stremio"
+	ua "github.com/webtor-io/web-ui/services/url_alias"
+	"github.com/webtor-io/web-ui/services/vault"
+	"github.com/webtor-io/web-ui/services/web"
+
+	"github.com/gin-gonic/gin"
+	"github.com/webtor-io/web-ui/services/template"
+)
+
+// BackendTypeInfo represents information about a streaming backend type
+type BackendTypeInfo struct {
+	Type        string
+	DisplayName string
+}
+
+type Data struct {
+	StremioAddonURL       string
+	WebDAVURL             string
+	EmbedDomains          []models.EmbedDomain
+	AddonUrls             []models.StremioAddonUrl
+	StremioSettings       *models.StremioSettingsData
+	StreamingBackends     []*models.StreamingBackend
+	AvailableBackendTypes []BackendTypeInfo
+	Is4KAvailable         bool
+	MinBitrateFor4KMbps   int64
+	VaultStats            *vault.UserStats
+	ErrKey                string
+	DisableWebDAV         bool
+	DisableEmbed          bool
+}
+
+type Handler struct {
+	tb            template.Builder[*web.Context]
+	ual           *ua.UrlAlias
+	at            *at.AccessToken
+	pg            *cs.PG
+	claims        *claims.Claims
+	vault         *vault.Vault
+	disableWebDAV bool
+	disableEmbed  bool
+}
+
+func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], at *at.AccessToken, ual *ua.UrlAlias, pg *cs.PG, cl *claims.Claims, v *vault.Vault) {
+	h := &Handler{
+		tb:            tm.MustRegisterViews("profile/*").WithLayout("main"),
+		at:            at,
+		ual:           ual,
+		pg:            pg,
+		claims:        cl,
+		vault:         v,
+		disableWebDAV: c.Bool(common.DisableWebDAVFlag),
+		disableEmbed:  c.Bool(common.DisableEmbedFlag),
+	}
+	r.GET("/profile", h.get)
+	gr := r.Group("/profile")
+	gr.Use(auth.HasAuth)
+	gr.POST("/delete", h.delete)
+}
+
+// getAvailableBackendTypes returns the list of available streaming backend types
+func getAvailableBackendTypes() []BackendTypeInfo {
+	return []BackendTypeInfo{
+		{Type: string(models.StreamingBackendTypeRealDebrid), DisplayName: "Real-Debrid"},
+		{Type: string(models.StreamingBackendTypeTorbox), DisplayName: "Torbox"},
+	}
+}
+
+func (s *Handler) getStremioAddonURL(c *gin.Context) (string, error) {
+	at, err := s.at.GetTokenByName(c, "stremio")
+	if at == nil {
+		return "", err
+	}
+	url := fmt.Sprintf("/%s/%s/stremio/", common.AccessTokenParamName, at.Token)
+
+	al, err := s.ual.Get(c.Request.Context(), url, false)
+	if err != nil {
+		return "", err
+	}
+	return al + "/manifest.json", nil
+
+}
+
+func (s *Handler) getWebDAVURL(c *gin.Context) (string, error) {
+	at, err := s.at.GetTokenByName(c, "webdav")
+	if at == nil {
+		return "", err
+	}
+	url := fmt.Sprintf("/%s/%s/webdav/fs/", common.AccessTokenParamName, at.Token)
+
+	al, err := s.ual.Get(c.Request.Context(), url, true)
+	if err != nil {
+		return "", err
+	}
+	return al + "/webdav/", nil
+}
+
+func deleteUser(ctx context.Context, db *pg.DB, userID uuid.UUID) error {
+	return models.DeleteUser(ctx, db, userID)
+}
+
+func (s *Handler) delete(c *gin.Context) {
+	u := auth.GetUserFromContext(c)
+	db := s.pg.Get()
+	if err := deleteUser(c.Request.Context(), db, u.ID); err != nil {
+		web.RedirectWithError(c, err)
+		return
+	}
+	c.Redirect(http.StatusFound, "/logout")
+}
+
+func (s *Handler) get(c *gin.Context) {
+	u := auth.GetUserFromContext(c)
+	if !u.HasAuth() {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+	stremioURL, err := s.getStremioAddonURL(c)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get stremio addon url"))
+		return
+	}
+	webdavURL, err := s.getWebDAVURL(c)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get webdav url"))
+		return
+	}
+
+	// Get user domains
+	db := s.pg.Get()
+	domains, err := models.GetUserDomains(c.Request.Context(), db, u.ID)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get user domains"))
+		return
+	}
+
+	// Get user addon URLs
+	addonUrls, err := models.GetAllUserStremioAddonUrls(c.Request.Context(), db, u.ID)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get user addon urls"))
+		return
+	}
+
+	// Get Stremio settings. When the user has never saved settings, prefill
+	// the preferred language with the current UI language so the dropdown
+	// shows a sensible default — saving the form locks it in.
+	existingSS, err := models.GetUserStremioSettings(c.Request.Context(), db, u.ID)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get stremio settings"))
+		return
+	}
+	var ss *models.StremioSettingsData
+	if existingSS == nil {
+		ss = models.GetDefaultStremioSettings()
+		if l := stremio.LanguageByCode(i18n.GetLang(c)); l != nil {
+			ss.PreferredLanguage = l.Code
+		}
+	} else {
+		ss = existingSS.Settings
+	}
+
+	// Get user streaming backends
+	streamingBackends, err := models.GetUserStreamingBackends(c.Request.Context(), db, u.ID)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get user streaming backends"))
+		return
+	}
+
+	// Get vault statistics if vault service is available
+	var vaultStats *vault.UserStats
+	if s.vault != nil {
+		vaultStats, _, err = s.vault.GetUserStats(c.Request.Context(), u)
+		if err != nil {
+			_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get vault user stats"))
+			return
+		}
+	}
+
+	s.tb.Build("profile/get").HTML(http.StatusOK, web.NewContext(c).WithData(&Data{
+		StremioAddonURL:       stremioURL,
+		WebDAVURL:             webdavURL,
+		EmbedDomains:          domains,
+		AddonUrls:             addonUrls,
+		StremioSettings:       ss,
+		StreamingBackends:     streamingBackends,
+		AvailableBackendTypes: getAvailableBackendTypes(),
+		VaultStats:            vaultStats,
+		ErrKey:                c.Query("err"),
+		DisableWebDAV:         s.disableWebDAV,
+		DisableEmbed:          s.disableEmbed,
+	}))
+}

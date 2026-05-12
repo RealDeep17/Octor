@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html style="background-color: black;">
+    <head>
+        <script>
+            window._id = "{{ .Data.ID }}";
+            window._CSRF = "{{ .CSRF }}";
+            window._embedSettings = {{ .Data.EmbedSettings | json }};
+            window._domainSettings = {{ .Data.DomainSettings | json }};
+            window._sessionID = "{{ .SessionID }}";
+            {{- if useUmami }}
+            window._umami = {{ umamiConfig | json }};
+            {{- end }}
+            window._tier = "{{ .Claims | tierName }}"
+        </script>
+        {{ template "embed_extra" . }}
+        {{ "embed.css" | asset }}
+        {{ "embed/index.js" | asset }}
+    </head>
+    <body data-iframe-height class="relative" style="background-color: black;">
+        {{ if .ErrKey }}
+        <div class="progress-alert progress-alert-oneline mb-10 closeable relative bg-black/50">
+            <pre>{{ t $.Lang $.ErrKey }}</pre>
+            <a class="closeable-close close">ok</a>
+        </div>
+        {{ end }} 
+        {{ with .Data }}
+        {{ if has . "Job" }}
+        <form class="hidden progress-alert progress-alert-block mb-10 closeable bg-black/50" data-async-progress-log="{{ makeJobLogURL $.Lang .Job }}">
+            <div class="log-target"></div>
+        </form>
+        {{ end }}
+        {{ end }}
+    </body>
+</html>

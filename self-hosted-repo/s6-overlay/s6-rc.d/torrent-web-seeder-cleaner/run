@@ -1,0 +1,5 @@
+#!/command/with-contenv sh
+set -a
+source /etc/webtor/common.env
+set +a
+/app/torrent-web-seeder-cleaner s 2>&1 | s6-log p"[torrent-web-seeder-cleaner]" 1

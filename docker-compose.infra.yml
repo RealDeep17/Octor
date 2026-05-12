@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: octor-postgres
+    environment:
+      - POSTGRES_USER=webtor
+      - POSTGRES_PASSWORD=webtor
+      - POSTGRES_DB=webtor
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra-data/postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: octor-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./infra-data/redis:/data
+
+  nats:
+    image: nats:2-alpine
+    container_name: octor-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  # Optional: SuperTokens if you want a local auth instance
+  # supertokens:
+  #   image: registry.supertokens.io/supertokens/supertokens-postgresql
+  #   container_name: octor-supertokens
+  #   depends_on:
+  #     - postgres
+  #   ports:
+  #     - "3567:3567"
+  #   environment:
+  #     - POSTGRESQL_CONNECTION_URI=postgresql://webtor:webtor@postgres:5432/webtor

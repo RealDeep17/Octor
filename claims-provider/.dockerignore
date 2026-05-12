@@ -1,0 +1,11 @@
+.git
+.github
+.vscode
+.dockerignore
+*Dockerfile*
+README.md
+Makefile
+LICENSE
+__debug_bin
+.DS_Store
+node_modules

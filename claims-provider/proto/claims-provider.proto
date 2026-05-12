@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+option go_package = "./";
+
+service ClaimsProvider {
+    rpc Get (GetRequest) returns (GetResponse);
+}
+
+message GetRequest {
+    string email = 1;
+    string patreon_user_id = 2;
+}
+
+message GetResponse {
+    Context context = 1;
+    Claims claims = 2;
+}
+
+message Context {
+    Tier tier = 1;
+    string patreon_user_id = 2;
+}
+
+message Tier {
+    uint32 id = 1;
+    string name = 2;
+}
+
+message Vault {
+    optional uint64 points = 1;
+}
+
+message Claims {
+    Connection connection = 1;
+    Embed embed = 2;
+    Site site = 3;
+    Vault vault = 4;
+}
+
+message Connection {
+    optional uint64 rate = 1;
+}
+
+message Embed {
+    bool no_ads = 1;
+}
+
+message Site {
+    bool no_ads = 1;
+}

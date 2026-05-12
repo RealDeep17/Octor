@@ -1,0 +1,176 @@
+{{ define "title" }}{{ with .Data }}{{ if .Tool }}{{ t $.Lang .Tool.Title | seoFriendly }} – {{ t $.Lang .Tool.Benefit }}{{ else }}{{ t $.Lang "home.title" }}{{ end }}{{ end }}{{ end }}
+{{ define "description" }}
+    <meta name="description" content="{{ with .Data }}{{ if .Tool }}{{ t $.Lang .Tool.Description }}{{ else }}{{ t $.Lang "home.description" }}{{ end }}{{ end }}">
+{{ end }}
+{{ define "canonical" }}
+    {{ with .Data }}{{ if .Tool }}<link rel="canonical" href="{{ canonicalURL $.Lang (printf "/%s" .Tool.Url) }}">{{ else }}<link rel="canonical" href="{{ canonicalURL $.Lang "/" }}">{{ end }}{{ end }}
+{{ end }}
+{{ define "og" }}
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Webtor.io">
+    {{ with .Data }}
+    {{ if .Tool }}
+    <meta property="og:title" content="{{ t $.Lang .Tool.Title | seoFriendly }} – {{ t $.Lang .Tool.Benefit }}">
+    <meta property="og:description" content="{{ t $.Lang .Tool.Description }}">
+    <meta property="og:url" content="{{ canonicalURL $.Lang (printf "/%s" .Tool.Url) }}">
+    {{ else }}
+    <meta property="og:title" content="{{ t $.Lang "home.ogTitle" }}">
+    <meta property="og:description" content="{{ t $.Lang "home.ogDescription" }}">
+    <meta property="og:url" content="{{ canonicalURL $.Lang "/" }}">
+    {{ end }}
+    {{ end }}
+    <meta property="og:image" content="{{ domain }}/assets/night/favicon.svg">
+{{ end }}
+{{ define "head_extra" }}
+    {{ with .Data }}{{ if .Tool }}
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "{{ t $.Lang .Tool.Title | seoFriendly }}",
+        "description": "{{ t $.Lang .Tool.Description }}",
+        "url": "{{ canonicalURL $.Lang (printf "/%s" .Tool.Url) }}",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Any",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "provider": {
+            "@type": "Organization",
+            "name": "Webtor",
+            "url": "{{ domain }}"
+        }
+    }
+    </script>
+    {{ else }}
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Webtor",
+        "description": "{{ t $.Lang "home.jsonLdDescription" }}",
+        "url": "{{ canonicalURL $.Lang "/" }}",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Any",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        }
+    }
+    </script>
+    {{ end }}{{ end }}
+{{ end }}
+{{ define "main" }}
+{{ with .Data }}
+<!-- Hero Section -->
+<section class="flex flex-col items-center text-center relative overflow-hidden pt-[120px] pb-16 px-3 sm:px-6">
+    <div class="absolute top-[-200px] left-1/2 -translate-x-1/2 w-[800px] h-[800px] hero-glow pointer-events-none"></div>
+
+    <!-- big logo -->
+    <div class="font-logo text-[clamp(4rem,10vw,6.5rem)] font-light tracking-tight leading-none mb-7 relative z-10">
+        <a href="{{ langPath $.Lang "/" }}" data-async-target="main" class="no-underline">
+            web<span class="text-w-pink">tor</span>
+        </a>
+    </div>
+
+    {{ if .Tool }}
+    <!-- Tool page hero -->
+    <div class="badge badge-lg bg-w-cyan/10 border-w-cyan/30 text-w-cyan gap-2 py-3 px-5 mb-8 relative z-10 text-sm font-medium">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+        {{ t $.Lang "home.toolBadge" }}
+    </div>
+
+    <h1 class="relative z-10 text-[clamp(2.4rem,5vw,3.8rem)] font-extrabold tracking-tighter leading-[1.1] max-w-[780px] mb-5 text-balance">
+        <span class="gradient-text">{{ t $.Lang .Tool.Benefit }}</span>
+    </h1>
+
+    <p class="relative z-10 text-lg text-w-sub max-w-[560px] mb-12 leading-relaxed">
+        {{ t $.Lang .Tool.Description }}
+    </p>
+    {{ else }}
+    <!-- Homepage hero -->
+    <div class="badge badge-lg bg-w-pink/10 border-w-pink/30 text-w-pinkL gap-2 py-3 px-5 mb-8 relative z-10 text-sm font-medium max-sm:text-xs max-sm:py-2 max-sm:px-3 max-sm:h-auto max-sm:whitespace-normal">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        {{ t $.Lang "home.badge" }}
+    </div>
+
+    <h1 class="relative z-10 text-[clamp(2.8rem,6vw,4.5rem)] font-extrabold tracking-tighter leading-[1.1] max-w-[780px] mb-5">
+        <span class="block text-balance">{{ t $.Lang "home.heading" }}</span>
+        <span class="block text-balance gradient-text">{{ t $.Lang "home.headingAccent" }}</span>
+    </h1>
+
+    <p class="relative z-10 text-lg text-w-sub max-w-[560px] mb-12 leading-relaxed">
+        {{ t $.Lang "home.subtitle" }}
+    </p>
+    {{ end }}
+
+    {{ if has . "Job" }}
+    <form class="hidden progress-alert progress-alert-block mb-10 closeable relative z-10 w-full max-w-[680px]" data-async-progress-log="{{ makeJobLogURL $.Lang .Job }}" data-async-target="main">
+        <div class="log-target"></div>
+        <div class="pt-3 justify-end flex hidden alert-close-wrapper">
+            <a class="closeable-close close">{{ t $.Lang "home.gotIt" }}</a>
+        </div>
+    </form>
+    {{ end }}
+
+    {{ if $.ErrKey }}
+    <div id="index-error" class="progress-alert progress-alert-oneline mb-10 relative z-10 w-full max-w-[680px]">
+        <pre class="error">{{ t $.Lang $.ErrKey }}</pre>
+        <a class="close" onclick="document.getElementById('index-error').remove()">{{ t $.Lang "home.ok" }}</a>
+    </div>
+    {{ end }}
+
+    <!-- input area -->
+    <div class="relative z-10 w-full max-w-[680px]">
+        <!-- search -->
+        <form action="{{ langPath $.Lang "/" }}" method="post" enctype="multipart/form-data" class="join w-full" data-async-target="main">
+            <div class="join-item flex items-center bg-base-300 border border-w-line rounded-l-[14px] flex-1 h-12 focus-within:border-w-pink focus-within:shadow-[0_0_40px_rgba(232,67,147,0.12)] transition-all">
+                <svg class="ml-4 shrink-0 text-w-muted" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input type="text" name="resource" value="{{ if has . "Args" }}{{ .Args.Query }}{{ end }}" placeholder="{{ t $.Lang "home.placeholder" }}" class="input bg-transparent border-0 focus:outline-none flex-1 text-base placeholder:text-w-muted font-sans" required />
+            </div>
+            <input name="instruction" value="{{ .Instruction }}" type="hidden" />
+            <button type="submit" class="btn join-item btn-pink px-7 h-12 rounded-r-[14px]" data-umami-event="search">{{ t $.Lang "home.search" }}</button>
+        </form>
+
+        <!-- divider -->
+        <div class="divider text-w-muted text-xs font-semibold tracking-widest uppercase my-5 before:bg-w-line after:bg-w-line">{{ t $.Lang "home.or" }}</div>
+
+        <!-- upload zone -->
+        <form action="{{ langPath $.Lang "/" }}" method="post" enctype="multipart/form-data" class="dropzone" data-async-target="main">
+            <label for="dropzone-input" class="upload-dashed rounded-2xl py-6 px-6 text-center cursor-pointer block">
+                <p class="text-[0.95rem] text-w-sub"><span class="text-w-pinkL font-semibold">{{ t $.Lang "home.dropzone" }}</span> {{ t $.Lang "home.dropzoneHint" }}</p>
+                <span class="badge badge-sm bg-white/5 border-0 text-w-muted mt-3">{{ t $.Lang "home.noSizeLimit" }}</span>
+            </label>
+            <input class="dropzone-input hidden" name="resource" type="file" />
+            <input name="instruction" value="{{ .Instruction }}" type="hidden" />
+        </form>
+
+        <!-- demo & speedtest links -->
+        <div class="flex justify-center items-center gap-4 mt-4">
+            <form action="{{ langPath $.Lang "/" }}" method="post" enctype="multipart/form-data" data-async-target="main">
+                <input type="hidden" name="resource" value="{{ demoMagnet }}" />
+                <input name="instruction" value="{{ .Instruction }}" type="hidden" />
+                <button type="submit" class="btn btn-ghost btn-sm text-w-muted gap-1.5 normal-case font-medium" data-umami-event="try-demo">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    {{ t $.Lang "home.tryDemo" }}
+                </button>
+            </form>
+            <a href="{{ langPath $.Lang "/speedtest" }}" data-async-target="main" class="btn btn-ghost btn-sm text-w-muted gap-1.5 normal-case font-medium" data-umami-event="speedtest-hero">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                {{ t $.Lang "home.speedTest" }}
+            </a>
+        </div>
+    </div>
+
+    {{ template "continue_watching" (withContext $ .ContinueWatching) }}
+    {{ template "discover" (withContext $ .Tool) }}
+
+
+    {{ "index.js" | asset }}
+</section>
+
+{{ end }}
+{{ end }}

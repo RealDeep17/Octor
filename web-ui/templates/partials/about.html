@@ -1,0 +1,306 @@
+{{ define "about" }}
+{{ $instruction := $.Data.Instruction | kebabToSnake }}
+{{ if eq $instruction "" }}{{ $instruction = "default" }}{{ end }}
+
+<!-- Stats Strip -->
+<div class="bg-base-200 border-y border-w-line">
+    <div class="stats stats-horizontal bg-transparent w-full flex justify-center py-2">
+        <div class="stat text-center bg-transparent">
+            <div class="stat-value text-3xl font-extrabold tracking-tight gradient-stat">5M+</div>
+            <div class="stat-desc text-w-muted mt-1 text-sm">{{ t $.Lang "about.stats.torrents" }}</div>
+        </div>
+        <div class="stat text-center bg-transparent">
+            <div class="stat-value text-3xl font-extrabold tracking-tight gradient-stat">180+</div>
+            <div class="stat-desc text-w-muted mt-1 text-sm">{{ t $.Lang "about.stats.countries" }}</div>
+        </div>
+        <div class="stat text-center bg-transparent">
+            <div class="stat-value text-3xl font-extrabold tracking-tight gradient-stat">100%</div>
+            <div class="stat-desc text-w-muted mt-1 text-sm">{{ t $.Lang "about.stats.openSource" }}</div>
+        </div>
+        <div class="stat text-center bg-transparent">
+            <div class="stat-value text-3xl font-extrabold tracking-tight gradient-stat">0</div>
+            <div class="stat-desc text-w-muted mt-1 text-sm">{{ t $.Lang "about.stats.software" }}</div>
+        </div>
+    </div>
+</div>
+
+{{ dynamicTemplate (printf "about_instruction_%s_how_to" $instruction) $ }}
+
+{{ if eq $instruction "default" }}
+<!-- How It Works -->
+<section id="how" class="py-24 px-3 sm:px-6">
+    <div class="max-w-[1100px] mx-auto">
+        <div class="badge badge-lg bg-w-pink/10 border-w-pink/30 text-w-pinkL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            {{ t $.Lang "about.how.badge" }}
+        </div>
+        <h2 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">{{ t $.Lang "about.how.title" }}</h2>
+        <p class="text-[1.05rem] text-w-sub max-w-[600px] leading-relaxed mb-14">{{ t $.Lang "about.how.subtitle" }}</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(232,67,147,0.1)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-11 h-11 rounded-xl bg-w-pink/15 text-w-pink flex items-center justify-center font-bold text-lg">1</div>
+                    <h3 class="card-title text-[1.15rem] mt-3">{{ t $.Lang "about.how.step1.title" }}</h3>
+                    <p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.how.step1.text" }}</p>
+                </div>
+            </div>
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(232,67,147,0.1)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-11 h-11 rounded-xl bg-w-pink/15 text-w-pink flex items-center justify-center font-bold text-lg">2</div>
+                    <h3 class="card-title text-[1.15rem] mt-3">{{ t $.Lang "about.how.step2.title" }}</h3>
+                    <p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.how.step2.text" }}</p>
+                </div>
+            </div>
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(232,67,147,0.1)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-11 h-11 rounded-xl bg-w-pink/15 text-w-pink flex items-center justify-center font-bold text-lg">3</div>
+                    <h3 class="card-title text-[1.15rem] mt-3">{{ t $.Lang "about.how.step3.title" }}</h3>
+                    <p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.how.step3.text" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{{ end }}
+
+<!-- Features -->
+<section id="features" class="py-24 px-3 sm:px-6 bg-base-200">
+    <div class="max-w-[1100px] mx-auto">
+        <div class="badge badge-lg bg-w-pink/10 border-w-pink/30 text-w-pinkL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg>
+            {{ t $.Lang "about.features.badge" }}
+        </div>
+        <h2 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">{{ t $.Lang "about.features.title" }}</h2>
+        <p class="text-[1.05rem] text-w-sub max-w-[600px] leading-relaxed mb-14">{{ t $.Lang "about.features.subtitle" }}</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-xl bg-w-pink/12 text-w-pink flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </div>
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.ddl.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.ddl.text" }}</p>
+                </div>
+            </div>
+
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-xl bg-w-purple/12 text-w-purpleL flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    </div>
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.streaming.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.streaming.text" }}</p>
+                    <div class="card-actions mt-2">
+                        <span class="badge badge-sm bg-w-cyan/10 border-w-cyan/30 text-w-cyan text-[0.7rem] tracking-wide uppercase">MKV, MP4, WEBM, AVI &amp; more</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-xl bg-w-cyan/12 text-w-cyan flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    </div>
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.stremio.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.stremio.text" }}</p>
+                </div>
+            </div>
+
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-xl bg-w-cyan/12 text-w-cyan flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                    </div>
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.zip.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.zip.text" }}</p>
+                </div>
+            </div>
+
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-xl bg-w-pink/12 text-w-pink flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                    </div>
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.library.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.library.text" }}</p>
+                    <div class="card-actions mt-2">
+                        <span class="badge badge-sm bg-w-purple/10 border-w-purple/30 text-w-purpleL text-[0.7rem] tracking-wide uppercase">Vault Pro</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-xl bg-w-cyan/12 text-w-cyan flex items-center justify-center">
+                        {{ if aiEnabled }}
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a4 4 0 0 1-2.275 2.275L3 12l5.813 1.912a4 4 0 0 1 2.275 2.275L12 21l1.912-5.813a4 4 0 0 1 2.275-2.275L21 12l-5.813-1.912a4 4 0 0 1-2.275-2.275z"/></svg>
+                        {{ else }}
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        {{ end }}
+                    </div>
+                    {{ if aiEnabled }}
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.ai.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.ai.text" }}</p>
+                    <div class="card-actions mt-2">
+                        <span class="badge badge-sm bg-w-cyan/10 border-w-cyan/30 text-w-cyan text-[0.7rem] tracking-wide uppercase">Beta</span>
+                    </div>
+                    {{ else }}
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.discover.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.discover.text" }}</p>
+                    {{ end }}
+                </div>
+            </div>
+
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-xl bg-w-purple/12 text-w-purpleL flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                    </div>
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.webdav.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.webdav.text" }}</p>
+                </div>
+            </div>
+
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-xl bg-w-pink/12 text-w-pink flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </div>
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.chrome.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.chrome.text" }}</p>
+                </div>
+            </div>
+
+            <div class="card bg-base-300 border border-w-line hover:border-w-pink/30 hover:-translate-y-1 hover:shadow-[0_4px_24px_rgba(0,0,0,0.4)] transition-all duration-300">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-xl bg-w-cyan/12 text-w-cyan flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    </div>
+                    <h3 class="card-title text-[1.05rem] mt-3">{{ t $.Lang "about.features.sdk.title" }}</h3>
+                    <p class="text-[0.9rem] text-w-sub leading-relaxed">{{ t $.Lang "about.features.sdk.text" }}</p>
+                    <div class="card-actions mt-2">
+                        <span class="badge badge-sm bg-w-cyan/10 border-w-cyan/30 text-w-cyan text-[0.7rem] tracking-wide uppercase">MIT License</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="py-24 px-3 sm:px-6">
+    <div class="max-w-[1100px] mx-auto">
+        <div class="text-center mb-14">
+            <div class="badge badge-lg bg-w-pink/10 border-w-pink/30 text-w-pinkL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                {{ t $.Lang "about.faq.badge" }}
+            </div>
+            <h2 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">{{ t $.Lang "about.faq.title" }}</h2>
+            <p class="text-[1.05rem] text-w-sub max-w-[600px] mx-auto leading-relaxed">{{ t $.Lang "about.faq.subtitle" }}</p>
+        </div>
+
+        <div class="max-w-[740px] mx-auto space-y-3">
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.free.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.free.a" }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.vpn.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.vpn.a" }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.mobile.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.mobile.a" }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.formats.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.formats.a" }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.opensource.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.opensource.a" }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.smarttv.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.smarttv.a" }}</p></div>
+            </div>
+
+            {{ if aiEnabled }}
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.aiDiscover.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.aiDiscover.a" }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.aiQuota.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ tp $.Lang "about.faq.aiQuota.a" "FreeQuota" (aiFreeQuota) "PaidQuota" (aiPaidQuota) }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.aiModel.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.aiModel.a" }}</p></div>
+            </div>
+            {{ end }}
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.expire.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.expire.a" }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.ads.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.ads.a" }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.zip.q" }}</div>
+                <div class="collapse-content"><p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.zip.a" }}</p></div>
+            </div>
+
+            <div class="collapse collapse-plus collapse-webtor border border-w-line rounded-2xl">
+                <input type="checkbox">
+                <div class="collapse-title text-base font-semibold">{{ t $.Lang "about.faq.speed.q" }}</div>
+                <div class="collapse-content">
+                    <p class="text-[0.92rem] text-w-sub leading-relaxed mb-2">{{ t $.Lang "about.faq.speed.a1" }}</p>
+                    <p class="text-[0.92rem] text-w-sub leading-relaxed">{{ t $.Lang "about.faq.speed.a2" }}</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="relative text-center py-24 px-3 sm:px-6 overflow-x-clip">
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] cta-glow pointer-events-none"></div>
+    <h2 class="relative z-10 text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight mb-4">{{ t $.Lang "about.cta.title" }}</h2>
+    <p class="relative z-10 text-w-sub max-w-[500px] mx-auto mb-9">{{ t $.Lang "about.cta.subtitle" }}</p>
+    <a href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;" class="btn btn-lg btn-pink relative z-10 gap-2 px-9">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        {{ t $.Lang "about.cta.button" }}
+    </a>
+</section>
+
+{{ end }}

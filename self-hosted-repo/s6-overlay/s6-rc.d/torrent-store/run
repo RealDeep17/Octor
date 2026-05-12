@@ -1,0 +1,6 @@
+#!/command/with-contenv sh
+set -a
+source /etc/webtor/common.env
+GRPC_PORT=$TORRENT_STORE_SERVICE_PORT
+set +a
+/app/torrent-store serve 2>&1 | s6-log p"[torrent-http-proxy]" 1
