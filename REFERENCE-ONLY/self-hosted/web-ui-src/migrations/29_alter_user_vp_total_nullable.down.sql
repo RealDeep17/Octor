@@ -1,1 +1,0 @@
-ALTER TABLE vault.user_vp ALTER COLUMN total SET NOT NULL;
