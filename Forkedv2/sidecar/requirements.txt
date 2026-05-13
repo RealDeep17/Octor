@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+requests
+rapidfuzz
+unidecode
+python-multipart

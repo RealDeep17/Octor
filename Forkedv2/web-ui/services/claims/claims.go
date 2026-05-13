@@ -46,6 +46,9 @@ func (s *Claims) Get(r *Request) (*Data, error) {
 	return s.LazyMap.Get(key, func() (resp *Data, err error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		if s.cl == nil {
+			return s.makeAdminClaims(), nil
+		}
 		var cl proto.ClaimsProviderClient
 		cl, err = s.cl.Get()
 		if err != nil {

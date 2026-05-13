@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	csrf "github.com/utrack/gin-csrf"
+	ra "github.com/webtor-io/rest-api/services"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/i18n"
 	vault "github.com/webtor-io/web-ui/services/vault"
@@ -20,17 +23,26 @@ import (
 
 // TorrentStatus represents the current combined status of a torrent.
 type TorrentStatus struct {
-	State    string  `json:"state"`    // idle, caching, cached, vaulting, vaulted
-	Progress float64 `json:"progress"` // 0-100 for caching/vaulting
-	Seeders  int     `json:"seeders"`  // seed count for caching
-	Label    string  `json:"label"`    // translated state label
+	State          string  `json:"state"`    // idle, caching, cached, vaulting, vaulted
+	Progress       float64 `json:"progress"` // 0-100 for caching/vaulting
+	Seeders        int     `json:"seeders"`  // seed count for caching
+	Label          string  `json:"label"`    // translated state label
+	SpeedBytes     int64   `json:"speed_bytes"`
+	RemainingBytes int64   `json:"remaining_bytes"`
+	ETASeconds     int64   `json:"eta_seconds"`
+	TotalStr       string  `json:"total_str,omitempty"`
+	CompletedStr   string  `json:"completed_str,omitempty"`
+	Detail         string  `json:"detail,omitempty"`
 }
 
 // TorrentStatsData holds the relevant fields from a torrent stats event.
 type TorrentStatsData struct {
-	Total     int64
-	Completed int
-	Seeders   int
+	Total          int64
+	Completed      int64
+	Seeders        int
+	SpeedBytes     int64
+	RemainingBytes int64
+	ETASeconds     int64
 }
 
 // resolveStatus is a pure function that determines the combined torrent status
@@ -46,6 +58,15 @@ func resolveStatus(dbResource *vaultModels.Resource, apiResource *vault.Resource
 	if vaultState.State == "vaulting" {
 		if stats != nil {
 			vaultState.Seeders = stats.Seeders
+			vaultState.SpeedBytes = stats.SpeedBytes
+			vaultState.RemainingBytes = stats.RemainingBytes
+			vaultState.ETASeconds = stats.ETASeconds
+			if stats.Total > 0 {
+				vaultState.Progress = float64(stats.Completed) / float64(stats.Total) * 100
+				vaultState.TotalStr = formatBytes(stats.Total)
+				vaultState.CompletedStr = formatBytes(stats.Completed)
+			}
+			vaultState.Detail = buildStatusDetail(stats)
 		}
 		return vaultState
 	}
@@ -92,16 +113,81 @@ func resolveCachingState(stats *TorrentStatsData) *TorrentStatus {
 	if stats.Total <= 0 {
 		return &TorrentStatus{State: "idle"}
 	}
-	// If nothing has been downloaded yet, treat as idle — don't show "Caching 0%"
-	// which would be misleading (the seeder may have been started just by our stats probe)
+	// If nothing has been downloaded yet, treat as caching 0% with details
 	if stats.Completed <= 0 {
-		return &TorrentStatus{State: "idle", Seeders: stats.Seeders}
+		return &TorrentStatus{
+			State:    "caching",
+			Progress: 0,
+			Seeders:  stats.Seeders,
+			Detail:   buildStatusDetail(stats),
+		}
 	}
 	progress := float64(stats.Completed) / float64(stats.Total) * 100
 	if progress >= 100 {
 		return &TorrentStatus{State: "cached", Progress: 100, Seeders: stats.Seeders}
 	}
-	return &TorrentStatus{State: "caching", Progress: progress, Seeders: stats.Seeders}
+	return &TorrentStatus{
+		State:          "caching",
+		Progress:       progress,
+		Seeders:        stats.Seeders,
+		SpeedBytes:     stats.SpeedBytes,
+		RemainingBytes: stats.RemainingBytes,
+		ETASeconds:     stats.ETASeconds,
+		TotalStr:       formatBytes(stats.Total),
+		CompletedStr:   formatBytes(stats.Completed),
+		Detail:         buildStatusDetail(stats),
+	}
+}
+
+func buildStatusDetail(stats *TorrentStatsData) string {
+	if stats == nil {
+		return ""
+	}
+	parts := make([]string, 0, 3)
+	if stats.SpeedBytes > 0 {
+		parts = append(parts, fmt.Sprintf("%s/s", formatBytes(stats.SpeedBytes)))
+	}
+	if stats.RemainingBytes > 0 {
+		parts = append(parts, fmt.Sprintf("%s left", formatBytes(stats.RemainingBytes)))
+	}
+	if stats.ETASeconds > 0 {
+		parts = append(parts, fmt.Sprintf("ETA %s", formatETA(stats.ETASeconds)))
+	}
+	return strings.Join(parts, " • ")
+}
+
+func formatBytes(v int64) string {
+	if v <= 0 {
+		return "0 B"
+	}
+	units := []string{"B", "KB", "MB", "GB", "TB"}
+	value := float64(v)
+	unit := 0
+	for value >= 1024 && unit < len(units)-1 {
+		value /= 1024
+		unit++
+	}
+	if unit == 0 {
+		return fmt.Sprintf("%d %s", int64(value), units[unit])
+	}
+	return fmt.Sprintf("%.1f %s", value, units[unit])
+}
+
+func formatETA(seconds int64) string {
+	if seconds <= 0 {
+		return ""
+	}
+	d := time.Duration(seconds) * time.Second
+	if d >= 24*time.Hour {
+		return fmt.Sprintf("%dd %dh", int(d.Hours()/24), int(d.Hours())%24)
+	}
+	if d >= time.Hour {
+		return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+	if d >= time.Minute {
+		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%ds", int(d.Seconds()))
 }
 
 // prepareInitialStatus computes the initial status for SSR (vault DB only, no SSE connection).
@@ -171,6 +257,7 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 
 	var statsCh <-chan api.EventData
 	var lastStats *TorrentStatsData
+	var lastEventAt time.Time
 	var lastJSON string
 	var lastDBResource *vaultModels.Resource
 	var lastAPIResource *vault.Resource
@@ -193,6 +280,14 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 	vaultTick := 0
 
 	sendStatus := func() bool {
+		// Self-hosted optimization: if caching is 100% and it's funded, mark as vaulted automatically
+		if s.vault != nil && lastDBResource != nil && lastDBResource.Funded && !lastDBResource.Vaulted && lastStats != nil && lastStats.Total > 0 && lastStats.Completed >= lastStats.Total {
+			if err := vaultModels.UpdateResourceVaulted(ctx, s.pg.Get(), resourceID); err != nil {
+				log.WithError(err).WithField("resourceID", resourceID).Warn("failed to mark resource vaulted after cache completion")
+			} else {
+				lastDBResource.Vaulted = true
+			}
+		}
 		status := resolveStatus(lastDBResource, lastAPIResource, lastStats)
 		data, _ := json.Marshal(status)
 		jsonStr := string(data)
@@ -248,11 +343,33 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 
 		case ev, ok := <-statsCh:
 			if ok {
-				lastStats = &TorrentStatsData{
-					Total:     ev.Total,
-					Completed: ev.Completed,
-					Seeders:   ev.Peers,
+				completed := int64(ev.Completed)
+				now := time.Now()
+				speedBytes := int64(0)
+				if lastStats != nil && !lastEventAt.IsZero() && completed >= lastStats.Completed {
+					deltaBytes := completed - lastStats.Completed
+					deltaSeconds := now.Sub(lastEventAt).Seconds()
+					if deltaBytes > 0 && deltaSeconds > 0 {
+						speedBytes = int64(math.Round(float64(deltaBytes) / deltaSeconds))
+					}
 				}
+				remainingBytes := ev.Total - completed
+				if remainingBytes < 0 {
+					remainingBytes = 0
+				}
+				etaSeconds := int64(0)
+				if speedBytes > 0 && remainingBytes > 0 {
+					etaSeconds = int64(math.Ceil(float64(remainingBytes) / float64(speedBytes)))
+				}
+				lastStats = &TorrentStatsData{
+					Total:          ev.Total,
+					Completed:      completed,
+					Seeders:        ev.Peers,
+					SpeedBytes:     speedBytes,
+					RemainingBytes: remainingBytes,
+					ETASeconds:     etaSeconds,
+				}
+				lastEventAt = now
 				log.WithField("resourceID", resourceID).WithField("completed", ev.Completed).WithField("total", ev.Total).WithField("peers", ev.Peers).Info("status: got stats event")
 			} else {
 				// Stats channel closed — seeder gone or connection dropped
@@ -296,14 +413,24 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 // for real-time torrent-level stats. Gets the root content ID from the list response,
 // then uses ExportResourceContent to get the stat URL for the whole torrent.
 func (s *Handler) tryConnectStats(ctx context.Context, claims *api.Claims, resourceID string) (<-chan api.EventData, string) {
-	connCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	// Get root content ID from list response
-	list, err := s.api.ListResourceContentCached(connCtx, claims, resourceID, &api.ListResourceContentArgs{
-		Output: api.OutputList,
-		Limit:  1,
-	})
+	// Get root content ID from list response (retry for magnets)
+	var list *ra.ListResponse
+	var err error
+	for i := 0; i < 3; i++ {
+		list, err = s.api.ListResourceContentCached(connCtx, claims, resourceID, &api.ListResourceContentArgs{
+			Output: api.OutputList,
+			Limit:  1,
+		})
+		if err == nil && list != nil && list.ID != "" {
+			break
+		}
+		if i < 2 {
+			time.Sleep(2 * time.Second)
+		}
+	}
 	if err != nil {
 		msg := fmt.Sprintf("list failed: %v", err)
 		log.WithError(err).WithField("resourceID", resourceID).Warn("status: " + msg)
@@ -311,7 +438,10 @@ func (s *Handler) tryConnectStats(ctx context.Context, claims *api.Claims, resou
 	}
 
 	// Use root item ID (ListResponse embeds ListItem with ID)
-	rootID := list.ID
+	rootID := ""
+	if list != nil {
+		rootID = list.ID
+	}
 	if rootID == "" {
 		return nil, "empty root ID"
 	}
@@ -344,7 +474,20 @@ func (s *Handler) tryConnectStats(ctx context.Context, claims *api.Claims, resou
 		log.WithError(err).WithField("resourceID", resourceID).Warn("status: " + msg)
 		return nil, msg
 	}
-	log.WithField("resourceID", resourceID).Info("status: connected to torrent stats SSE")
+
+	// Kickstart download: 1-byte request on the first file to wake the seeder.
+	go func() {
+		ksCtx, ksCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer ksCancel()
+		r, err := s.api.DownloadWithRange(ksCtx, statItem.URL, 0, 1024)
+		if err == nil {
+			_, _ = io.Copy(io.Discard, r)
+			_ = r.Close()
+		}
+	}()
+
+	log.WithField("resourceID", resourceID).Info("status: connected to torrent stats SSE and kickstarted download")
 	return ch, "connected"
 }
+
 

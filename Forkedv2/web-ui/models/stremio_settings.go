@@ -22,6 +22,7 @@ type StremioSettingsData struct {
 	// PreferredLanguage is a 2-letter ISO code (e.g. "en", "ru") used to
 	// filter Stremio addon stream titles. Empty string disables filtering.
 	PreferredLanguage string `json:"preferred_language,omitempty"`
+	SidecarEnrichment bool   `json:"sidecar_enrichment"`
 }
 
 type StremioSettings struct {
@@ -109,5 +110,6 @@ func GetDefaultStremioSettings() *StremioSettingsData {
 			{Resolution: "720p", Enabled: true},
 			{Resolution: "other", Enabled: true},
 		},
+		SidecarEnrichment: false,
 	}
 }

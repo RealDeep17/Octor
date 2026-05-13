@@ -117,6 +117,9 @@ func (api *Api) SearchByTitleAndYear(ctx context.Context, title string, year *in
 		y := *year
 		q.Set("y", strconv.Itoa(int(y)))
 	}
+	if sidecar, ok := ctx.Value("sidecar_enrichment").(bool); ok {
+		q.Set("sidecar_enrichment_enabled", strconv.FormatBool(sidecar))
+	}
 	req.URL.RawQuery = q.Encode()
 
 	req, err = api.prepareRequest(req)
@@ -166,6 +169,9 @@ func (api *Api) GetByIMDBID(ctx context.Context, imdbID string) (*OmdbResponse, 
 	q := req.URL.Query()
 	q.Set("i", imdbID)
 	q.Set("plot", "full")
+	if sidecar, ok := ctx.Value("sidecar_enrichment").(bool); ok {
+		q.Set("sidecar_enrichment_enabled", strconv.FormatBool(sidecar))
+	}
 	req.URL.RawQuery = q.Encode()
 
 	req, err = api.prepareRequest(req)
