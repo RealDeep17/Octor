@@ -1,1 +1,0 @@
-ALTER TABLE url_alias DROP COLUMN proxy;

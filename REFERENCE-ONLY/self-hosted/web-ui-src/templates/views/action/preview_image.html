@@ -1,9 +1,0 @@
-{{ define "main" }}
-{{ with .Data.ExportTag }}
-<div class="wt-preview-mount">
-    <img class="wt-preview-image" src="{{ .Src }}" alt="{{ .Alt }}">
-</div>
-{{ end }}
-{{ "player.css" | asset }}
-{{ "action/image.js" | asset }}
-{{ end }}

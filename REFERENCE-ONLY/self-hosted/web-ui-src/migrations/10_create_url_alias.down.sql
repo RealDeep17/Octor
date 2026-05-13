@@ -1,1 +1,0 @@
-DROP TABLE url_alias;

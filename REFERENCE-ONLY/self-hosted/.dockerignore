@@ -1,8 +1,0 @@
-.git
-.github
-.vscode
-.dockerignore
-*Dockerfile*
-README.md
-LICENSE
-.DS_Store

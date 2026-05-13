@@ -1,1 +1,0 @@
-DROP TABLE public.addon_url;

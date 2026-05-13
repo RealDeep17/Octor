@@ -1,5 +1,0 @@
-{{ define "title" }}Check code{{ end }}
-{{ define "main" }}
-{{ template "auth/form" (withContext $ .Data) }}
-{{ "auth/verify.js" | asset }}
-{{ end }}
