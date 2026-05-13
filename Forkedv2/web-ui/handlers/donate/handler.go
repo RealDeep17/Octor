@@ -14,5 +14,5 @@ func RegisterHandler(r *gin.Engine) {
 }
 
 func (h *Handler) get(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "https://www.patreon.com/bePatron?u=24145874")
+	c.Redirect(http.StatusTemporaryRedirect, "/")
 }

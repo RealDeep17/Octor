@@ -119,7 +119,6 @@
     "auth.login.vaultNote": "Anmeldung erforderlich, um Torrents im Vault zu speichern.",
     "auth.login.discoverNote": "Anmeldung erforderlich, um auf Discover zuzugreifen.",
     "auth.login.note": "Hinweis:",
-    "auth.login.patreon": "Weiter mit Patreon",
     "auth.login.google": "Weiter mit Google",
     "auth.login.orEmail": "Oder per E-Mail",
     "auth.login.emailPrompt": "Geben Sie Ihre E-Mail ein, um einen Einmal-Login-Link zu erhalten.",

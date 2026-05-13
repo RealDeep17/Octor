@@ -119,7 +119,6 @@
     "auth.login.vaultNote": "Se requiere autorización para guardar torrents en Vault.",
     "auth.login.discoverNote": "Se requiere autorización para acceder a Discover.",
     "auth.login.note": "Nota:",
-    "auth.login.patreon": "Continuar con Patreon",
     "auth.login.google": "Continuar con Google",
     "auth.login.orEmail": "O usa email",
     "auth.login.emailPrompt": "Ingresa tu email para recibir un enlace de inicio de sesión.",

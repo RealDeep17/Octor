@@ -119,7 +119,6 @@
     "auth.login.vaultNote": "Pro uložení torrentů do Vault je vyžadována autorizace.",
     "auth.login.discoverNote": "Pro přístup k Discover je vyžadována autorizace.",
     "auth.login.note": "Poznámka:",
-    "auth.login.patreon": "Pokračovat s Patreon",
     "auth.login.google": "Pokračovat s Google",
     "auth.login.orEmail": "Nebo použij e-mail",
     "auth.login.emailPrompt": "Zadej svůj e-mail pro získání jednorázového přihlašovacího odkazu.",

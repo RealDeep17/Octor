@@ -119,7 +119,6 @@
     "auth.login.vaultNote": "É necessário autenticar para salvar torrents no Vault.",
     "auth.login.discoverNote": "É necessário autenticar para acessar o Discover.",
     "auth.login.note": "Observação:",
-    "auth.login.patreon": "Continuar com Patreon",
     "auth.login.google": "Continuar com Google",
     "auth.login.orEmail": "Ou usar e-mail",
     "auth.login.emailPrompt": "Informe seu e-mail para receber um link de login de uso único.",

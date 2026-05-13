@@ -1,0 +1,10 @@
+{
+    email admin@octor.duckdns.org
+}
+
+octor.duckdns.org {
+    reverse_proxy localhost:8081
+    tls {
+        dns duckdns 2b8b9c5c-005e-418b-8449-3c75e9bd727d
+    }
+}

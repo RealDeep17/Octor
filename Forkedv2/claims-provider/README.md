@@ -26,5 +26,5 @@ Notes
 Client
 - Build: `go build -o claims-client ./client`
 - Run by email: `./claims-client --grpc-host 127.0.0.1 --grpc-port 50051 --email user@example.com`
-- Run by Patreon ID: `./claims-client --grpc-host 127.0.0.1 --grpc-port 50051 --patreon-id 123456`
+- Run by Email: `./claims-client --grpc-host 127.0.0.1 --grpc-port 50051 --email test@example.com`
 - You can also use env vars GRPC_HOST and GRPC_PORT instead of flags.

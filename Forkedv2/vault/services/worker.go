@@ -1099,6 +1099,10 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		return nil, errors.Wrap(err, "failed to select file by hash")
 	}
 	s3Cl := s.s3.Get()
+	if s3Cl == nil {
+		log.Warn("S3 client is nil, skipping S3 check (using local storage mode)")
+		return nil, errors.New("S3 not configured")
+	}
 	// Only short-circuit if the file is *fully* stored AND the S3 object
 	// actually exists. Returning "fresh but in-progress" rows here (the old
 	// `updated_at < 10s && upload_id == ""` branch) was unsafe: a concurrent

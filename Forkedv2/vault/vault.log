@@ -1,2 +1,59 @@
-time="2026-05-13T20:14:25+05:30" level=fatal msg="failed to serve application" error="failed to perform PGMigration: ERROR #42701 column \"upload_id\" of relation \"file\" already exists"
+Incorrect Usage: flag provided but not defined: -s3-endpoint
+
+NAME:
+   vault serve - Serves web server
+
+USAGE:
+   vault serve [command options] [arguments...]
+
+OPTIONS:
+   --probe-host value                  probe listening host [$PROBE_HOST]
+   --probe-port value                  probe listening port (default: 8081) [$PROBE_PORT]
+   --use-probe                         enable probe [$USE_PROBE]
+   --pprof-host value                  pprof listening host [$PPROF_HOST]
+   --pprof-port value                  pprof listening port (default: 8082) [$PPROF_PORT]
+   --use-pprof                         enable pprof [$USE_PPROF]
+   --prom-host value                   prometheus metrics listening host [$PROM_HOST]
+   --prom-port value                   prometheus metrics listening port (default: 8083) [$PROM_PORT]
+   --use-prom                          use prometheus metrics [$USE_PROM]
+   --postgres-host value               postgres host [$PG_HOST]
+   --postgres-port value               postgres port (default: 5432) [$PG_PORT]
+   --postgres-user value               postgres user [$PG_USER]
+   --postgres-password value           postgres password [$PG_PASSWORD]
+   --postgres-database value           postgres database [$PG_DATABASE]
+   --postgres-ssl                      postgres ssl [$PG_SSL]
+   --postgres-pool-size value          postgres pool size (default: 5) [$PG_POOL_SIZE]
+   --postgres-min-idle-conns value     postgres min idle connections (default: 1) [$PG_MIN_IDLE_CONNS]
+   --postgres-max-conn-age value       postgres max connection age (0 = no limit) (default: "0") [$PG_MAX_CONN_AGE]
+   --postgres-idle-timeout value       postgres idle timeout (0 = no limit) (default: "0") [$PG_IDLE_TIMEOUT]
+   --postgres-max-retries value        postgres max retries on transient errors (EOF, timeout) (default: 3) [$PG_MAX_RETRIES]
+   --postgres-min-retry-backoff value  postgres min retry backoff (default: "100ms") [$PG_MIN_RETRY_BACKOFF]
+   --postgres-max-retry-backoff value  postgres max retry backoff (default: "1s") [$PG_MAX_RETRY_BACKOFF]
+   --aws-access-key-id value           AWS Access Key ID [$AWS_ACCESS_KEY_ID]
+   --aws-secret-access-key value       AWS Secret Access Key [$AWS_SECRET_ACCESS_KEY]
+   --aws-endpoint value                AWS Endpoint [$AWS_ENDPOINT]
+   --aws-region value                  AWS Region [$AWS_REGION]
+   --aws-no-ssl                         [$AWS_NO_SSL]
+   --host value                        listening host [$WEB_HOST]
+   --port value                        http listening port (default: 8080) [$WEB_PORT]
+   --workers value                     number of worker goroutines (default: 10) [$WORKERS]
+   --aws-bucket value                  aws bucket [$AWS_BUCKET]
+   --aws-upload-concurrency value      aws upload concurrency (default: 1) [$AWS_UPLOAD_CONCURRENCY]
+   --aws-upload-part-size value        aws upload part size (default: 50000000) [$AWS_UPLOAD_PART_SIZE]
+   --resource-id value                 specific resource ID to process (for debugging) [$RESOURCE_ID]
+   --verify-integrity                  verify each stored file against torrent piece SHA-1 hashes (default true) [$VAULT_VERIFY_INTEGRITY]
+   --webtor-rest-api-host value        webtor rest-api host [$REST_API_SERVICE_HOST]
+   --webtor-rest-api-port value        webtor rest-api port (default: 80) [$REST_API_SERVICE_PORT]
+   --webtor-rest-api-secure            webtor rest-api secure (https) [$REST_API_SECURE]
+   --webtor-rest-api-expire value      webtor rest-api expire in days (default: 1) [$REST_API_EXPIRE]
+   --webtor-key value                  webtor api key [$WEBTOR_API_KEY]
+   --webtor-secret value               webtor api secret [$WEBTOR_API_SECRET]
+   --use-internal-torrent-http-proxy   use internal torrent http proxy [$USE_INTERNAL_TORRENT_HTTP_PROXY]
+   --torrent-http-proxy-host value     torrent http proxy host [$TORRENT_HTTP_PROXY_SERVICE_HOST]
+   --torrent-http-proxy-port value     torrent http proxy port (default: 80) [$TORRENT_HTTP_PROXY_SERVICE_PORT]
+   --metrics-refresh-interval value    how often to recompute vault metrics from the database (default: 1m0s) [$METRICS_REFRESH_INTERVAL]
+   --nats-service-host value           nats service host [$NATS_SERVICE_HOST]
+   --nats-service-port value           nats service port (default: 4222) [$NATS_SERVICE_PORT]
+   
+time="2026-05-14T03:58:00+05:30" level=fatal msg="failed to serve application" error="flag provided but not defined: -s3-endpoint"
 exit status 1

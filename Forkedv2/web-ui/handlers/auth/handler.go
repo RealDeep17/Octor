@@ -100,7 +100,6 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context]) {
 	r.GET("/logout", h.logout)
 	r.GET("/auth/verify", h.verify)
 	r.GET("/auth/callback/google", h.callback)
-	r.GET("/auth/callback/patreon", h.callback)
 }
 
 func (s *Handler) refresh(c *gin.Context) {

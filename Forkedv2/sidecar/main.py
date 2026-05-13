@@ -535,6 +535,12 @@ def tpdb_search_raw_q(q: str, limit: int = 10) -> List[dict]:
 def _normalise_tpdb(d: dict) -> dict:
     """Flatten TPDB scene response to a common dict."""
     site_obj = d.get("site") or {}
+    
+    # TPDB: Try to prioritize vertical posters if possible
+    # Note: TPDB standard API 'poster' field is usually the vertical one.
+    # 'image' or 'poster_image' might be horizontal backdrops.
+    poster = d.get("poster") or d.get("poster_image") or d.get("image")
+    
     return {
         "id": d.get("_id") or d.get("id") or d.get("slug"),
         "title": d.get("title"),
@@ -543,7 +549,7 @@ def _normalise_tpdb(d: dict) -> dict:
         "description": d.get("description") or d.get("details"),
         "performers": d.get("performers") or [],
         "tags": [t.get("name") for t in d.get("tags") or [] if t.get("name")],
-        "poster": d.get("poster") or d.get("poster_image") or d.get("image"),
+        "poster": poster,
         "duration": d.get("duration"),
         "rating": d.get("rating"),
         "url": d.get("url"),

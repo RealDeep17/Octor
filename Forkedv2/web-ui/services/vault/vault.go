@@ -109,8 +109,7 @@ func (s *Vault) UpdateUserVP(ctx context.Context, user *auth.User) (*vaultModels
 
 	// Get current claims
 	claimsData, err := s.claims.Get(&claims.Request{
-		Email:         user.Email,
-		PatreonUserID: user.PatreonUserID,
+		Email: user.Email,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get claims")

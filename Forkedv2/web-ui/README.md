@@ -23,9 +23,7 @@ Some features to mention:
   - [ ] Subtitle size control
 - [x] Authentication
   - [x] Passwordless authentication
-  - [x] Patreon account linking
   - [x] Google authentication
-  - [x] Patreon authentication
 - [x] Ads and statistic integration support
 - [x] Misc
   - [x] Feedback form

@@ -1,8 +1,8 @@
-badger 2026/05/13 20:14:25 INFO: All 2 tables opened in 2ms
-badger 2026/05/13 20:14:25 INFO: Discard stats nextEmptySlot: 0
-badger 2026/05/13 20:14:25 INFO: Set nextTxnTs to 3
-badger 2026/05/13 20:14:25 INFO: Deleting empty file: /tmp/badger/000010.vlog
-time="2026-05-13T20:14:25+05:30" level=info msg="use provider" provider=badger
-time="2026-05-13T20:14:25+05:30" level=info msg="serving probe at :50071"
-time="2026-05-13T20:14:25+05:30" level=info msg="serving GRPC at :50051"
-time="2026-05-13T20:14:25+05:30" level=info msg="serving pprof at :50061"
+badger 2026/05/14 03:57:58 INFO: All 6 tables opened in 5ms
+badger 2026/05/14 03:57:58 INFO: Discard stats nextEmptySlot: 0
+badger 2026/05/14 03:57:58 INFO: Set nextTxnTs to 8
+badger 2026/05/14 03:57:58 INFO: Deleting empty file: /tmp/badger/000021.vlog
+time="2026-05-14T03:57:58+05:30" level=info msg="use provider" provider=badger
+time="2026-05-14T03:57:58+05:30" level=info msg="serving probe at :50071"
+time="2026-05-14T03:57:58+05:30" level=info msg="serving pprof at :50061"
+time="2026-05-14T03:57:58+05:30" level=info msg="serving GRPC at :50051"
