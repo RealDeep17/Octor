@@ -231,6 +231,8 @@
     "profile.settings.preferredLanguage": "Preferred Language",
     "profile.settings.preferredLanguageDesc": "Hide Stremio addon streams whose title does not advertise this language. Items already in your Library are always shown.",
     "profile.settings.preferredLanguageAny": "Any language",
+    "profile.settings.sidecarEnrichment": "Metadata Sidecar",
+    "profile.settings.sidecarEnrichmentDesc": "Enable adult content metadata enrichment.",
     "profile.settings.save": "Save",
     "profile.vault.title": "Vault Points",
     "profile.vault.total": "Total",

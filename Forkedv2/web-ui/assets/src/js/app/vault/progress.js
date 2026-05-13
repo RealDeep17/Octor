@@ -126,13 +126,76 @@ function attachRow(row) {
         }
         applyRowFill(row, status);
         if (badge) badge.innerHTML = renderBadge(status, savedLabel);
+
+        // Update stats line
+        const statsLine = row.querySelector('[data-vault-stats-line]');
+        if (statsLine) {
+            const speedEl = statsLine.querySelector('[data-vault-stat-speed]');
+            const sizeEl = statsLine.querySelector('[data-vault-stat-size]');
+            const etaEl = statsLine.querySelector('[data-vault-stat-eta]');
+            const peersEl = statsLine.querySelector('[data-vault-stat-peers]');
+
+            if (status.state === 'caching' || status.state === 'vaulting') {
+                if (status.speed_bytes > 0 && speedEl) {
+                    speedEl.textContent = `${formatBytes(status.speed_bytes)}/s`;
+                    speedEl.classList.remove('hidden');
+                } else if (speedEl) speedEl.classList.add('hidden');
+
+                if (status.completed_str && status.total_str && sizeEl) {
+                    sizeEl.textContent = `${status.completed_str} of ${status.total_str}`;
+                    sizeEl.classList.remove('hidden');
+                } else if (sizeEl) sizeEl.classList.add('hidden');
+
+                if (status.eta_seconds > 0 && etaEl) {
+                    etaEl.textContent = `ETA ${formatETA(status.eta_seconds)}`;
+                    etaEl.classList.remove('hidden');
+                } else if (etaEl) etaEl.classList.add('hidden');
+
+                if (status.seeders > 0 && peersEl) {
+                    peersEl.textContent = `${status.seeders} peers`;
+                    peersEl.classList.remove('hidden');
+                } else if (peersEl) peersEl.classList.add('hidden');
+                statsLine.classList.remove('hidden');
+            } else {
+                statsLine.classList.add('hidden');
+            }
+        }
+
+        // Update progress bar
+        const progressBar = row.querySelector('[data-vault-progress-bar]');
+        if (progressBar) {
+            progressBar.style.width = `${status.progress}%`;
+        }
+
         if (status.state === 'vaulted') {
             settleVaultedIcon(row);
+            if (statsLine) statsLine.classList.add('hidden');
+            const progressBarWrap = row.querySelector('[data-vault-progress-bar-wrap]');
+            if (progressBarWrap) progressBarWrap.classList.add('hidden');
             source.close();
         }
     };
-
     return source;
+}
+
+function formatBytes(v) {
+    if (v <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = v;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+    return unit === 0 ? `${Math.round(value)} ${units[unit]}` : `${value.toFixed(1)} ${units[unit]}`;
+}
+
+function formatETA(seconds) {
+    if (seconds <= 0) return '';
+    if (seconds >= 86400) return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
+    if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+    if (seconds >= 60) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    return `${seconds}s`;
 }
 
 av(async function () {

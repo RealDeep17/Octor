@@ -1,12 +1,16 @@
 infra-data/
 server/
 REFERENCE-ONLY/
-*.sqlite
-*.sqlite-shm
-*.sqlite-wal
-*.backup
 .DS_Store
 node_modules/
 vendor/
 .env
 .env.*
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

@@ -341,27 +341,47 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 	// firing N Claude calls — see resourceAIBudget.
 	budget := &resourceAIBudget{}
 
+	type movieResult struct {
+		movie      *models.Movie
+		metadataID *uuid.UUID
+		err        error
+	}
+	movieResCh := make(chan movieResult, len(movies))
+
 	for _, m := range movies {
-		moviePath := ""
-		if m.Path != nil {
-			moviePath = *m.Path
+		go func(m *models.Movie) {
+			moviePath := ""
+			if m.Path != nil {
+				moviePath = *m.Path
+			}
+			md, err := s.mapMetadata(ctx, m.VideoContent, m.GetContentType(), force, hintVideoID, moviePath, budget)
+			if err != nil {
+				movieResCh <- movieResult{err: errors.Wrapf(err, "failed to map metadata for movie %+v", m)}
+				return
+			}
+			if md == nil {
+				movieResCh <- movieResult{movie: m}
+				return
+			}
+			metadataID, err := models.UpsertMovieMetadata(ctx, db, md)
+			if err != nil {
+				movieResCh <- movieResult{err: errors.Wrapf(err, "failed to upsert metadata for movie %+v", md)}
+				return
+			}
+			movieResCh <- movieResult{movie: m, metadataID: &metadataID}
+		}(m)
+	}
+
+	for i := 0; i < len(movies); i++ {
+		res := <-movieResCh
+		if res.err != nil {
+			return nil, res.err
 		}
-		md, err := s.mapMetadata(ctx, m.VideoContent, m.GetContentType(), force, hintVideoID, moviePath, budget)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to map metadata for movie %+v hash %s", m, hash)
-		}
-		if md == nil {
-			log.Warnf("no metadata for %v", m.VideoContent)
-			continue
-		}
-		log.Infof("processing movie metadata %+v", md)
-		metadataID, err := models.UpsertMovieMetadata(ctx, db, md)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to upsert metadata for movie %+v hash %s", md, hash)
-		}
-		err = models.LinkMovieToMetadata(ctx, db, m.MovieID, metadataID)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to link movie %+v with metadata for hash %s", m, hash)
+		if res.metadataID != nil {
+			err = models.LinkMovieToMetadata(ctx, db, res.movie.MovieID, *res.metadataID)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to link movie %+v with metadata", res.movie)
+			}
 		}
 	}
 
@@ -370,44 +390,58 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 		return nil, errors.Wrapf(err, "failed to get series for hash %s", hash)
 	}
 
-	for _, ser := range seriesSlice {
-		var md *models.VideoMetadata
-		if mt != models.MediaInfoMediaTypeSeriesCompilation && mt != models.MediaInfoMediaTypeSeriesSplitScenes {
-			seriesPath, perr := models.GetFirstEpisodePathForSeries(ctx, db, ser.SeriesID)
-			if perr != nil {
-				log.WithError(perr).Warnf("failed to load representative episode path for series %v", ser.SeriesID)
-			}
-			// Feed AI fallback the torrent ROOT folder, not the first
-			// episode filename. A series packaged as
-			// "Stand.Up.S13.Complete/01 - haunt in inn.mkv" gives Claude
-			// nothing usable from "01 - haunt in inn" but everything it
-			// needs from "Stand.Up.S13.Complete". Top-level torrents
-			// (single-file series, unusual) keep the full path as-is.
-			seriesPath = torrentRoot(seriesPath)
-			md, err = s.mapMetadata(ctx, ser.VideoContent, ser.GetContentType(), force, hintVideoID, seriesPath, budget)
-		}
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to map metadata for hash %s", hash)
-		}
-		if md == nil {
-			log.Warnf("no metadata for %v", ser.VideoContent)
-			continue
-		}
-		log.Infof("processing series %+v", md)
-		metadataID, err := models.UpsertSeriesMetadata(ctx, db, md)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to upsert series metadata for hash %s", hash)
-		}
-		err = models.LinkSeriesToMetadata(ctx, db, ser.SeriesID, metadataID)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to link series %+v with metadata for hash %s", ser, hash)
-		}
+	type seriesResult struct {
+		series     *models.Series
+		metadataID *uuid.UUID
+		videoID    string
+		err        error
+	}
+	seriesResCh := make(chan seriesResult, len(seriesSlice))
 
-		// Enrich episodes with metadata
-		if len(s.episodeMappers) > 0 {
-			err = s.enrichEpisodes(ctx, db, ser, md.VideoID, force)
+	for _, ser := range seriesSlice {
+		go func(ser *models.Series) {
+			var md *models.VideoMetadata
+			if mt != models.MediaInfoMediaTypeSeriesCompilation && mt != models.MediaInfoMediaTypeSeriesSplitScenes {
+				seriesPath, perr := models.GetFirstEpisodePathForSeries(ctx, db, ser.SeriesID)
+				if perr != nil {
+					log.WithError(perr).Warnf("failed to load representative episode path for series %v", ser.SeriesID)
+				}
+				seriesPath = torrentRoot(seriesPath)
+				md, err = s.mapMetadata(ctx, ser.VideoContent, ser.GetContentType(), force, hintVideoID, seriesPath, budget)
+			}
 			if err != nil {
-				log.WithError(err).Warnf("failed to enrich episodes for series %v hash %s", md.VideoID, hash)
+				seriesResCh <- seriesResult{err: errors.Wrapf(err, "failed to map metadata for series %v", ser)}
+				return
+			}
+			if md == nil {
+				seriesResCh <- seriesResult{series: ser}
+				return
+			}
+			metadataID, err := models.UpsertSeriesMetadata(ctx, db, md)
+			if err != nil {
+				seriesResCh <- seriesResult{err: errors.Wrapf(err, "failed to upsert series metadata for %v", md)}
+				return
+			}
+			seriesResCh <- seriesResult{series: ser, metadataID: &metadataID, videoID: md.VideoID}
+		}(ser)
+	}
+
+	for i := 0; i < len(seriesSlice); i++ {
+		res := <-seriesResCh
+		if res.err != nil {
+			return nil, res.err
+		}
+		if res.metadataID != nil {
+			err = models.LinkSeriesToMetadata(ctx, db, res.series.SeriesID, *res.metadataID)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to link series %+v with metadata", res.series)
+			}
+			// Enrich episodes with metadata
+			if len(s.episodeMappers) > 0 {
+				err = s.enrichEpisodes(ctx, db, res.series, res.videoID, force)
+				if err != nil {
+					log.WithError(err).Warnf("failed to enrich episodes for series %v hash %s", res.videoID, hash)
+				}
 			}
 		}
 	}
@@ -482,6 +516,17 @@ func (s *Enricher) Enrich(ctx context.Context, hash string, claims *api.Claims, 
 		return nil
 	}
 	log.Infof("start processing media info %+v", mi)
+	sidecarEnrichment := false
+	if claims != nil && claims.Subject != "" {
+		userID, err := uuid.FromString(claims.Subject)
+		if err == nil {
+			settings, err := models.GetUserStremioSettingsData(ctx, db, userID)
+			if err == nil && settings != nil {
+				sidecarEnrichment = settings.SidecarEnrichment
+			}
+		}
+	}
+	ctx = context.WithValue(ctx, "sidecar_enrichment", sidecarEnrichment)
 
 	mt, err := s.enrichMediaInfo(ctx, db, hash, claims, force, hintVideoID)
 	if err != nil {

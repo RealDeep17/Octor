@@ -150,7 +150,7 @@ func (s *OMDB) Map(ctx context.Context, m *models.VideoContent, mt models.Conten
 }
 
 func (s *OMDB) MapByID(ctx context.Context, videoID string, ct models.ContentType, force bool) (*models.VideoMetadata, error) {
-	if !strings.HasPrefix(videoID, "tt") {
+	if !strings.HasPrefix(videoID, "tt") && !strings.HasPrefix(videoID, "tpdb:") && !strings.HasPrefix(videoID, "stash:") {
 		return nil, nil
 	}
 	db := s.pg.Get()

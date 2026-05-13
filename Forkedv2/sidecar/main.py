@@ -57,7 +57,7 @@ STASHDB_API_KEY     = os.getenv("STASHDB_API_KEY")
 STASHDB_ENDPOINT    = os.getenv("STASHDB_ENDPOINT", "https://stashdb.org/graphql")
 THEPORNDB_API_KEY   = os.getenv("THEPORNDB_API_KEY") or os.getenv("TPDB_API_KEY")
 TPDB_BASE           = os.getenv("TPDB_BASE", "https://api.theporndb.net")
-NSFW_DB_ENABLED     = os.getenv("NSFW_DB_ENABLED", "true").lower() != "false"
+SIDECAR_ENRICHMENT_ENABLED = os.getenv("SIDECAR_ENRICHMENT_ENABLED", "true").lower() != "false"
 
 SETTINGS_FILE = Path("/data/settings.json")
 
@@ -79,7 +79,7 @@ def get_settings():
             return json.loads(SETTINGS_FILE.read_text())
         except Exception as e:
             log(f"Error reading settings: {e}")
-    return {"nsfw_db_enabled": NSFW_DB_ENABLED}
+    return {"sidecar_enrichment_enabled": SIDECAR_ENRICHMENT_ENABLED}
 
 def save_settings(settings):
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -266,7 +266,7 @@ def studio_in_title(title: str) -> bool:
     t_no_sep = re.sub(r'[^a-z0-9]', '', title.lower())
     return any(s in t_no_sep for s in _NSFW_STUDIOS)
 
-def looks_nsfw(title: str) -> bool:
+def is_adult_content(title: str) -> bool:
     """
     Detect adult content by three signals (JAV handled separately):
 
@@ -386,7 +386,8 @@ def _normalise_tpdb_jav(d: dict) -> dict:
     site_obj = d.get("site") or {}
     poster = d.get("poster")
     if not poster and isinstance(d.get("posters"), dict):
-        poster = d["posters"].get("full") or d["posters"].get("large")
+        # Prefer vertical poster if explicitly listed in posters dict
+        poster = d["posters"].get("poster") or d["posters"].get("full") or d["posters"].get("large")
     if not poster:
         poster = d.get("image")
     return {
@@ -587,7 +588,14 @@ def stashdb_search(term: str) -> List[dict]:
 
 def _normalise_stashdb(s: dict) -> dict:
     images = s.get("images") or []
-    poster = images[0].get("url") if images else None
+    # StashDB: try to find a vertical image (height > width)
+    poster = None
+    for img in images:
+        if img.get("height", 0) > img.get("width", 0):
+            poster = img.get("url")
+            break
+    if not poster and images:
+        poster = images[0].get("url")
     studio = s.get("studio") or {}
     return {
         "id": s.get("id"),
@@ -605,7 +613,7 @@ def _normalise_stashdb(s: dict) -> dict:
     }
 
 # ── Multi-strategy NSFW lookup (namer-style passes) ───────────────────────────
-def nsfw_lookup(title: str) -> Optional[dict]:
+def adult_enrichment_lookup(title: str) -> Optional[dict]:
     """
     Namer-style multi-pass search:
       JAV fast-path: if title looks like a JAV code → TPDB /jav endpoint
@@ -777,12 +785,15 @@ def metadata_proxy(
     i: Optional[str] = Query(None),
     apikey: Optional[str] = Query(None),
     plot: Optional[str] = Query("short"),
+    sidecar_enrichment_enabled: Optional[str] = Query(None),
 ):
     if not t and not i:
         return JSONResponse({"Response": "False", "Error": "No title or ID"}, status_code=400)
 
     settings = get_settings()
-    nsfw_enabled = settings.get("nsfw_db_enabled", True)
+    sidecar_enabled = settings.get("sidecar_enrichment_enabled", True)
+    if sidecar_enrichment_enabled is not None:
+        sidecar_enabled = sidecar_enrichment_enabled.lower() == "true"
 
     # ── Cache check ─────────────────────────────────────────────────────────────
     cache_key = f"{t}|{i}"
@@ -793,7 +804,7 @@ def metadata_proxy(
 
     # ── Path 1: JAV code ────────────────────────────────────────────────────────
     jav_code = extract_jav_code(t) if t else None
-    if jav_code and nsfw_enabled:
+    if jav_code and sidecar_enabled:
         log(f"JAV fast-path for code: {jav_code}")
         result = tpdb_jav_lookup(jav_code)
         if result:
@@ -804,9 +815,9 @@ def metadata_proxy(
 
     # ── Path 2: Western adult scene ─────────────────────────────────────────────
     # Only search when a known studio name OR structural date pattern is present.
-    if t and nsfw_enabled and looks_nsfw(t):
-        log(f"Adult scene search for: {t!r}")
-        data = nsfw_lookup(t)
+    if t and sidecar_enabled and is_adult_content(t):
+        log(f"Adult content detected, attempting enrichment for: {t}")
+        data = adult_enrichment_lookup(t)
         if data:
             _cache_set(cache_key, data)
             return data
@@ -822,11 +833,11 @@ def view_settings():
 
 
 @app.post("/settings")
-def update_settings(nsfw_enabled: bool = Form(...)):
-    settings = {"nsfw_db_enabled": nsfw_enabled}
+def update_settings(sidecar_enrichment_enabled: bool = Form(...)):
+    settings = {"sidecar_enrichment_enabled": sidecar_enrichment_enabled}
     try:
         save_settings(settings)
     except Exception as e:
         log(f"Error saving settings: {e}")
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-    return {"status": "ok", "nsfw_db_enabled": nsfw_enabled}
+    return {"status": "ok", "sidecar_enrichment_enabled": sidecar_enrichment_enabled}

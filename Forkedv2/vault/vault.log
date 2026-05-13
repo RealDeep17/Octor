@@ -1,0 +1,2 @@
+time="2026-05-13T20:14:25+05:30" level=fatal msg="failed to serve application" error="failed to perform PGMigration: ERROR #42701 column \"upload_id\" of relation \"file\" already exists"
+exit status 1

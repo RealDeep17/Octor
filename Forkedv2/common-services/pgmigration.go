@@ -21,6 +21,7 @@ func (s *PGMigration) Run(a ...string) error {
 		log.Infof("DB not initialized, skipping migration")
 		return nil
 	}
+	migrations.SetTableName("gopg_migrations_vault")
 	col := migrations.NewCollection()
 	col.DiscoverSQLMigrations("migrations")
 	_, _, err := col.Run(db, "init")

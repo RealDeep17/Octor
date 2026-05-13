@@ -7,9 +7,9 @@ services:
       - POSTGRES_PASSWORD=webtor
       - POSTGRES_DB=webtor
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - ./infra-data/postgres:/var/lib/postgresql/data
+      - ../server/infra-data/postgres:/var/lib/postgresql/data
 
   redis:
     image: redis:7-alpine
@@ -17,7 +17,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./infra-data/redis:/data
+      - ../server/infra-data/redis:/data
 
   nats:
     image: nats:2-alpine
@@ -25,14 +25,3 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"
-
-  # Optional: SuperTokens if you want a local auth instance
-  # supertokens:
-  #   image: registry.supertokens.io/supertokens/supertokens-postgresql
-  #   container_name: octor-supertokens
-  #   depends_on:
-  #     - postgres
-  #   ports:
-  #     - "3567:3567"
-  #   environment:
-  #     - POSTGRESQL_CONNECTION_URI=postgresql://webtor:webtor@postgres:5432/webtor

@@ -1,0 +1,3 @@
+time="2026-05-13T20:14:30+05:30" level=info msg="api endpoint http://localhost:8080"
+time="2026-05-13T20:14:30+05:30" level=fatal msg="failed to serve application" error="failed to perform PGMigration from 3 to 0: ERROR #42P01 relation \"user\" does not exist"
+exit status 1

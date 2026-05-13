@@ -81,6 +81,7 @@ func (s *Handler) updateSettings(c *gin.Context) {
 
 	settingsData.PreferredResolutions = orderedQualities
 	settingsData.DiscoverOnly = c.PostForm("discover_only") == "on"
+	settingsData.SidecarEnrichment = c.PostForm("sidecar_enrichment") == "on"
 
 	// Validate preferred language against the canonical list. Unknown codes
 	// (and the explicit "any" sentinel) collapse to empty string = no filter.
