@@ -36,13 +36,12 @@ func New(c *cli.Context, cl *Client, pg *cs.PG) *Claims {
 }
 
 type Request struct {
-	Email         string
-	PatreonUserID *string
+	Email string
 }
 
 func (s *Claims) Get(r *Request) (*Data, error) {
-	// prefer cache key by patreonID if available, otherwise by email
-	key := fmt.Sprintf("email:%v;patreonid:%v", r.Email, r.PatreonUserID)
+	// cache key by email
+	key := fmt.Sprintf("email:%v", r.Email)
 	return s.LazyMap.Get(key, func() (resp *Data, err error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -54,11 +53,7 @@ func (s *Claims) Get(r *Request) (*Data, error) {
 		if err != nil {
 			return nil, err
 		}
-		var patreonUserID string
-		if r.PatreonUserID != nil {
-			patreonUserID = *r.PatreonUserID
-		}
-		resp, err = cl.Get(ctx, &proto.GetRequest{Email: r.Email, PatreonUserId: patreonUserID})
+		resp, err = cl.Get(ctx, &proto.GetRequest{Email: r.Email})
 		if err != nil {
 			return nil, errors.WithMessage(err, "failed to get claims")
 		}
@@ -91,8 +86,7 @@ func (s *Claims) MakeUserClaimsFromContext(c *gin.Context) (*Data, error) {
 		return s.makeAdminClaims(), nil
 	}
 	r, err := s.Get(&Request{
-		Email:         u.Email,
-		PatreonUserID: u.PatreonUserID,
+		Email: u.Email,
 	})
 	if _, err := c.Cookie("test-ads"); err == nil {
 		r.Claims.Site.NoAds = false

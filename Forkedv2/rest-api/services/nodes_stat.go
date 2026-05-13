@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
+	log "github.com/sirupsen/logrus"
 	"github.com/webtor-io/lazymap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,7 +82,14 @@ func (s *NodesStat) Get() ([]NodeStat, error) {
 		defer cancel()
 		cl, err := s.kcl.Get()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get k8s client")
+			log.WithError(err).Warn("failed to get k8s client — falling back to static local node")
+			return []NodeStat{
+				{
+					Name:      "local",
+					Subdomain: "octor.duckdns.org",
+					Pools:     []string{"all"},
+				},
+			}, nil
 		}
 		nodes, err := cl.CoreV1().Nodes().List(ctx2, metav1.ListOptions{})
 		if err != nil {

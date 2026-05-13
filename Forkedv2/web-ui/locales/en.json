@@ -123,7 +123,6 @@
     "auth.login.discoverNote": "Authorization is required to access Discover.",
     "@auth.login.discoverNote": "1-line note shown on the Sign In page when the user arrived from Discover (top-nav click or deep link). Mirrors libraryNote/vaultNote — used as the heading of a richer info card that also lists discover.landing.intro + feature1..4.",
     "auth.login.note": "Note:",
-    "auth.login.patreon": "Continue with Patreon",
     "auth.login.google": "Continue with Google",
     "auth.login.orEmail": "Or use email",
     "auth.login.emailPrompt": "Enter your email to receive a one-time login link.",

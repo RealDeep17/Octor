@@ -26,7 +26,6 @@ func main() {
 		host       string
 		port       int
 		email      string
-		patreonID  string
 		timeoutSec int
 	)
 
@@ -42,12 +41,11 @@ func main() {
 	flag.StringVar(&host, "grpc-host", hostDefault, "gRPC server host (can use GRPC_HOST env)")
 	flag.IntVar(&port, "grpc-port", portDefault, "gRPC server port (can use GRPC_PORT env)")
 	flag.StringVar(&email, "email", "", "email to query claims by")
-	flag.StringVar(&patreonID, "patreon-id", "", "Patreon ID to query claims by")
 	flag.IntVar(&timeoutSec, "timeout", 10, "dial/call timeout in seconds")
 	flag.Parse()
 
-	if email == "" && patreonID == "" {
-		fail(errors.New("either --email or --patreon-id must be provided"))
+	if email == "" {
+		fail(errors.New("--email must be provided"))
 	}
 
 	addr := fmt.Sprintf("%s:%d", host, port)
@@ -67,10 +65,8 @@ func main() {
 
 	client := pb.NewClaimsProviderClient(conn)
 
-	// Server prefers patreon_id when both are present; we emulate same behavior.
 	req := &pb.GetRequest{
-		Email:         email,
-		PatreonUserId: patreonID,
+		Email: email,
 	}
 
 	resp, err := client.Get(ctx, req)
@@ -100,7 +96,6 @@ func printResponse(r *pb.GetResponse) {
 		if r.Context.Tier != nil {
 			fmt.Printf("  Tier: id=%d name=%s\n", r.Context.Tier.Id, r.Context.Tier.Name)
 		}
-		fmt.Printf("  Patreon ID: %s\n", r.Context.PatreonUserId)
 	}
 
 	fmt.Println("Claims:")

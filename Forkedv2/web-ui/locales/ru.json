@@ -119,7 +119,6 @@
     "auth.login.vaultNote": "Для сохранения торрентов в Vault необходима авторизация.",
     "auth.login.discoverNote": "Для доступа к Discover необходима авторизация.",
     "auth.login.note": "Примечание:",
-    "auth.login.patreon": "Войти через Patreon",
     "auth.login.google": "Войти через Google",
     "auth.login.orEmail": "Или по email",
     "auth.login.emailPrompt": "Введите email для получения одноразовой ссылки для входа.",

@@ -3,9 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -39,8 +37,6 @@ const (
 	SupertokensPortFlag     = "supertokens-port"
 	googleClientIDFlag      = "google-client-id"
 	googleClientSecretFlag  = "google-client-secret"
-	patreonClientIDFlag     = "patreon-client-id"
-	patreonClientSecretFlag = "patreon-client-secret"
 	overrideUserEmail       = "override-user-email"
 )
 
@@ -68,16 +64,6 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 			EnvVar: "GOOGLE_CLIENT_SECRET",
 		},
 		cli.StringFlag{
-			Name:   patreonClientIDFlag,
-			Usage:  "patreon oauth client id",
-			EnvVar: "PATREON_CLIENT_ID",
-		},
-		cli.StringFlag{
-			Name:   patreonClientSecretFlag,
-			Usage:  "patreon oauth client secret",
-			EnvVar: "PATREON_CLIENT_SECRET",
-		},
-		cli.StringFlag{
 			Name:   overrideUserEmail,
 			Usage:  "override user email",
 			EnvVar: "OVERRIDE_USER_EMAIL",
@@ -97,8 +83,6 @@ type Auth struct {
 	pg                  *cs.PG
 	googleClientID      string
 	googleClientSecret  string
-	patreonClientID     string
-	patreonClientSecret string
 	hasSupetokens       bool
 	overrideUserEmail   string
 }
@@ -117,8 +101,6 @@ func New(c *cli.Context, cl *http.Client, pg *cs.PG) *Auth {
 		pg:                  pg,
 		googleClientID:      c.String(googleClientIDFlag),
 		googleClientSecret:  c.String(googleClientSecretFlag),
-		patreonClientID:     c.String(patreonClientIDFlag),
-		patreonClientSecret: c.String(patreonClientSecretFlag),
 		overrideUserEmail:   c.String(overrideUserEmail),
 	}
 }
@@ -205,79 +187,6 @@ func (s *Auth) Init() error {
 								},
 							},
 						},
-						{
-							Config: tpmodels.ProviderConfig{
-								ThirdPartyId:          "patreon",
-								AuthorizationEndpoint: "https://www.patreon.com/oauth2/authorize",
-								TokenEndpoint:         "https://www.patreon.com/api/oauth2/token",
-								TokenEndpointBodyParams: map[string]interface{}{
-									"grant_type":    "authorization_code",
-									"client_id":     s.patreonClientID,
-									"client_secret": s.patreonClientSecret,
-								},
-								Clients: []tpmodels.ProviderClientConfig{
-									{
-										ClientID:     s.patreonClientID,
-										ClientSecret: s.patreonClientSecret,
-										Scope:        []string{"identity", "identity[email]"},
-									},
-								},
-							},
-							Override: func(originalImplementation *tpmodels.TypeProvider) *tpmodels.TypeProvider {
-								originalImplementation.GetUserInfo = func(oAuthTokens map[string]interface{}, userContext *map[string]interface{}) (tpmodels.TypeUserInfo, error) {
-									accessToken, _ := oAuthTokens["access_token"].(string)
-									identityURL := "https://www.patreon.com/api/oauth2/v2/identity?fields[user]=email"
-									req, err := http.NewRequest("GET", identityURL, nil)
-									if err != nil {
-										log.WithError(err).Error("patreon identity: build request failed")
-										return tpmodels.TypeUserInfo{}, err
-									}
-									req.Header.Set("Authorization", "Bearer "+accessToken)
-									req.Header.Set("Content-Type", "application/json")
-									res, err := s.cl.Do(req)
-									if err != nil {
-										log.WithError(err).Error("patreon identity: http call failed")
-										return tpmodels.TypeUserInfo{}, err
-									}
-									defer func(Body io.ReadCloser) {
-										_ = Body.Close()
-									}(res.Body)
-									body, err := io.ReadAll(res.Body)
-									if err != nil {
-										log.WithError(err).WithField("status", res.StatusCode).Error("patreon identity: read body failed")
-										return tpmodels.TypeUserInfo{}, err
-									}
-									bodyPreview := string(body)
-									if len(bodyPreview) > 1024 {
-										bodyPreview = bodyPreview[:1024]
-									}
-									if res.StatusCode < 200 || res.StatusCode >= 300 {
-										log.WithField("status", res.StatusCode).WithField("body", bodyPreview).Error("patreon identity: non-2xx response")
-										return tpmodels.TypeUserInfo{}, fmt.Errorf("patreon identity: status %d", res.StatusCode)
-									}
-									var data PatreonIdentityResponse
-									if err := json.Unmarshal(body, &data); err != nil {
-										log.WithError(err).WithField("body", bodyPreview).Error("patreon identity: unmarshal failed")
-										return tpmodels.TypeUserInfo{}, err
-									}
-									if data.Data.ID == "" || data.Data.Attributes.Email == "" {
-										log.WithField("has_id", data.Data.ID != "").WithField("has_email", data.Data.Attributes.Email != "").WithField("body", bodyPreview).Error("patreon identity: empty id or email")
-										return tpmodels.TypeUserInfo{}, fmt.Errorf("patreon identity: missing id or email")
-									}
-									return tpmodels.TypeUserInfo{
-										ThirdPartyUserId: data.Data.ID,
-										Email: &tpmodels.EmailStruct{
-											ID:         data.Data.Attributes.Email,
-											IsVerified: true,
-										},
-										RawUserInfoFromProvider: tpmodels.TypeRawUserInfoFromProvider{
-											FromUserInfoAPI: map[string]interface{}{},
-										},
-									}, nil
-								}
-								return originalImplementation
-							},
-						},
 					},
 				},
 			}),
@@ -293,7 +202,6 @@ type User struct {
 	ID            uuid.UUID
 	Email         string
 	Expired       bool
-	PatreonUserID *string
 	IsNew         bool
 	Tier          string
 }
@@ -309,7 +217,6 @@ func makeUserFromContext(c *gin.Context) *User {
 	if ok {
 		u.ID = su.UserID
 		u.Email = su.Email
-		u.PatreonUserID = su.PatreonUserID
 		u.Tier = su.Tier
 	}
 	inc := c.Request.Context().Value(IsNewContext{})
@@ -410,23 +317,19 @@ func (s *Auth) createUser(ctx context.Context, sess sessmodels.SessionContainer)
 	userID := sess.GetUserID()
 
 	if s.overrideUserEmail != "" {
-		return models.GetOrCreateUser(ctx, db, s.overrideUserEmail, nil)
-	}
+	return models.GetOrCreateUser(ctx, db, s.overrideUserEmail)
+}
 
-	// Try to get user from passwordless first
-	userInfo, err := passwordless.GetUserByID(userID)
-	if err == nil && userInfo != nil && userInfo.Email != nil {
-		return models.GetOrCreateUser(ctx, db, *userInfo.Email, nil)
-	}
+// Try to get user from passwordless first
+userInfo, err := passwordless.GetUserByID(userID)
+if err == nil && userInfo != nil && userInfo.Email != nil {
+	return models.GetOrCreateUser(ctx, db, *userInfo.Email)
+}
 
 	// If not found in passwordless, try third-party
 	tpUserInfo, err := thirdparty.GetUserByID(userID)
 	if err == nil && tpUserInfo != nil && tpUserInfo.Email != "" {
-		var patreonUserID *string = nil
-		if tpUserInfo.ThirdParty.ID == "patreon" {
-			patreonUserID = &tpUserInfo.ThirdParty.UserID
-		}
-		return models.GetOrCreateUser(ctx, db, tpUserInfo.Email, patreonUserID)
+		return models.GetOrCreateUser(ctx, db, tpUserInfo.Email)
 	}
 	return
 }
@@ -483,7 +386,7 @@ func (s *Auth) registerAdminUser(c *gin.Context) {
 	if db == nil {
 		return
 	}
-	u, isNew, err := models.GetOrCreateUser(c.Request.Context(), db, "admin", nil)
+	u, isNew, err := models.GetOrCreateUser(c.Request.Context(), db, "admin")
 	if err != nil {
 		log.WithError(err).Error("failed to create admin user")
 		return

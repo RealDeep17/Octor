@@ -32,7 +32,7 @@ func (h *Handler) userUpdated(msg []byte) error {
 	}
 
 	db := h.pg.Get()
-	user, _, err := models.GetOrCreateUser(ctx, db, m.Email, nil)
+	user, _, err := models.GetOrCreateUser(ctx, db, m.Email)
 	if err != nil {
 		return err
 	}
@@ -48,9 +48,8 @@ func (h *Handler) userUpdated(msg []byte) error {
 	// 3. UpdateUserVPIfExists if Vault exists
 	if h.vault != nil {
 		authUser := &auth.User{
-			ID:            user.UserID,
-			Email:         user.Email,
-			PatreonUserID: user.PatreonUserID,
+			ID:    user.UserID,
+			Email: user.Email,
 		}
 		if _, err := h.vault.UpdateUserVPIfExists(ctx, authUser); err != nil {
 			return err

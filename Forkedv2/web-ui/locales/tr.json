@@ -119,7 +119,6 @@
     "auth.login.vaultNote": "Torrentleri Vault'a kaydetmek için yetkilendirme gerekli.",
     "auth.login.discoverNote": "Discover'a erişmek için yetkilendirme gerekli.",
     "auth.login.note": "Not:",
-    "auth.login.patreon": "Patreon ile devam et",
     "auth.login.google": "Google ile devam et",
     "auth.login.orEmail": "Veya e-posta kullan",
     "auth.login.emailPrompt": "Tek seferlik giriş linki almak için e-postanı gir.",

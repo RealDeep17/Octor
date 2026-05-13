@@ -27,11 +27,7 @@ func PopulateUserTiers(col *migrations.Collection, cl *claims.Client) {
 			return err
 		}
 		for _, u := range users {
-			var patreonUserID string
-			if u.PatreonUserID != nil {
-				patreonUserID = *u.PatreonUserID
-			}
-			r, err := c.Get(ctx, &proto.GetRequest{Email: u.Email, PatreonUserId: patreonUserID})
+			r, err := c.Get(ctx, &proto.GetRequest{Email: u.Email})
 			if err != nil {
 				return err
 			}

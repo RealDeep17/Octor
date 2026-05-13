@@ -119,7 +119,6 @@
     "auth.login.vaultNote": "L'authentification est requise pour enregistrer des torrents dans Vault.",
     "auth.login.discoverNote": "L'authentification est requise pour accéder à Discover.",
     "auth.login.note": "Note :",
-    "auth.login.patreon": "Continuer avec Patreon",
     "auth.login.google": "Continuer avec Google",
     "auth.login.orEmail": "Ou utiliser un e-mail",
     "auth.login.emailPrompt": "Saisissez votre e-mail pour recevoir un lien de connexion à usage unique.",

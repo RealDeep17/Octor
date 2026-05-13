@@ -119,7 +119,6 @@
     "auth.login.vaultNote": "Autorisatie is vereist om torrents op te slaan in Vault.",
     "auth.login.discoverNote": "Autorisatie is vereist om Discover te gebruiken.",
     "auth.login.note": "Let op:",
-    "auth.login.patreon": "Doorgaan met Patreon",
     "auth.login.google": "Doorgaan met Google",
     "auth.login.orEmail": "Of gebruik e-mail",
     "auth.login.emailPrompt": "Voer je e-mail in om een eenmalige login-link te ontvangen.",

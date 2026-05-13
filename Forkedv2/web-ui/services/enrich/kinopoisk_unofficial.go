@@ -24,6 +24,9 @@ func (s *KinopoiskUnofficial) GetName() string {
 }
 
 func NewKinopoiskUnofficial(pg *cs.PG, api *ku.Api) *KinopoiskUnofficial {
+	if api == nil {
+		return nil
+	}
 	return &KinopoiskUnofficial{
 		pg:  pg,
 		api: api,

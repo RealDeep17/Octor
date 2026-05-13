@@ -110,7 +110,7 @@ GIN_MODE=release go run $GO_FLAGS . serve \
     --webtor-rest-api-port 8080 \
     --vault-service-host localhost \
     --vault-service-port 8086 \
-    --domain http://localhost:8081 > web-ui.log 2>&1 &
+    --domain $EXTERNAL_URL > web-ui.log 2>&1 &
 cd ..
 
 # G. Vault (Go)
@@ -123,11 +123,32 @@ GIN_MODE=release go run $GO_FLAGS . serve \
     --prom-port 8089 \
     --webtor-rest-api-host localhost \
     --webtor-rest-api-port 8080 \
-    --aws-bucket webtor-vault > vault.log 2>&1 &
+    --s3-endpoint http://localhost:9000 \
+    --s3-access-key-id octoradmin \
+    --s3-secret-access-key octorpassword \
+    --s3-bucket vault \
+    --s3-region us-east-1 > vault.log 2>&1 &
 cd ..
 
+# H. Reverse Proxy (Caddy with DuckDNS plugin)
+echo "   -> Starting Custom Caddy Reverse Proxy..."
+export DuckDNS_Token="2b8b9c5c-005e-418b-8449-3c75e9bd727d"
+./caddy-custom stop > /dev/null 2>&1
+./caddy-custom start --config Caddyfile > caddy.log 2>&1
+
+# I. DuckDNS IP Auto-Updater
+echo "   -> Starting DuckDNS IP Auto-Updater..."
+(
+    while true; do
+        curl -s "https://www.duckdns.org/update?domains=octor&token=2b8b9c5c-005e-418b-8449-3c75e9bd727d&ip=" > /dev/null
+        sleep 300
+    done
+) &
+
 echo "🎉 All services starting in background!"
-echo "   - Web UI: http://localhost:8081"
+echo "   - Secure URL: https://absorption-chief-slowly-dining.trycloudflare.com"
+echo "   - External UI: https://octor.duckdns.org"
+echo "   - Internal Web UI: http://localhost:8081"
 echo "   - Rest API: http://localhost:8080"
 echo "   - Sidecar: http://localhost:8000"
 echo "   - Vault: http://localhost:8086"

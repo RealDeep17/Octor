@@ -112,8 +112,7 @@ func (s *DomainSettings) Get(domain string) (*DomainSettingsData, error) {
 			return nil, err
 		}
 		cl, err := s.claims.Get(&claims.Request{
-			Email:         em.User.Email,
-			PatreonUserID: em.User.PatreonUserID,
+			Email: em.User.Email,
 		})
 		if err != nil {
 			return nil, err
