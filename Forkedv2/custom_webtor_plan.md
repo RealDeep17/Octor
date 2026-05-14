@@ -101,7 +101,26 @@ services:
     # ... rest of services (seeder, transcoder, postgres, etc.)
 ```
 
-## 📝 Next Steps
-1. **Containerize the Sidecar**: Ensure your custom plugin has a Dockerfile.
-2. **Harmonize the Network**: Connect all 20+ services to a single internal Docker network.
-3. **Database Initialization**: Run the migrations found in the `migrations` folders of the respective repositories.
+## 💎 Premium Refinements (Self-Hosted Octor)
+
+To transform this into a premium personal media suite, the following high-impact modifications are required:
+
+### ⚡ Performance & UX
+*   **SSE Turbo**: Reduce the status refresh ticker from `1s` to `200ms` for fluid progress bars.
+*   **Seeder Connection Limits**: Increase `EstablishedConnsPerTorrent` and `HalfOpenConns` to allow full 4Gbps saturation.
+*   **Real-time UI**: Implement WebSocket/SSE listeners in the Library to show new additions without page reloads.
+
+### 📁 Storage & Vault Evolution
+*   **Vault -> Library Link**: Modify the Vault action handler to automatically register new resources in the Library database.
+*   **Metric Shift**: [DONE] De-monetized the UI by replacing "Vault Points (VP)" with real disk "GB/TB" metrics via `statfs`.
+*   **Non-Sequential (Turbo) Vaulting**: Enable rarest-first piece selection for background vaulting jobs to maximize download speeds.
+
+### 🌐 Metadata Waterfall
+*   **Tier 1: Stremio/Cinemeta**: A free, keyless metadata proxy for mainstream movies.
+*   **Tier 2: NSFW Sidecar**: Specialized adult metadata (StashDB/ThePornDB).
+*   **Tier 3: Local Fallback**: Parsed torrent info (PTN) for completely obscure content.
+
+## 💾 Hybrid Storage Pipeline (Phase 3)
+*   **Rclone Mount**: Merge multiple Google Drive accounts into a unified `/mnt/octor` layer.
+*   **RAM-First VFS**: Use the 24GB VPS RAM as a high-speed buffer (2GB+ per stream) to enable instant seek times on 4K content.
+*   **MinIO Bridge**: Use local S3 (MinIO) as the primary landing zone, with Rclone handling the massive long-term archive.

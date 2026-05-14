@@ -1,0 +1,18 @@
+default:
+  name: torrent-web-seeder
+  endpointsProvider: Environment
+hls:
+  name: content-transcoder
+  endpointsProvider: Environment
+vi:
+  name: video-info
+  endpointsProvider: Environment
+arch:
+  name: torrent-archiver
+  endpointsProvider: Environment
+vtt:
+  name: srt2vtt
+  endpointsProvider: Environment
+vod:
+  name: torrent-web-seeder
+  endpointsProvider: Environment

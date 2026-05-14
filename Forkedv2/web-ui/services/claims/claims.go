@@ -62,14 +62,17 @@ func (s *Claims) Get(r *Request) (*Data, error) {
 }
 
 func (s *Claims) makeAdminClaims() *Data {
+	var rate uint64 = 0
 	return &Data{Context: &proto.Context{
 		Tier: &proto.Tier{
-			Id:   1,
-			Name: "free",
+			Id:   2,
+			Name: "pro",
 		},
 	},
 		Claims: &proto.Claims{
-			Connection: &proto.Connection{},
+			Connection: &proto.Connection{
+				Rate: &rate,
+			},
 			Embed: &proto.Embed{
 				NoAds: true,
 			},

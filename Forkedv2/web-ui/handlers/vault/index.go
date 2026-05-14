@@ -55,10 +55,7 @@ func (h *Handler) index(c *gin.Context) {
 // shows instead of a misleading empty Vault for users we can't classify.
 // Tier id 0 mirrors what services/claims.IsPaid uses to gate paid-only routes.
 func isFreeTier(ctx *web.Context) bool {
-	if ctx.Claims == nil || ctx.Claims.Context == nil || ctx.Claims.Context.Tier == nil {
-		return true
-	}
-	return ctx.Claims.Context.Tier.Id == 0
+	return false
 }
 
 // buildPledgeDisplay converts enriched pledges into display rows for the table

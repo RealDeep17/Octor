@@ -14,6 +14,7 @@ import (
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/claims"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -21,6 +22,7 @@ const (
 	VaultResourceExpirePeriodFlag            = "vault-resource-expire-period"
 	VaultResourceAbandonedExpirePeriodFlag   = "vault-resource-abandoned-expire-period"
 	VaultResourceTransferTimeoutPeriodFlag   = "vault-resource-transfer-timeout-period"
+	VaultStoragePathFlag                     = "vault-storage-path"
 )
 
 func RegisterFlags(f []cli.Flag) []cli.Flag {
@@ -28,7 +30,7 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 		cli.DurationFlag{
 			Name:   VaultPledgeFreezePeriodFlag,
 			Usage:  "vault pledge freeze period",
-			Value:  24 * time.Hour,
+			Value:  0,
 			EnvVar: "VAULT_PLEDGE_FREEZE_PERIOD",
 		},
 		cli.DurationFlag{
@@ -49,6 +51,12 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 			Value:  7 * 24 * time.Hour,
 			EnvVar: "VAULT_RESOURCE_TRANSFER_TIMEOUT_PERIOD",
 		},
+		cli.StringFlag{
+			Name:   VaultStoragePathFlag,
+			Usage:  "path to storage to calculate free space",
+			Value:  ".",
+			EnvVar: "VAULT_STORAGE_PATH",
+		},
 	)
 }
 
@@ -61,6 +69,7 @@ type Vault struct {
 	freezePeriod          time.Duration
 	expirePeriod          time.Duration
 	transferTimeoutPeriod time.Duration
+	storagePath           string
 }
 
 func New(c *cli.Context, vaultApi *Api, cl *claims.Claims, client *http.Client, pg *cs.PG, restApi *api.Api) *Vault {
@@ -82,6 +91,7 @@ func New(c *cli.Context, vaultApi *Api, cl *claims.Claims, client *http.Client, 
 		freezePeriod:          freezePeriod,
 		expirePeriod:          expirePeriod,
 		transferTimeoutPeriod: transferTimeoutPeriod,
+		storagePath:           c.String(VaultStoragePathFlag),
 	}
 }
 
@@ -370,9 +380,19 @@ func (s *Vault) GetUserStats(ctx context.Context, user *auth.User) (*UserStats, 
 			available = 0
 		}
 		stats.Available = &available
+	} else {
+		// Self-hosted logic: total = funded + free_space
+		free := s.getFreeSpaceGB()
+		total := stats.Funded + free
+		stats.Total = &total
+		stats.Available = &free
 	}
 
 	return stats, enriched, nil
+}
+
+func (s *Vault) getFreeSpaceGB() float64 {
+	return getFreeSpaceGB(s.storagePath)
 }
 
 // CreatePledge creates a new pledge for a resource
@@ -614,18 +634,7 @@ func (s *Vault) GetPledge(ctx context.Context, user *auth.User, resource *vaultM
 // IsPledgeFrozen checks if a pledge is currently in the freeze period.
 // The freeze runs for the full freezePeriod from FrozenAt, regardless of vault status.
 func (s *Vault) IsPledgeFrozen(ctx context.Context, pledge *vaultModels.Pledge) (bool, error) {
-	if pledge == nil {
-		return false, errors.New("pledge is nil")
-	}
-
-	// Calculate the time when freeze period ends
-	freezeEndTime := pledge.FrozenAt.Add(s.freezePeriod)
-
-	// Check if current time is still within freeze period
-	now := time.Now()
-	isFrozen := now.Before(freezeEndTime)
-
-	return isFrozen, nil
+	return false, nil
 }
 
 // RemovePledge removes a pledge and updates the resource accordingly
@@ -880,4 +889,19 @@ func pointsEqual(a, b *float64) bool {
 		return false
 	}
 	return *a == *b
+}
+
+func getFreeSpaceGB(path string) float64 {
+	var stat unix.Statfs_t
+	if path == "" {
+		path = "."
+	}
+	err := unix.Statfs(path, &stat)
+	if err != nil {
+		log.WithError(err).WithField("path", path).Error("failed to get free space")
+		return 0
+	}
+	// Available blocks * size per block = available bytes
+	free := float64(stat.Bavail) * float64(stat.Bsize)
+	return free / (1024 * 1024 * 1024)
 }
