@@ -1,36 +1,44 @@
-{{ define "title" }}Downloads{{ end }}
+{{ define "title" }}Vault{{ end }}
 {{ define "main" }}
 <section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
   <div class="max-w-[960px] mx-auto">
 
-    {{/* ── Header ─────────────────────────────────────────── */}}
-    <div class="flex items-center justify-between mb-8">
-      <div>
-        <h1 class="text-[clamp(1.75rem,3.5vw,2.4rem)] font-extrabold tracking-tight leading-tight">
-          Downloads
-        </h1>
-        <p class="text-sm text-w-muted mt-1">Local cache — torrents stored on this server</p>
-      </div>
-      <a href="{{ langPath $.Lang "/profile" }}" class="btn btn-sm btn-ghost border border-w-line gap-1.5" data-async-target="main">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
-        Profile
-      </a>
-    </div>
-
-    {{/* ── Summary bar ─────────────────────────────────────── */}}
+    {{/* ── Stats & Storage ─────────────────────────────────── */}}
     {{ if .Data.Stats }}
-    <div class="grid grid-cols-3 gap-3 mb-8">
-      <div class="bg-base-300/50 border border-w-line rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-        <span class="text-2xl font-bold text-green-400">{{ .Data.Stats.VaultedCount }}</span>
-        <span class="text-xs text-w-muted mt-1 font-medium tracking-wide uppercase">Saved</span>
+    <div class="grid grid-cols-3 gap-3 sm:gap-4 mb-8">
+      {{/* ── Storage usage (Spans more space, but in same row) ──────────────── */}}
+      <div class="bg-base-300/50 border border-w-line rounded-2xl p-6 flex flex-col justify-center">
+        <div class="flex justify-between items-end mb-3">
+            <div>
+                <span class="text-xl font-bold text-w-text tabular-nums">{{ formatVP .Data.Stats.Funded }}</span>
+                <span class="text-[10px] text-w-muted font-bold uppercase tracking-widest ml-1">Used</span>
+            </div>
+            <div class="text-right">
+                {{ if .Data.Stats.Total }}
+                    <span class="text-sm font-semibold text-w-sub tabular-nums">{{ formatVP (derefFloat64 .Data.Stats.Total) }}</span>
+                {{ else }}
+                    <span class="text-sm font-semibold text-w-sub">&#8734;</span>
+                {{ end }}
+                <span class="text-[10px] text-w-muted font-bold uppercase tracking-widest ml-1">Total</span>
+            </div>
+        </div>
+        <div class="w-full bg-base-200 rounded-full h-2 overflow-hidden border border-w-line/20">
+            {{ if .Data.Stats.Total }}
+                <div class="h-full bg-gradient-to-r from-w-pink to-w-pinkL transition-all duration-1000 ease-out" style="width: {{ printf "%.1f" (multiply (div .Data.Stats.Funded (derefFloat64 .Data.Stats.Total)) 100.0) }}%"></div>
+            {{ else }}
+                <div class="h-full bg-gradient-to-r from-w-pink to-w-pinkL transition-all duration-1000 ease-out" style="width: 5%"></div>
+            {{ end }}
+        </div>
       </div>
-      <div class="bg-base-300/50 border border-w-line rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-        <span class="text-2xl font-bold {{ if gt .Data.Stats.LoadingCount 0 }}text-w-cyan{{ else }}text-w-muted{{ end }}">{{ .Data.Stats.LoadingCount }}</span>
-        <span class="text-xs text-w-muted mt-1 font-medium tracking-wide uppercase">Loading</span>
+
+      {{/* ── Stats ─────────────────────────────────────── */}}
+      <div class="bg-base-300/50 border border-w-line rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+        <span class="text-xl font-bold text-green-400">{{ .Data.Stats.VaultedCount }}</span>
+        <span class="text-[10px] text-w-muted mt-1 font-bold tracking-widest uppercase">Saved</span>
       </div>
-      <div class="bg-base-300/50 border border-w-line rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-        <span class="text-2xl font-bold {{ if gt .Data.Stats.ExpiringCount 0 }}text-w-pinkL{{ else }}text-w-muted{{ end }}">{{ .Data.Stats.ExpiringCount }}</span>
-        <span class="text-xs text-w-muted mt-1 font-medium tracking-wide uppercase">Expiring</span>
+      <div class="bg-base-300/50 border border-w-line rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+        <span class="text-xl font-bold {{ if gt .Data.Stats.LoadingCount 0 }}text-w-cyan{{ else }}text-w-muted{{ end }}">{{ .Data.Stats.LoadingCount }}</span>
+        <span class="text-[10px] text-w-muted mt-1 font-bold tracking-widest uppercase">Processing</span>
       </div>
     </div>
     {{ end }}

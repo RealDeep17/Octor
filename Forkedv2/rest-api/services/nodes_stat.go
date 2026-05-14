@@ -86,7 +86,7 @@ func (s *NodesStat) Get() ([]NodeStat, error) {
 			return []NodeStat{
 				{
 					Name:      "local",
-					Subdomain: "octor.duckdns.org",
+					Subdomain: "",
 					Pools:     []string{"all"},
 				},
 			}, nil

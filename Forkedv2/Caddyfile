@@ -3,7 +3,19 @@
 }
 
 octor.duckdns.org {
-    reverse_proxy localhost:8081
+    # Route seeder/stream traffic to the seeder service
+    @seeder {
+        path /speedtest* /webseed* /torrent* /stat*
+    }
+    handle @seeder {
+        reverse_proxy localhost:50052
+    }
+
+    # Route everything else to the Web UI
+    handle {
+        reverse_proxy localhost:8081
+    }
+
     tls {
         dns duckdns 2b8b9c5c-005e-418b-8449-3c75e9bd727d
     }

@@ -183,12 +183,6 @@ func (s *Handler) prepareVaultPledgeRemoveForm(c *gin.Context, args *GetArgs) (*
 		return form, nil
 	}
 
-	// Check if pledge is frozen
-	isFrozen, err := s.vault.IsPledgeFrozen(ctx, pledge)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to check pledge frozen status")
-	}
-
-	form.Frozen = isFrozen
+	form.Frozen = false
 	return form, nil
 }

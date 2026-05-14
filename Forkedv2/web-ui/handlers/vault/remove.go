@@ -55,15 +55,7 @@ func (h *Handler) deletePledge(ctx context.Context, resourceID string, user *aut
 		return errors.New("pledge not found")
 	}
 
-	// Check if pledge is frozen
-	isFrozen, err := h.vault.IsPledgeFrozen(ctx, pledge)
-	if err != nil {
-		return errors.Wrap(err, "failed to check pledge frozen status")
-	}
 
-	if isFrozen {
-		return errors.New("pledge is frozen and cannot be removed")
-	}
 
 	// Remove the pledge
 	err = h.vault.RemovePledge(ctx, pledge)

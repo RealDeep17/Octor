@@ -133,6 +133,26 @@ func (s *Helper) BitsForHumans(b int64) string {
 	return h.Bytes(uint64(b))
 }
 
+func (s *Helper) FormatVP(vp float64) string {
+	bytes := int64(vp * 1024 * 1024 * 1024)
+	return h.Bytes(uint64(bytes))
+}
+
+func (s *Helper) FormatVPBytes(vp float64) int64 {
+	return int64(vp * 1024 * 1024 * 1024)
+}
+
+func (s *Helper) Multiply(a, b float64) float64 {
+	return a * b
+}
+
+func (s *Helper) Div(a, b float64) float64 {
+	if b == 0 {
+		return 0
+	}
+	return a / b
+}
+
 func (s *Helper) Dev() bool {
 	return gin.Mode() == "debug"
 }

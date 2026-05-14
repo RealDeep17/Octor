@@ -3,8 +3,8 @@
 # Octor Hybrid Dev Runner (ARM64 Optimized)
 # Runs infra in Docker and services on Host.
 
-# Protobuf conflict ignore flag
-GO_FLAGS="-ldflags=-X=google.golang.org/protobuf/reflect/protoregistry.conflictPolicy=ignore"
+# Protobuf conflict ignore
+export GOLANG_PROTOBUF_REGISTRATION_CONFLICT=ignore
 
 # 1. Load Environment
 if [ -f ../.env ]; then
@@ -58,13 +58,13 @@ go run $GO_FLAGS . serve \
 cd ..
 
 # C. Torrent Web Seeder (Go)
-echo "   -> Starting Torrent Web Seeder (50052)..."
+echo "   -> Starting Torrent Web Seeder (50054)..."
 cd torrent-web-seeder/server
 go run $GO_FLAGS . \
-    --port 50052 \
-    --pprof-port 50062 \
-    --probe-port 50072 \
-    --prom-port 50082 > torrent-web-seeder.log 2>&1 &
+    --port 50054 \
+    --pprof-port 50064 \
+    --probe-port 50074 \
+    --prom-port 50084 > torrent-web-seeder.log 2>&1 &
 cd ../..
 
 # D. Magnet2Torrent (Go)
@@ -76,14 +76,72 @@ go run $GO_FLAGS . \
     --probe-port 50073 > magnet2torrent.log 2>&1 &
 cd ../..
 
-# E. Rest API (Go)
+# E. Content Transcoder (Go)
+echo "   -> Starting Content Transcoder (50055)..."
+cd content-transcoder
+go run $GO_FLAGS . \
+    --port 50055 \
+    --pprof-port 50065 \
+    --probe-port 50075 > content-transcoder.log 2>&1 &
+cd ..
+
+# F. Video Info (Go)
+echo "   -> Starting Video Info (50056)..."
+cd video-info
+go run $GO_FLAGS . \
+    --port 50056 \
+    --pprof-port 50066 \
+    --probe-port 50076 > video-info.log 2>&1 &
+cd ..
+
+# G. Torrent Archiver (Go)
+echo "   -> Starting Torrent Archiver (50057)..."
+cd torrent-archiver
+go run $GO_FLAGS . \
+    --port 50057 \
+    --pprof-port 50067 \
+    --probe-port 50077 \
+    --prom-port 50087 > torrent-archiver.log 2>&1 &
+cd ..
+
+# H. SRT2VTT (Go)
+echo "   -> Starting SRT2VTT (50058)..."
+cd srt2vtt
+go run $GO_FLAGS . \
+    --port 50058 \
+    --pprof-port 50068 \
+    --probe-port 50078 > srt2vtt.log 2>&1 &
+cd ..
+
+# I. Torrent HTTP Proxy (Go) - CRITICAL EDGE SERVICE
+echo "   -> Starting Torrent HTTP Proxy (50052)..."
+cd torrent-http-proxy
+export TORRENT_WEB_SEEDER_SERVICE_HOST=127.0.0.1
+export TORRENT_WEB_SEEDER_SERVICE_PORT=50054
+export CONTENT_TRANSCODER_SERVICE_HOST=127.0.0.1
+export CONTENT_TRANSCODER_SERVICE_PORT=50055
+export VIDEO_INFO_SERVICE_HOST=127.0.0.1
+export VIDEO_INFO_SERVICE_PORT=50056
+export TORRENT_ARCHIVER_SERVICE_HOST=127.0.0.1
+export TORRENT_ARCHIVER_SERVICE_PORT=50057
+export SRT2VTT_SERVICE_HOST=127.0.0.1
+export SRT2VTT_SERVICE_PORT=50058
+go run $GO_FLAGS . \
+    --port 50052 \
+    --config services.yaml \
+    --pprof-port 50062 \
+    --probe-port 50072 \
+    --prom-port 50082 > torrent-http-proxy.log 2>&1 &
+cd ..
+
+# J. Rest API (Go)
 echo "   -> Starting Rest API (8080)..."
 cd rest-api
 GIN_MODE=release go run $GO_FLAGS . serve \
     --port 8080 \
-    --pprof-port 8082 \
-    --probe-port 8084 \
-    --export-domain http://localhost:50052 \
+    --pprof-port 50182 \
+    --probe-port 50184 \
+    --export-domain https://octor.duckdns.org \
     --torrent-store-host 127.0.0.1 \
     --torrent-store-port 50051 \
     --magnet2torrent-host 127.0.0.1 \
@@ -91,8 +149,10 @@ GIN_MODE=release go run $GO_FLAGS . serve \
     --export-use-subdomains false > rest-api.log 2>&1 &
 cd ..
 
-# F. Web UI (Go)
+# K. Web UI (Go)
 echo "   -> Starting Web UI (8081)..."
+export VAULT_STORAGE_PATH=$(pwd)/server/infra-data/minio
+mkdir -p $VAULT_STORAGE_PATH
 cd web-ui
 if [ ! -d "node_modules" ]; then
     echo "      (First run: Installing npm modules...)"
@@ -102,18 +162,10 @@ if [ ! -d "assets/dist" ]; then
     echo "      (Building assets...)"
     npm run build
 fi
-GIN_MODE=release go run $GO_FLAGS . serve \
-    --port 8081 \
-    --pprof-port 8083 \
-    --probe-port 8085 \
-    --webtor-rest-api-host localhost \
-    --webtor-rest-api-port 8080 \
-    --vault-service-host localhost \
-    --vault-service-port 8086 \
-    --domain $EXTERNAL_URL > web-ui.log 2>&1 &
+GIN_MODE=release go run . serve --port 8081 --pprof-port 50183 --probe-port 50185 --webtor-rest-api-host localhost --webtor-rest-api-port 8080 --vault-service-host localhost --vault-service-port 8086 --vault-storage-path $VAULT_STORAGE_PATH --domain "https://octor.duckdns.org" > web-ui.log 2>&1 &
 cd ..
 
-# G. Vault (Go)
+# L. Vault (Go)
 echo "   -> Starting Vault (8086)..."
 cd vault
 GIN_MODE=release go run $GO_FLAGS . serve \
@@ -130,13 +182,13 @@ GIN_MODE=release go run $GO_FLAGS . serve \
     --s3-region us-east-1 > vault.log 2>&1 &
 cd ..
 
-# H. Reverse Proxy (Caddy with DuckDNS plugin)
+# M. Reverse Proxy (Caddy with DuckDNS plugin)
 echo "   -> Starting Custom Caddy Reverse Proxy..."
 export DuckDNS_Token="2b8b9c5c-005e-418b-8449-3c75e9bd727d"
 ./caddy-custom stop > /dev/null 2>&1
 ./caddy-custom start --config Caddyfile > caddy.log 2>&1
 
-# I. DuckDNS IP Auto-Updater
+# N. DuckDNS IP Auto-Updater
 echo "   -> Starting DuckDNS IP Auto-Updater..."
 (
     while true; do

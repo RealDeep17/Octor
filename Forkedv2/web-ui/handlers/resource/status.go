@@ -274,7 +274,7 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 		statsChResult <- statsResult{ch: ch, msg: msg}
 	}()
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 
 	vaultTick := 0
