@@ -183,10 +183,10 @@ GIN_MODE=release go run $GO_FLAGS . serve \
 cd ..
 
 # M. Reverse Proxy (Caddy with DuckDNS plugin)
-echo "   -> Starting Custom Caddy Reverse Proxy..."
+echo "   -> Starting Custom Caddy Reverse Proxy (needs sudo for 80/443)..."
 export DuckDNS_Token="2b8b9c5c-005e-418b-8449-3c75e9bd727d"
-./caddy-custom stop > /dev/null 2>&1
-./caddy-custom start --config Caddyfile > caddy.log 2>&1
+sudo ./caddy-custom stop > /dev/null 2>&1
+sudo ./caddy-custom start --config Caddyfile > caddy.log 2>&1
 
 # N. DuckDNS IP Auto-Updater
 echo "   -> Starting DuckDNS IP Auto-Updater..."

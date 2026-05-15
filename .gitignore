@@ -14,3 +14,12 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# Application Data & Logs
+data/
+log/
+logs/
+dbs/
+*.log
+*.db
+*.sqlite

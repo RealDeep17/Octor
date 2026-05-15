@@ -57,9 +57,11 @@ func (s *Web) handleSpeedtest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 
-	// Stream zero bytes
-	written, err := io.Copy(w, io.LimitReader(zeroReader{}, int64(size)))
+	w.WriteHeader(http.StatusOK)
+
+	// Stream zero bytes without throttling
+	_, err = io.CopyN(w, zeroReader{}, int64(size))
 	if err != nil {
-		logger.WithError(err).WithField("written", written).Debug("speedtest stream interrupted")
+		logger.WithError(err).Debug("speedtest stream interrupted")
 	}
 }
