@@ -688,8 +688,10 @@ func (s *Vault) RemovePledge(ctx context.Context, pledge *vaultModels.Pledge) er
 			return errors.Wrap(err, "failed to update resource funded VP")
 		}
 
-		// If funded_vp < required_vp, mark resource as expired and unfunded
-		if newFundedVP < resource.RequiredVP {
+		// If no funding remains, or funding is below the required threshold,
+		// mark the resource as unfunded and queue vault deletion. The explicit
+		// zero check covers zero-required resources where 0 < 0 is false.
+		if newFundedVP <= 0 || newFundedVP < resource.RequiredVP {
 			if s.vaultApi != nil {
 				if _, err = s.vaultApi.DeleteResource(ctx, resource.ResourceID); err != nil {
 					return errors.Wrap(err, "failed to queue resource deletion in vault api")

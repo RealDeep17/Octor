@@ -89,6 +89,9 @@ func TestResolveStatus_VaultingProcessing(t *testing.T) {
 	if status.Progress != 72 {
 		t.Errorf("expected progress 72, got %v", status.Progress)
 	}
+	if status.CompletedStr == "" || status.TotalStr == "" || status.RemainingStr == "" {
+		t.Errorf("expected vault API byte strings, got completed=%q total=%q remaining=%q", status.CompletedStr, status.TotalStr, status.RemainingStr)
+	}
 }
 
 func TestResolveStatus_Vaulted_DB(t *testing.T) {
@@ -121,7 +124,7 @@ func TestResolveStatus_VaultFailed(t *testing.T) {
 func TestResolveStatus_CachingAndVaulting(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
 	apiRes := &vault.Resource{Status: vault.StatusProcessing, StoredSize: 30, TotalSize: 100}
-	stats := &TorrentStatsData{Total: 100, Completed: 60, Seeders: 2}
+	stats := &TorrentStatsData{Total: 100, Completed: 60, Seeders: 2, SpeedBytes: 10, RemainingBytes: 40}
 	status := resolveStatus(db, apiRes, stats)
 	// Vaulting has higher priority than caching
 	if status.State != "vaulting" {
@@ -132,6 +135,9 @@ func TestResolveStatus_CachingAndVaulting(t *testing.T) {
 	}
 	if status.Seeders != 2 {
 		t.Errorf("expected seeders 2 from stats, got %v", status.Seeders)
+	}
+	if status.SpeedBytes != stats.SpeedBytes || status.RemainingBytes != stats.RemainingBytes {
+		t.Errorf("expected stats detail to be preserved on vaulting status")
 	}
 }
 

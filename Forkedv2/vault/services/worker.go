@@ -30,9 +30,10 @@ import (
 // worker to lose its lease while it is still alive.
 const (
 	leaseDuration     = 2 * time.Minute
-	leaseHeartbeat    = 30 * time.Second
+	leaseHeartbeat    = 5 * time.Second
 	claimIdleSleep    = 5 * time.Second
 	storeErrorBackoff = 30 * time.Minute
+	visibleReadChunk  = 64 * 1024
 )
 
 // Worker processes background store and delete jobs for vault resources.
@@ -954,7 +955,7 @@ func (s *Worker) handleError(id string, err error, errorStatus Status, workerID 
 	}
 }
 
-// runPeriodicFlush calls fn every 10 seconds until the returned cancel
+// runPeriodicFlush calls fn every 200 milliseconds until the returned cancel
 // function is called. It is used by storeFile to flush the current
 // stored_size counters on file and resource rows to the DB while a
 // multipart upload is in progress, so the UI can show progress.
@@ -962,7 +963,7 @@ func (s *Worker) handleError(id string, err error, errorStatus Status, workerID 
 func runPeriodicFlush(ctx context.Context, fn func()) context.CancelFunc {
 	fctx, cancel := context.WithCancel(ctx)
 	go func() {
-		ticker := time.NewTicker(10 * time.Second)
+		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
@@ -1058,6 +1059,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	mu.Lock()
 	var completedParts []*awss3.CompletedPart
 	completedPartsMap := make(map[int64]*awss3.CompletedPart)
+	var visibleStored int64
 	mu.Unlock()
 	partSize := s.part
 	if partSize < 5*1024*1024 {
@@ -1066,7 +1068,11 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 
 	stopFlush := runPeriodicFlush(ctx, func() {
 		mu.Lock()
-		currentStored := int64(len(completedPartsMap)) * partSize
+		currentStored := visibleStored
+		committedStored := int64(len(completedPartsMap)) * partSize
+		if committedStored > currentStored {
+			currentStored = committedStored
+		}
 		mu.Unlock()
 		if currentStored > item.Size {
 			currentStored = item.Size
@@ -1252,6 +1258,9 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	if err := flush(stored); err != nil {
 		log.WithError(err).Error("initial flush progress failed")
 	}
+	mu.Lock()
+	visibleStored = stored
+	mu.Unlock()
 
 	// Build the inline integrity verifier when metainfo is available. The
 	// verifier hashes piece-aligned chunks as they flow through this loop —
@@ -1347,10 +1356,11 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		}()
 	}
 
-	// openDownload creates a new download stream from the current stored offset
-	// with a dynamic timeout based on remaining bytes.
-	openDownload := func() (io.ReadCloser, context.CancelFunc, error) {
-		remaining := f.TotalSize - stored
+	openDownloadFrom := func(offset int64) (io.ReadCloser, context.CancelFunc, error) {
+		remaining := f.TotalSize - offset
+		if remaining < 0 {
+			remaining = 0
+		}
 		dlTimeout := time.Duration(remaining/(2*1024*1024)) * time.Second
 		if dlTimeout < 20*time.Minute {
 			dlTimeout = 20 * time.Minute
@@ -1359,12 +1369,18 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 			dlTimeout = 6 * time.Hour
 		}
 		dctx, dcancel := context.WithTimeout(ctx, dlTimeout)
-		r, err := s.api.DownloadWithRange(dctx, u, int(stored), -1)
+		r, err := s.api.DownloadWithRange(dctx, u, int(offset), -1)
 		if err != nil {
 			dcancel()
-			return nil, nil, errors.Wrapf(err, "failed to download file content with range, url=%s, start=%d", u, stored)
+			return nil, nil, errors.Wrapf(err, "failed to download file content with range, url=%s, start=%d", u, offset)
 		}
 		return r, dcancel, nil
+	}
+
+	// openDownload creates a new download stream from the current stored offset
+	// with a dynamic timeout based on remaining bytes.
+	openDownload := func() (io.ReadCloser, context.CancelFunc, error) {
+		return openDownloadFrom(stored)
 	}
 
 	r, dcancel, err := openDownload()
@@ -1409,41 +1425,64 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 			"start_byte":  stored,
 		}).Info("reading part")
 
-		buf := make([]byte, currentPartSize)
-		_, readErr := io.ReadFull(r, buf)
-		if readErr != nil {
-			// Connection dropped or timeout — retry download from current offset.
-			retried := false
-			for attempt := 1; attempt <= maxDownloadRetries; attempt++ {
-				log.WithFields(log.Fields{
-					"resource_id": id,
-					"stored":      stored,
-					"attempt":     attempt,
-				}).WithError(readErr).Warn("download stream interrupted, reconnecting")
-				// r/dcancel may be nil if a previous openDownload() in this
-				// retry loop failed — only clean up a live reader.
-				if r != nil {
-					_ = r.Close()
+		partStart := stored
+		buf := make([]byte, int(currentPartSize))
+		filled := 0
+		attempt := 0
+		for filled < len(buf) {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+
+			chunkEnd := filled + visibleReadChunk
+			if chunkEnd > len(buf) {
+				chunkEnd = len(buf)
+			}
+			n, readErr := io.ReadFull(r, buf[filled:chunkEnd])
+			if n > 0 {
+				filled += n
+				mu.Lock()
+				if current := partStart + int64(filled); current > visibleStored {
+					visibleStored = current
 				}
-				if dcancel != nil {
-					dcancel()
-				}
-				time.Sleep(time.Duration(attempt) * 5 * time.Second)
-				r, dcancel, err = openDownload()
-				if err != nil {
-					readErr = err
-					continue
-				}
-				_, readErr = io.ReadFull(r, buf)
-				if readErr == nil {
-					retried = true
+				mu.Unlock()
+			}
+			if readErr == nil {
+				continue
+			}
+			if r != nil {
+				_ = r.Close()
+			}
+			if dcancel != nil {
+				dcancel()
+			}
+			for {
+				attempt++
+				if attempt > maxDownloadRetries {
+					setUploadErr(errors.Wrap(readErr, "failed to read part data from download stream"))
 					break
 				}
+
+				log.WithFields(log.Fields{
+					"resource_id": id,
+					"offset":      partStart + int64(filled),
+					"attempt":     attempt,
+				}).WithError(readErr).Warn("download stream interrupted, reconnecting")
+				time.Sleep(time.Duration(attempt) * 5 * time.Second)
+				r, dcancel, err = openDownloadFrom(partStart + int64(filled))
+				if err == nil {
+					break
+				}
+				readErr = err
 			}
-			if !retried {
-				setUploadErr(errors.Wrap(readErr, "failed to read part data from download stream"))
+			if uploadErr != nil {
 				break
 			}
+		}
+		if uploadErr != nil {
+			break
 		}
 
 		// Inline integrity check before the part is uploaded — catches a
@@ -1461,7 +1500,12 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 			data:       buf,
 		}
 
-		stored += currentPartSize
+		stored = partStart + currentPartSize
+		mu.Lock()
+		if stored > visibleStored {
+			visibleStored = stored
+		}
+		mu.Unlock()
 		partNumber++
 	}
 	close(jobs)

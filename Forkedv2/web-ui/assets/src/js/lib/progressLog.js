@@ -78,6 +78,7 @@ export function initProgressLog(el, func) {
         };
     }
     const sdk = new SDK(onMessage);
+    r.sdk = sdk;
     sdk.destroy = () => { if (src) { src.close(); src = null; } };
     return sdk;
 }

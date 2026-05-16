@@ -5,29 +5,17 @@
 
 # Protobuf conflict ignore (CRITICAL for mixing microservices)
 export GOLANG_PROTOBUF_REGISTRATION_CONFLICT=ignore
-export TORRENT_WEB_SEEDER_SERVICE_HOST=127.0.0.1
-export TORRENT_WEB_SEEDER_SERVICE_PORT=50054
-export CONTENT_TRANSCODER_SERVICE_HOST=127.0.0.1
-export CONTENT_TRANSCODER_SERVICE_PORT=50055
-export VIDEO_INFO_SERVICE_HOST=127.0.0.1
-export VIDEO_INFO_SERVICE_PORT=50056
-export TORRENT_ARCHIVER_SERVICE_HOST=127.0.0.1
-export TORRENT_ARCHIVER_SERVICE_PORT=50057
-export SRT2VTT_SERVICE_HOST=127.0.0.1
-export SRT2VTT_SERVICE_PORT=50058
-export CONTENT_PROBER_SERVICE_HOST=127.0.0.1
-export CONTENT_PROBER_SERVICE_PORT=50063
-export CONTENT_PROBER_HTTP_SERVICE_HOST=127.0.0.1
-export CONTENT_PROBER_HTTP_SERVICE_PORT=50062
 
 # 0. Prepare Logs
 mkdir -p logs
 rm -f logs/*.log > /dev/null 2>&1 || true
 
 # 1. Load Environment
-if [ -f ../.env ]; then
-    export $(grep -v '^#' ../.env | xargs)
-    echo "✅ Loaded environment from ../.env"
+if [ -f custom.env ]; then
+    set -a
+    source custom.env
+    set +a
+    echo "✅ Loaded environment from custom.env"
     export OCTOR_DOMAIN=${OCTOR_DOMAIN:-http://localhost:8081}
     export OCTOR_HOST=$(echo $OCTOR_DOMAIN | sed -e 's|^[^/]*//||' -e 's|/.*$||')
     export PG_HOST=$POSTGRES_HOST
@@ -36,7 +24,7 @@ if [ -f ../.env ]; then
     export PG_PASSWORD=$POSTGRES_PASSWORD
     export PG_DATABASE=$POSTGRES_DB
 else
-    echo "❌ .env file not found in root!"
+    echo "❌ custom.env file not found! Please copy example.env to custom.env"
     exit 1
 fi
 
@@ -64,6 +52,11 @@ trap cleanup SIGINT SIGTERM
 
 # 4. Start Services
 echo "🚀 Starting Octor Services with Unified Port Mapping..."
+
+# --- AI PROXY (must start before web-ui) ---
+echo "   -> Starting Anthropic→Gemini Proxy (3456)..."
+node ai-proxy/proxy.js > logs/ai-proxy.log 2>&1 &
+sleep 1  # give it a moment to bind before web-ui starts
 
 # --- 8xxx RANGE: Entry Points ---
 
@@ -127,11 +120,11 @@ GIN_MODE=release go run . serve \
     --prom-port 53086 \
     --webtor-rest-api-host localhost \
     --webtor-rest-api-port 8080 \
-    --aws-endpoint http://localhost:9000 \
-    --aws-region us-east-1 \
-    --aws-access-key-id octoradmin \
-    --aws-secret-access-key octorpassword \
-    --aws-bucket vault \
+    --aws-endpoint ${AWS_ENDPOINT} \
+    --aws-region ${AWS_REGION} \
+    --aws-access-key-id ${AWS_ACCESS_KEY_ID} \
+    --aws-secret-access-key ${AWS_SECRET_ACCESS_KEY} \
+    --aws-bucket ${VAULT_AWS_BUCKET} \
     --aws-no-ssl \
     --postgres-database vault > ../logs/vault.log 2>&1 &
 cd ..
@@ -170,11 +163,11 @@ go run . serve \
     --abuse-port 50059 \
     --use-abuse \
     --use-s3 \
-    --aws-endpoint http://localhost:9000 \
-    --aws-access-key-id octoradmin \
-    --aws-secret-access-key octorpassword \
-    --aws-bucket torrent-store \
-    --aws-region us-east-1 \
+    --aws-endpoint ${AWS_ENDPOINT} \
+    --aws-access-key-id ${AWS_ACCESS_KEY_ID} \
+    --aws-secret-access-key ${AWS_SECRET_ACCESS_KEY} \
+    --aws-bucket ${TORRENT_STORE_AWS_BUCKET} \
+    --aws-region ${AWS_REGION} \
     --aws-no-ssl > ../logs/torrent-store.log 2>&1 &
 cd ..
 
@@ -206,6 +199,12 @@ go run . \
     --probe-port 52054 \
     --prom-port 53054 > ../../logs/torrent-web-seeder.log 2>&1 &
 cd ../..
+
+# J2. Torrent Web Seeder Cleaner
+echo "   -> Starting Torrent Web Seeder Cleaner..."
+cd torrent-web-seeder-cleaner
+go run . serve > ../logs/torrent-web-seeder-cleaner.log 2>&1 &
+cd ..
 
 # K. Content Transcoder (50055)
 echo "   -> Starting Content Transcoder (50055)..."
@@ -260,20 +259,6 @@ cd ../..
 # O. Torrent HTTP Proxy (50052) - CRITICAL EDGE SERVICE
 echo "   -> Starting Torrent HTTP Proxy (50052)..."
 cd torrent-http-proxy
-export TORRENT_WEB_SEEDER_SERVICE_HOST=127.0.0.1
-export TORRENT_WEB_SEEDER_SERVICE_PORT=50054
-export CONTENT_TRANSCODER_SERVICE_HOST=127.0.0.1
-export CONTENT_TRANSCODER_SERVICE_PORT=50055
-export VIDEO_INFO_SERVICE_HOST=127.0.0.1
-export VIDEO_INFO_SERVICE_PORT=50056
-export TORRENT_ARCHIVER_SERVICE_HOST=127.0.0.1
-export TORRENT_ARCHIVER_SERVICE_PORT=50057
-export SRT2VTT_SERVICE_HOST=127.0.0.1
-export SRT2VTT_SERVICE_PORT=50058
-export CONTENT_PROBER_SERVICE_HOST=127.0.0.1
-export CONTENT_PROBER_SERVICE_PORT=50063
-export CONTENT_PROBER_HTTP_SERVICE_HOST=127.0.0.1
-export CONTENT_PROBER_HTTP_SERVICE_PORT=50062
 go run . \
     --port 50052 \
     --torrent-http-proxy-host 127.0.0.1 \

@@ -40,6 +40,7 @@ const (
 	apiHostFlag                     = "webtor-rest-api-host"
 	apiPortFlag                     = "webtor-rest-api-port"
 	apiExpireFlag                   = "webtor-rest-api-expire"
+	apiCacheExpireFlag              = "web-ui-api-cache-expire"
 	useInternalTorrentHTTPProxyFlag = "use-internal-torrent-http-proxy"
 	torrentHTTPProxyHostFlag        = "torrent-http-proxy-host"
 	torrentHTTPProxyPortFlag        = "torrent-http-proxy-port"
@@ -68,6 +69,12 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 			Usage:  "webtor rest-api expire in days",
 			EnvVar: "REST_API_EXPIRE",
 			Value:  1,
+		},
+		cli.DurationFlag{
+			Name:   apiCacheExpireFlag,
+			Usage:  "web-ui temporary metadata cache expiration",
+			EnvVar: "CACHED_METADATA_EXPIRE,WEB_UI_API_CACHE_EXPIRE",
+			Value:  time.Minute,
 		},
 		cli.StringFlag{
 			Name:   apiKeyFlag,
@@ -259,6 +266,7 @@ func New(c *cli.Context, cl *http.Client) *Api {
 	}
 	log.Infof("api endpoint %v", u)
 	apiURL, _ := url.Parse(c.String(common.DomainFlag))
+	cacheExpire := c.Duration(apiCacheExpireFlag)
 	return &Api{
 		url:            u,
 		cl:             cl,
@@ -266,13 +274,13 @@ func New(c *cli.Context, cl *http.Client) *Api {
 		domain:         apiURL.Hostname(),
 		expire:         expire,
 		torrentCache: lazymap.New[[]byte](&lazymap.Config{
-			Expire: time.Minute,
+			Expire: cacheExpire,
 		}),
 		resourcesCache: lazymap.New[*ra.ResourceResponse](&lazymap.Config{
-			Expire: time.Minute,
+			Expire: cacheExpire,
 		}),
 		listResponseCache: lazymap.New[*ra.ListResponse](&lazymap.Config{
-			Expire: time.Minute,
+			Expire: cacheExpire,
 		}),
 		useInternalTorrentHTTPProxy: c.Bool(useInternalTorrentHTTPProxyFlag),
 		torrentHTTPProxyHost:        c.String(torrentHTTPProxyHostFlag),
@@ -346,6 +354,19 @@ func (s *Api) ListResourceContentCached(ctx context.Context, c *Claims, infohash
 	return s.listResponseCache.Get(key, func() (*ra.ListResponse, error) {
 		return s.ListResourceContent(ctx, c, infohash, args)
 	})
+}
+
+func (s *Api) DropResourceCaches(infohash string) {
+	if infohash == "" {
+		return
+	}
+	s.resourcesCache.Drop(infohash)
+	s.torrentCache.Drop(infohash)
+	for _, key := range s.listResponseCache.Keys() {
+		if strings.HasPrefix(key, infohash) {
+			s.listResponseCache.Drop(key)
+		}
+	}
 }
 
 func (s *Api) doRequestRaw(ctx context.Context, c *Claims, url string, method string, data []byte) (res *http.Response, err error) {
@@ -528,6 +549,60 @@ func (s *Api) DeleteTranscoderSession(ctx context.Context, baseURL string, sessi
 		return errors.Wrap(err, "failed to delete transcoder session")
 	}
 	_ = res.Body.Close()
+	return nil
+}
+
+func (s *Api) DeleteURL(ctx context.Context, u string) error {
+	resolved, err := s.proxyURL(u)
+	if err != nil {
+		return errors.Wrap(err, "failed to resolve proxy URL")
+	}
+	req, err := http.NewRequestWithContext(ctx, "DELETE", resolved, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to create request")
+	}
+	res, err := s.cl.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete url")
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusNoContent && res.StatusCode != http.StatusOK && res.StatusCode != http.StatusNotFound {
+		data, _ := io.ReadAll(res.Body)
+		return errors.Errorf("delete failed status=%d body=%s", res.StatusCode, string(data))
+	}
+	return nil
+}
+
+func (s *Api) PurgeResourceCache(ctx context.Context, c *Claims, resourceID string) error {
+	defer s.DropResourceCaches(resourceID)
+
+	list, err := s.ListResourceContent(ctx, c, resourceID, &ListResourceContentArgs{
+		Output: OutputList,
+		Limit:  1,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to list resource content")
+	}
+	rootID := ""
+	if list != nil {
+		rootID = list.ID
+	}
+	if rootID == "" {
+		rootID = resourceID
+	}
+	exportResp, err := s.ExportResourceContent(ctx, c, resourceID, rootID, "")
+	if err != nil {
+		return errors.Wrap(err, "failed to export resource content")
+	}
+	if exportResp == nil {
+		return nil
+	}
+	if item, ok := exportResp.ExportItems["download"]; ok && item.URL != "" {
+		return s.DeleteURL(ctx, item.URL)
+	}
+	if item, ok := exportResp.ExportItems["stream"]; ok && item.URL != "" {
+		return s.DeleteURL(ctx, item.URL)
+	}
 	return nil
 }
 

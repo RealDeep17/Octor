@@ -47,6 +47,8 @@ type StreamContent struct {
 	TranscoderSession   *api.TranscoderSession
 	SessionSeekURL      string
 	SessionDeleteURL    string
+	DirectFallbackURL   string
+	DirectFallbackType  string
 	// GraceDurationSec is non-zero only for free-tier users when grace rules
 	// are enabled. Surfaced to the player JS so it knows when to show the
 	// soft signup CTA after the grace window passes.
@@ -456,6 +458,8 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 			directPlayFallback = true
 			se.Meta.Transcode = false
 		} else {
+			sc.DirectFallbackURL = directPlayURL(downloadURL)
+			sc.DirectFallbackType = "video/mp4"
 			sc.TranscoderSession = result.Session
 			sc.ExportTag.Sources = []ra.ExportSource{{
 				Src:  result.HLSURL,
@@ -503,11 +507,11 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 				defer osCancel()
 				subs, err := s.api.GetOpenSubtitles(osCtx, subtitles.URL)
 				if err != nil {
-					j.Warn(errors.Wrap(err, "failed to get OpenSubtitles"))
+					log.WithError(err).Warn("failed to get OpenSubtitles; continuing without external subtitles")
 				} else {
 					sc.OpenSubtitles = subs
-					j.Done()
 				}
+				j.Done()
 			}
 		}
 	}

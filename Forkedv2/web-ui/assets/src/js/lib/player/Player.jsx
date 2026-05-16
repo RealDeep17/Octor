@@ -10,6 +10,8 @@ import { init as initI18n, t, tf } from './i18n';
 import '../../../styles/player.css';
 
 let _currentPlayer = null;
+const PLAYER_START_TIMEOUT_MS = 30000;
+const DIRECT_FALLBACK_TIMEOUT_MS = 20000;
 
 function closeTranscoderSession(deletePath) {
     if (!deletePath) return;
@@ -32,21 +34,25 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
 
     const isVideo = videoEl.tagName === 'VIDEO';
     const duration = videoEl.getAttribute('data-duration') ? parseFloat(videoEl.getAttribute('data-duration')) : -1;
-    const sessionId = videoEl.dataset.sessionId;
-    const sessionSeekUrl = videoEl.dataset.sessionSeekUrl;
-    const sessionDeletePath = videoEl.dataset.sessionDeletePath;
-    const isSession = !!sessionId;
-    const graceDurationSec = videoEl.dataset.graceDurationSec ? parseInt(videoEl.dataset.graceDurationSec, 10) : 0;
+	const sessionId = videoEl.dataset.sessionId;
+	const sessionSeekUrl = videoEl.dataset.sessionSeekUrl;
+	const sessionDeletePath = videoEl.dataset.sessionDeletePath;
+	const directFallbackUrl = videoEl.dataset.directFallbackUrl;
+	const [sourceUrl, setSourceUrl] = useState(() => {
+		const sourceEl = videoEl.querySelector('source');
+		return sourceEl ? sourceEl.getAttribute('src') : videoEl.src;
+	});
+	const [usingDirectFallback, setUsingDirectFallback] = useState(false);
+	const isSession = !!sessionId && !usingDirectFallback;
+	const readyRef = useRef(false);
+	const fallbackStartedRef = useRef(false);
+	const graceDurationSec = videoEl.dataset.graceDurationSec ? parseInt(videoEl.dataset.graceDurationSec, 10) : 0;
     const graceShownRef = useRef(false);
     const poster = videoEl.getAttribute('poster');
     const resourceID = videoEl.dataset.resourceId;
     const path = videoEl.dataset.path;
 
-    // Source URL from first <source> element
-    const sourceEl = videoEl.querySelector('source');
-    const sourceUrl = sourceEl ? sourceEl.getAttribute('src') : videoEl.src;
-
-    // Parse features from settings
+	// Parse features from settings
     const features = parseFeatures(settings, isVideo, duration, isSession);
 
     // Fetch initial seek offset from transcoder session
@@ -69,10 +75,39 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
     // Player state hook
     const state = usePlayerState(videoRef, containerRef, { duration, seekOffset, seeking: sessionSeeking });
 
-    // HLS hook
-    const hlsRef = useHls(videoRef, sourceUrl);
+	// HLS hook
+	const hlsRef = useHls(videoRef, sourceUrl);
 
-    // Resume prompt state — must be declared before useWatchHistory which reads it.
+	const emitPlayerError = useCallback((message, reason = null) => {
+		window.dispatchEvent(new CustomEvent('player_error', {
+			detail: {message, reason},
+		}));
+	}, []);
+
+	const switchToDirectFallback = useCallback((reason) => {
+		if (!directFallbackUrl || fallbackStartedRef.current || readyRef.current) return false;
+		fallbackStartedRef.current = true;
+		setUsingDirectFallback(true);
+		closeTranscoderSession(sessionDeletePath);
+		if (window.hlsPlayer) {
+			window.hlsPlayer.stopLoad();
+			window.hlsPlayer.destroy();
+			window.hlsPlayer = null;
+		}
+		videoEl.removeAttribute('data-session-id');
+		videoEl.removeAttribute('data-session-seek-url');
+		videoEl.removeAttribute('data-session-delete-path');
+		videoEl.src = directFallbackUrl;
+		videoEl.load();
+		videoEl.play().catch(() => {});
+		setSourceUrl(directFallbackUrl);
+		window.dispatchEvent(new CustomEvent('player_fallback', {
+			detail: {reason},
+		}));
+		return true;
+	}, [directFallbackUrl, sessionDeletePath, videoEl]);
+
+	// Resume prompt state — must be declared before useWatchHistory which reads it.
     const [showResumePrompt, setShowResumePrompt] = useState(false);
 
     // Watch history hook (position tracking + resume).
@@ -235,13 +270,14 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
     }, []);
 
     // Dispatch player_ready on canplay + set aspect-ratio from video
-    useEffect(() => {
-        let dispatched = false;
-        function onCanPlay() {
-            if (!dispatched) {
-                dispatched = true;
-                // Native HLS (iOS) starts at live edge — force start from beginning
-                if (!hlsRef.current && videoEl.currentTime > 1) {
+	useEffect(() => {
+		let dispatched = false;
+		function onCanPlay() {
+			if (!dispatched) {
+				dispatched = true;
+				readyRef.current = true;
+				// Native HLS (iOS) starts at live edge — force start from beginning
+				if (!hlsRef.current && videoEl.currentTime > 1) {
                     videoEl.currentTime = 0;
                 }
                 // Set container aspect-ratio from actual video dimensions
@@ -251,9 +287,43 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
                 window.dispatchEvent(new CustomEvent('player_ready'));
             }
         }
-        videoEl.addEventListener('canplay', onCanPlay);
-        return () => videoEl.removeEventListener('canplay', onCanPlay);
-    }, []);
+		videoEl.addEventListener('canplay', onCanPlay);
+		return () => videoEl.removeEventListener('canplay', onCanPlay);
+	}, []);
+
+	useEffect(() => {
+		readyRef.current = false;
+		fallbackStartedRef.current = usingDirectFallback;
+
+		const onHlsError = (event) => {
+			if (readyRef.current || usingDirectFallback) return;
+			const detail = event.detail || {};
+			const reason = detail.details || detail.type || 'hls_error';
+			if (!switchToDirectFallback(reason)) {
+				emitPlayerError('Unable to start the HLS stream.', reason);
+			}
+		};
+		const onVideoError = () => {
+			if (readyRef.current) return;
+			const code = videoEl.error?.code ? `media_error_${videoEl.error.code}` : 'media_error';
+			if (!usingDirectFallback && switchToDirectFallback(code)) return;
+			emitPlayerError('The browser could not play this video source.', code);
+		};
+
+		const startupTimer = window.setTimeout(() => {
+			if (readyRef.current) return;
+			if (!usingDirectFallback && switchToDirectFallback('startup_timeout')) return;
+			emitPlayerError('Player failed to initialize before the timeout.', 'startup_timeout');
+		}, usingDirectFallback ? DIRECT_FALLBACK_TIMEOUT_MS : PLAYER_START_TIMEOUT_MS);
+
+		window.addEventListener('player_hls_error', onHlsError);
+		videoEl.addEventListener('error', onVideoError);
+		return () => {
+			window.clearTimeout(startupTimer);
+			window.removeEventListener('player_hls_error', onHlsError);
+			videoEl.removeEventListener('error', onVideoError);
+		};
+	}, [sourceUrl, usingDirectFallback, switchToDirectFallback, emitPlayerError, videoEl]);
 
     // Once resume check completes: show resume prompt if there's a saved position
     useEffect(() => {
