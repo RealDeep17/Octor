@@ -48,6 +48,7 @@ else
     docker ps --format "{{.Names}}" | grep -q "octor-postgres" || { echo "❌ Postgres is not running! (Use --force to skip check)"; exit 1; }
     docker ps --format "{{.Names}}" | grep -q "octor-redis" || { echo "❌ Redis is not running! (Use --force to skip check)"; exit 1; }
     docker ps --format "{{.Names}}" | grep -q "octor-nats" || { echo "❌ NATS is not running! (Use --force to skip check)"; exit 1; }
+    docker ps --format "{{.Names}}" | grep -q "octor-minio" || { echo "❌ MinIO is not running! (Use --force to skip check)"; exit 1; }
     echo "✅ Infrastructure is UP."
 fi
 
@@ -133,11 +134,13 @@ GIN_MODE=release go run . serve \
     --prom-port 53086 \
     --webtor-rest-api-host localhost \
     --webtor-rest-api-port 8080 \
-    --s3-endpoint http://localhost:9000 \
+    --aws-endpoint http://localhost:9000 \
     --aws-region us-east-1 \
-    --s3-access-key-id octoradmin \
-    --s3-secret-access-key octorpassword \
-    --s3-bucket vault > ../logs/vault.log 2>&1 &
+    --aws-access-key-id octoradmin \
+    --aws-secret-access-key octorpassword \
+    --aws-bucket vault \
+    --aws-no-ssl \
+    --postgres-database vault > ../logs/vault.log 2>&1 &
 cd ..
 
 # --- 500xx RANGE: Core GRPC Services ---
@@ -156,7 +159,6 @@ cd ..
 echo "   -> Starting Claims Provider (50060)..."
 cd claims-provider
 go run . serve \
-    --port 54060 \
     --grpc-port 50060 \
     --pprof-port 51060 \
     --probe-port 52060 \
@@ -294,7 +296,7 @@ cd ..
 echo "   -> Starting Custom Caddy..."
 export DuckDNS_Token="${DUCKDNS_TOKEN}"
 echo "${SUDO_PASSWORD}" | sudo -S -E ./caddy-custom stop > /dev/null 2>&1
-echo "${SUDO_PASSWORD}" | sudo -S -E ./caddy-custom start --config Caddyfile > logs/caddy.log 2>&1
+echo "${SUDO_PASSWORD}" | sudo -S -E ./caddy-custom run --config Caddyfile > logs/caddy.log 2>&1 &
 
 # Q. DuckDNS IP Auto-Updater
 (

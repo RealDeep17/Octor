@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-# Octor Hybrid Dev Runner (ARM64 Optimized)
+# Octor Hybrid Dev Runner (ARM64 Optimized) - SKIP INFRA VERSION
 # Runs infra in Docker and services on Host.
 
 # Protobuf conflict ignore (CRITICAL for mixing microservices)
@@ -15,13 +15,21 @@ export TORRENT_ARCHIVER_SERVICE_HOST=127.0.0.1
 export TORRENT_ARCHIVER_SERVICE_PORT=50057
 export SRT2VTT_SERVICE_HOST=127.0.0.1
 export SRT2VTT_SERVICE_PORT=50058
+export CONTENT_PROBER_SERVICE_HOST=127.0.0.1
+export CONTENT_PROBER_SERVICE_PORT=50063
+export CONTENT_PROBER_HTTP_SERVICE_HOST=127.0.0.1
+export CONTENT_PROBER_HTTP_SERVICE_PORT=50062
+
+# 0. Prepare Logs
+mkdir -p logs
+rm -f logs/*.log > /dev/null 2>&1 || true
 
 # 1. Load Environment
 if [ -f ../.env ]; then
     export $(grep -v '^#' ../.env | xargs)
     echo "✅ Loaded environment from ../.env"
-    export OCTOR_DOMAIN=http://localhost:8081
-    export OCTOR_HOST=localhost:8081
+    export OCTOR_DOMAIN=${OCTOR_DOMAIN:-http://localhost:8081}
+    export OCTOR_HOST=$(echo $OCTOR_DOMAIN | sed -e 's|^[^/]*//||' -e 's|/.*$||')
     export PG_HOST=$POSTGRES_HOST
     export PG_PORT=$POSTGRES_PORT
     export PG_USER=$POSTGRES_USER
@@ -34,9 +42,7 @@ fi
 
 # 2. Check Infra
 echo "🔍 Checking infrastructure..."
-echo "⚠️ Skipping infra check..."
-echo "⚠️ Skipping infra check..."
-echo "⚠️ Skipping infra check..."
+echo "⚠️  Forcing startup: Skipping infrastructure checks..."
 echo "✅ Infrastructure is UP."
 
 # 3. Cleanup existing processes
@@ -68,13 +74,13 @@ if [ ! -d "venv" ]; then
     python3 -m venv venv
     ./venv/bin/pip install -r requirements.txt
 fi
-./venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 > sidecar.log 2>&1 &
+./venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 > ../logs/sidecar.log 2>&1 &
 cd ..
 
 # J. Rest API (Go)
 echo "   -> Starting Rest API (8080)..."
 cd rest-api
-GIN_MODE=release go run $GO_FLAGS . serve \
+GIN_MODE=release go run . serve \
     --port 8080 \
     --pprof-port 51080 \
     --probe-port 52080 \
@@ -85,7 +91,7 @@ GIN_MODE=release go run $GO_FLAGS . serve \
     --magnet2torrent-port 50053 \
     --video-info-host 127.0.0.1 \
     --video-info-port 50056 \
-    --export-use-subdomains false > rest-api.log 2>&1 &
+    --export-use-subdomains false > ../logs/rest-api.log 2>&1 &
 cd ..
 
 # C. Web UI (8082)
@@ -108,7 +114,7 @@ GIN_MODE=release go run . serve \
     --use-internal-torrent-http-proxy=true \
     --torrent-http-proxy-host localhost \
     --torrent-http-proxy-port 50052 \
-    --domain "${OCTOR_DOMAIN:-http://localhost:8081}" > web-ui.log 2>&1 &
+    --domain "${OCTOR_DOMAIN:-http://localhost:8081}" > ../logs/web-ui.log 2>&1 &
 cd ..
 
 # D. Vault (8086)
@@ -121,11 +127,13 @@ GIN_MODE=release go run . serve \
     --prom-port 53086 \
     --webtor-rest-api-host localhost \
     --webtor-rest-api-port 8080 \
-    --s3-endpoint http://localhost:9000 \
+    --aws-endpoint http://localhost:9000 \
     --aws-region us-east-1 \
-    --s3-access-key-id octoradmin \
-    --s3-secret-access-key octorpassword \
-    --s3-bucket vault > vault.log 2>&1 &
+    --aws-access-key-id octoradmin \
+    --aws-secret-access-key octorpassword \
+    --aws-bucket vault \
+    --aws-no-ssl \
+    --postgres-database vault > ../logs/vault.log 2>&1 &
 cd ..
 
 # --- 500xx RANGE: Core GRPC Services ---
@@ -137,19 +145,18 @@ go run . serve \
     --grpc-port 50059 \
     --pprof-port 51059 \
     --probe-port 52059 \
-    --postgres-database abuse_store > abuse-store.log 2>&1 &
+    --postgres-database abuse_store > ../logs/abuse-store.log 2>&1 &
 cd ..
 
 # F. Claims Provider (50060)
 echo "   -> Starting Claims Provider (50060)..."
 cd claims-provider
 go run . serve \
-    --port 54060 \
     --grpc-port 50060 \
     --pprof-port 51060 \
     --probe-port 52060 \
     --prom-port 53060 \
-    --postgres-database claims_provider > claims-provider.log 2>&1 &
+    --postgres-database claims_provider > ../logs/claims-provider.log 2>&1 &
 cd ..
 
 # G. Torrent Store (50051)
@@ -168,7 +175,7 @@ go run . serve \
     --aws-secret-access-key octorpassword \
     --aws-bucket torrent-store \
     --aws-region us-east-1 \
-    --aws-no-ssl > torrent-store.log 2>&1 &
+    --aws-no-ssl > ../logs/torrent-store.log 2>&1 &
 cd ..
 
 # H. Magnet2Torrent (50053)
@@ -177,7 +184,7 @@ cd magnet2torrent/server
 go run . \
     --port 50053 \
     --pprof-port 51053 \
-    --probe-port 52053 > magnet2torrent.log 2>&1 &
+    --probe-port 52053 > ../../logs/magnet2torrent.log 2>&1 &
 cd ../..
 
 # I. URL Store (50061)
@@ -187,7 +194,7 @@ go run . serve \
     --port 54061 \
     --grpc-port 50061 \
     --probe-port 52061 \
-    --postgres-database url_store > url-store.log 2>&1 &
+    --postgres-database url_store > ../logs/url-store.log 2>&1 &
 cd ..
 
 # J. Torrent Web Seeder (50054)
@@ -197,7 +204,7 @@ go run . \
     --port 50054 \
     --pprof-port 51054 \
     --probe-port 52054 \
-    --prom-port 53054 > torrent-web-seeder.log 2>&1 &
+    --prom-port 53054 > ../../logs/torrent-web-seeder.log 2>&1 &
 cd ../..
 
 # K. Content Transcoder (50055)
@@ -206,7 +213,7 @@ cd content-transcoder
 go run . \
     --port 50055 \
     --pprof-port 51055 \
-    --probe-port 52055 > content-transcoder.log 2>&1 &
+    --probe-port 52055 > ../logs/content-transcoder.log 2>&1 &
 cd ..
 
 # L. Video Info (50056)
@@ -216,7 +223,7 @@ go run . \
     --port 50056 \
     --probe-port 52056 \
     --redis-host localhost \
-    --redis-port 6379 > video-info.log 2>&1 &
+    --redis-port 6379 > ../logs/video-info.log 2>&1 &
 cd ..
 
 # M. Torrent Archiver (50057)
@@ -228,7 +235,7 @@ go run . \
     --probe-port 52057 \
     --torrent-store-host localhost \
     --torrent-store-port 50051 \
-    --prom-port 53057 > torrent-archiver.log 2>&1 &
+    --prom-port 53057 > ../logs/torrent-archiver.log 2>&1 &
 cd ..
 
 # N. SRT2VTT (50058)
@@ -236,8 +243,19 @@ echo "   -> Starting SRT2VTT (50058)..."
 cd srt2vtt
 go run . \
     --port 50058 \
-    --probe-port 52058 > srt2vtt.log 2>&1 &
+    --probe-port 52058 > ../logs/srt2vtt.log 2>&1 &
 cd ..
+
+# Q. Content Prober (50062)
+echo "   -> Starting Content Prober (50062)..."
+cd content-prober/server
+go run . \
+    --port 50063 \
+    --http-port 50062 \
+    --probe-port 52062 \
+    --redis-host localhost \
+    --redis-port 6379 > ../../logs/content-prober.log 2>&1 &
+cd ../..
 
 # O. Torrent HTTP Proxy (50052) - CRITICAL EDGE SERVICE
 echo "   -> Starting Torrent HTTP Proxy (50052)..."
@@ -252,13 +270,17 @@ export TORRENT_ARCHIVER_SERVICE_HOST=127.0.0.1
 export TORRENT_ARCHIVER_SERVICE_PORT=50057
 export SRT2VTT_SERVICE_HOST=127.0.0.1
 export SRT2VTT_SERVICE_PORT=50058
+export CONTENT_PROBER_SERVICE_HOST=127.0.0.1
+export CONTENT_PROBER_SERVICE_PORT=50063
+export CONTENT_PROBER_HTTP_SERVICE_HOST=127.0.0.1
+export CONTENT_PROBER_HTTP_SERVICE_PORT=50062
 go run . \
     --port 50052 \
     --torrent-http-proxy-host 127.0.0.1 \
     --torrent-http-proxy-port 50052 \
     --pprof-port 51052 \
     --probe-port 52052 \
-    --config services.yaml > torrent-http-proxy.log 2>&1 &
+    --config services.yaml > ../logs/torrent-http-proxy.log 2>&1 &
 cd ..
 
 # --- INFRA & PROXY ---
@@ -266,8 +288,8 @@ cd ..
 # P. Reverse Proxy (Caddy)
 echo "   -> Starting Custom Caddy..."
 export DuckDNS_Token="${DUCKDNS_TOKEN}"
-echo "${SUDO_PASSWORD}" | sudo -S ./caddy-custom stop > /dev/null 2>&1
-echo "${SUDO_PASSWORD}" | sudo -S ./caddy-custom start --config Caddyfile > caddy.log 2>&1
+echo "${SUDO_PASSWORD}" | sudo -S -E ./caddy-custom stop > /dev/null 2>&1
+echo "${SUDO_PASSWORD}" | sudo -S -E ./caddy-custom run --config Caddyfile > logs/caddy.log 2>&1 &
 
 # Q. DuckDNS IP Auto-Updater
 (
@@ -281,7 +303,7 @@ echo "\n🎉 All services starting with non-conflicting ports!"
 echo "   - Primary: ${OCTOR_DOMAIN}"
 echo "   - Rest API: http://localhost:8080"
 echo "   - Sidecar: http://localhost:8000"
-echo "Check logs (*.log) for output."
+echo "Check logs (logs/*.log) for output."
 
 # Keep script alive
 wait
