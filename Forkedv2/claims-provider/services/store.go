@@ -56,7 +56,7 @@ func RegisterStoreFlags(f []cli.Flag) []cli.Flag {
 }
 
 type Store struct {
-	lazymap.LazyMap[*models.Claims]
+	*lazymap.LazyMap[*models.Claims]
 	pg               *cs.PG
 	dbTimeout        time.Duration
 	fetch            func(ctx context.Context, email string) (*models.Claims, error)

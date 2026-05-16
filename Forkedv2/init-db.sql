@@ -1,0 +1,6 @@
+CREATE DATABASE url_store;
+CREATE DATABASE abuse_store;
+CREATE DATABASE claims_provider;
+GRANT ALL PRIVILEGES ON DATABASE url_store TO webtor;
+GRANT ALL PRIVILEGES ON DATABASE abuse_store TO webtor;
+GRANT ALL PRIVILEGES ON DATABASE claims_provider TO webtor;

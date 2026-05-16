@@ -54,10 +54,10 @@ func NewStore(providers []StoreProvider) *Store {
 		revProviders = append(revProviders, providers[i])
 	}
 	return &Store{
-		pullm:        &pullm,
-		pushm:        &pushm,
-		touchm:       &touchm,
-		ratem:        &ratem,
+		pullm:        pullm,
+		pushm:        pushm,
+		touchm:       touchm,
+		ratem:        ratem,
 		providers:    providers,
 		revProviders: revProviders,
 	}

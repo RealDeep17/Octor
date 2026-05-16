@@ -13,6 +13,9 @@ arch:
 vtt:
   name: srt2vtt
   endpointsProvider: Environment
+cp:
+  name: content-prober-http
+  endpointsProvider: Environment
 vod:
-  name: torrent-web-seeder
+  name: content-transcoder
   endpointsProvider: Environment

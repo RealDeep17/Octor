@@ -23,3 +23,7 @@ dbs/
 *.log
 *.db
 *.sqlite
+badger_data/
+.!*!*
+*.swp
+*.swo

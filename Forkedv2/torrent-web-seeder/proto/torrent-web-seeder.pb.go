@@ -4,7 +4,7 @@
 // 	protoc        v5.28.3
 // source: proto/torrent-web-seeder.proto
 
-package __
+package proto
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"

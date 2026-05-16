@@ -21,7 +21,7 @@ func RegisterHLSFlags(f []cli.Flag) []cli.Flag {
 		Name:   HLSAACCodecFlag,
 		Usage:  "specify the hls aac codec",
 		EnvVar: "HLS_AAC_CODEC",
-		Value:  "libfdk_aac",
+		Value:  "aac",
 	}, cli.BoolFlag{
 		Name:   DisableVideoTranscodingFlag,
 		Usage:  "disable video transcoding",
@@ -197,7 +197,7 @@ func (h *HLSStream) GetCodecParams() []string {
 			"-bufsize", fmt.Sprintf("%vK", uint(float64(h.r.Rate())*1.5)),
 			"-pix_fmt", "yuv420p",
 		)
-	} else if h.st == Audio && (h.s.GetCodecName() != "aac" || h.s.GetChannels() > 2) {
+	} else if h.st == Audio && h.s.GetCodecName() != "aac" {
 		params = append(
 			params,
 			h.cfg.aacCodec,

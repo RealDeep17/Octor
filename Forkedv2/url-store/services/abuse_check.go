@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	pb "github.com/webtor-io/abuse-store/abuse-store"
+	pb "github.com/webtor-io/abuse-store/proto"
 )
 
 type AbuseCheck struct {

@@ -1,7 +1,7 @@
 import os
 import re
 
-root_dir = r"e:\project\octor"
+root_dir = os.path.dirname(os.path.abspath(__file__))
 repos = [d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))]
 
 def localize_go_mod(repo_path):

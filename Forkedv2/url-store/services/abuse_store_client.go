@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	pb "github.com/webtor-io/abuse-store/abuse-store"
+	pb "github.com/webtor-io/abuse-store/proto"
 	"google.golang.org/grpc"
 )
 

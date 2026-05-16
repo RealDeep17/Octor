@@ -136,6 +136,9 @@ func (s *Web) buildHandler() {
 	mux.HandleFunc("/session", s.sessionCreateHandler)
 	mux.HandleFunc("/session/", s.sessionRouter)
 
+	// Legacy HLS route for compatibility with old Rest API URLs
+	mux.HandleFunc("/hls/", s.legacyHLSHandler)
+
 	// Swagger UI at /swagger/
 	mux.Handle("/swagger/", httpSwagger.WrapHandler)
 
@@ -559,6 +562,106 @@ func isSubtitlePlaylist(name string) bool {
 		}
 	}
 	return true
+}
+
+func (s *Web) legacyHLSHandler(w http.ResponseWriter, r *http.Request) {
+	setCORSHeaders(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Parse path: /hls/{hash}/...
+	path := strings.TrimPrefix(r.URL.Path, "/hls/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) == 0 || parts[0] == "" {
+		http.Error(w, "missing media hash", http.StatusBadRequest)
+		return
+	}
+
+	subPath := ""
+	if len(parts) > 1 {
+		subPath = parts[1]
+	}
+
+	// For legacy HLS, we use the mediaHash as the session ID if possible,
+	// or create a new session if one doesn't exist for this SourceURL.
+	sourceURL := getSourceURL(r)
+	if sourceURL == "" {
+		http.Error(w, "missing source_url", http.StatusBadRequest)
+		return
+	}
+
+	// Try to find existing session for this sourceURL
+	var sess *Session
+	for _, s := range s.sessionManager.sessions {
+		if s.sourceURL == sourceURL {
+			sess = s
+			break
+		}
+	}
+
+	// If no session exists, create one (similar to sessionCreateHandler)
+	if sess == nil {
+		h := sha1.New()
+		h.Write([]byte(sourceURL)) // Simple hash for directory
+		hash := hex.EncodeToString(h.Sum(nil))
+		hashDir, err := GetDir(s.output, hash)
+		if err != nil {
+			http.Error(w, "failed to get output dir", http.StatusInternalServerError)
+			return
+		}
+		if err := os.MkdirAll(hashDir, 0755); err != nil {
+			http.Error(w, "failed to create output dir", http.StatusInternalServerError)
+			return
+		}
+		_, _ = s.touchMap.Touch(hashDir)
+
+		pr, err := s.contentProbe.Get(sourceURL, hashDir)
+		if err != nil {
+			log.WithError(err).Error("legacy-hls: failed to probe media")
+			http.Error(w, "failed to probe media", http.StatusInternalServerError)
+			return
+		}
+
+		duration := getDuration(pr)
+		hls := s.hlsBuilder.Build(sourceURL, pr)
+
+		sess = s.sessionManager.Create(SessionConfig{
+			SourceURL: sourceURL,
+			HashDir:   hashDir,
+			HLS:       hls,
+			Duration:  duration,
+		})
+
+		if err := os.MkdirAll(sess.outputDir, 0755); err != nil {
+			s.sessionManager.Close(sess.id)
+			http.Error(w, "failed to create session dir", http.StatusInternalServerError)
+			return
+		}
+		if err := hls.MakeMasterPlaylist(sess.outputDir); err != nil {
+			s.sessionManager.Close(sess.id)
+			http.Error(w, "failed to create master playlist", http.StatusInternalServerError)
+			return
+		}
+		if err := sess.Start(0); err != nil {
+			s.sessionManager.Close(sess.id)
+			log.WithError(err).Error("legacy-hls: failed to start ffmpeg")
+			http.Error(w, "failed to start transcoding", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Now handle the subPath (playlist or segment) using existing session logic
+	safeName := filepath.Base(subPath)
+	switch {
+	case strings.HasSuffix(safeName, ".m3u8"):
+		s.sessionPlaylistHandler(w, r, sess, safeName)
+	case strings.HasSuffix(safeName, ".ts") || strings.HasSuffix(safeName, ".vtt"):
+		s.sessionSegmentHandler(w, r, sess, safeName)
+	default:
+		http.Error(w, "not found", http.StatusNotFound)
+	}
 }
 
 func setCORSHeaders(w http.ResponseWriter) {
