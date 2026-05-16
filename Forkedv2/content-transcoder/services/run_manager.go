@@ -9,17 +9,17 @@ import (
 )
 
 const (
-	runGracePeriod      = 30 * time.Second // keep idle run alive for reuse
-	runReaperInterval   = 10 * time.Second
+	runGracePeriod    = 10 * time.Second
+	runReaperInterval = 2 * time.Second
 )
 
 // RunManager manages shared TranscodeRun instances.
 // Runs are keyed by (hashDir, seekTime) — sessions with the same source
 // and seek position share a single FFmpeg process.
 type RunManager struct {
-	mu   sync.Mutex
-	runs map[string]*managedRun
-	done chan struct{}
+	mu     sync.Mutex
+	runs   map[string]*managedRun
+	done   chan struct{}
 	closed bool
 }
 

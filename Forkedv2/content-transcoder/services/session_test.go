@@ -13,16 +13,16 @@ func TestQuantizeSeekTime(t *testing.T) {
 	}{
 		{0, 0},
 		{-5, 0},
-		{10, 0},           // 10 / 30 = 0.33 → 0 * 30 = 0
-		{29.9, 0},         // still in first quantum
-		{30, 30},          // exact boundary
+		{10, 0},   // 10 / 30 = 0.33 → 0 * 30 = 0
+		{29.9, 0}, // still in first quantum
+		{30, 30},  // exact boundary
 		{30.5, 30},
 		{59.9, 30},
 		{60, 60},
-		{500, 480},        // 500 / 30 = 16.66 → 16 * 30 = 480
-		{510, 510},        // 510 / 30 = 17.0 → 17 * 30 = 510
-		{1000, 990},       // 1000 / 30 = 33.33 → 33 * 30 = 990
-		{3292.87, 3270},   // near end of 55min video
+		{500, 480},      // 500 / 30 = 16.66 → 16 * 30 = 480
+		{510, 510},      // 510 / 30 = 17.0 → 17 * 30 = 510
+		{1000, 990},     // 1000 / 30 = 33.33 → 33 * 30 = 990
+		{3292.87, 3270}, // near end of 55min video
 	}
 	for _, tt := range tests {
 		got := quantizeSeekTime(tt.input)
@@ -106,6 +106,21 @@ func TestInjectSeekParams_NoIFlag(t *testing.T) {
 	got := injectSeekParams(params, 50, true)
 	if len(got) != len(params) {
 		t.Fatalf("expected no injection, got %v", got)
+	}
+}
+
+func TestInjectRealtimeInputParam(t *testing.T) {
+	params := []string{"-fix_sub_duration", "-i", "http://example.com/video.mkv", "-c:v", "copy"}
+	got := injectRealtimeInputParam(params)
+
+	want := []string{"-fix_sub_duration", "-re", "-i", "http://example.com/video.mkv", "-c:v", "copy"}
+	if len(got) != len(want) {
+		t.Fatalf("len mismatch: got %d %v, want %d %v", len(got), got, len(want), want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("param[%d]: got %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 
@@ -193,7 +208,7 @@ func TestPlaylistForStream(t *testing.T) {
 	defer runMgr.CloseAll()
 
 	s := NewSession(SessionConfig{
-		ID:     "test-playlist",
+		ID:      "test-playlist",
 		HashDir: dir,
 		RunMgr:  runMgr,
 	})

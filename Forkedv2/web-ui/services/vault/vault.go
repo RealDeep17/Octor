@@ -18,11 +18,11 @@ import (
 )
 
 const (
-	VaultPledgeFreezePeriodFlag              = "vault-pledge-freeze-period"
-	VaultResourceExpirePeriodFlag            = "vault-resource-expire-period"
-	VaultResourceAbandonedExpirePeriodFlag   = "vault-resource-abandoned-expire-period"
-	VaultResourceTransferTimeoutPeriodFlag   = "vault-resource-transfer-timeout-period"
-	VaultStoragePathFlag                     = "vault-storage-path"
+	VaultPledgeFreezePeriodFlag            = "vault-pledge-freeze-period"
+	VaultResourceExpirePeriodFlag          = "vault-resource-expire-period"
+	VaultResourceAbandonedExpirePeriodFlag = "vault-resource-abandoned-expire-period"
+	VaultResourceTransferTimeoutPeriodFlag = "vault-resource-transfer-timeout-period"
+	VaultStoragePathFlag                   = "vault-storage-path"
 )
 
 func RegisterFlags(f []cli.Flag) []cli.Flag {
@@ -350,11 +350,8 @@ func (s *Vault) GetUserStats(ctx context.Context, user *auth.User) (*UserStats, 
 			stats.Claimable += pledge.Amount
 		}
 
-		// Content state counters (per-resource).
-		// Expired is checked first because a resource can be Vaulted=true && Expired=true
-		// (MarkResourceExpiredAndUnfunded does not clear vaulted) — and from the user's
-		// perspective such a resource is "expiring" and the table badge reads "Expiring",
-		// so the dashboard counter must agree.
+		// Content state counters (per-resource). Expired is checked first so
+		// the dashboard agrees with the table badge during cleanup windows.
 		if pledge.Resource != nil {
 			switch {
 			case pledge.Resource.Expired:
@@ -693,6 +690,12 @@ func (s *Vault) RemovePledge(ctx context.Context, pledge *vaultModels.Pledge) er
 
 		// If funded_vp < required_vp, mark resource as expired and unfunded
 		if newFundedVP < resource.RequiredVP {
+			if s.vaultApi != nil {
+				if _, err = s.vaultApi.DeleteResource(ctx, resource.ResourceID); err != nil {
+					return errors.Wrap(err, "failed to queue resource deletion in vault api")
+				}
+			}
+
 			// Mark as expired
 			err = vaultModels.MarkResourceExpiredAndUnfunded(ctx, tx, resource.ResourceID)
 			if err != nil {

@@ -12,6 +12,7 @@
            {{ else if .MediaProbe }}data-duration="{{ .MediaProbe | getDurationSec }}" {{ end }}
            {{ if .TranscoderSession }}data-session-id="{{ .TranscoderSession.ID }}"{{ end }}
            {{ if .SessionSeekURL }}data-session-seek-url="{{ .SessionSeekURL }}"{{ end }}
+           {{ if .SessionDeleteURL }}data-session-delete-path="{{ .SessionDeleteURL }}"{{ end }}
            {{ if .GraceDurationSec }}data-grace-duration-sec="{{ .GraceDurationSec }}"{{ end }}
            {{ if .Settings | hasControls }}controls{{ end }}
            {{ if .Settings.Width }}width="{{ .Settings.Width }}"{{ end }}
