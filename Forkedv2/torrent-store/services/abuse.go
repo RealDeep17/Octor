@@ -29,7 +29,7 @@ var (
 )
 
 type Abuse struct {
-	lazymap.LazyMap[bool]
+	*lazymap.LazyMap[bool]
 	cl *AbuseClient
 }
 

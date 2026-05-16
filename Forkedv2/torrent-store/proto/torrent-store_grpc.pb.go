@@ -4,7 +4,7 @@
 // - protoc             v5.28.3
 // source: proto/torrent-store.proto
 
-package __
+package proto
 
 import (
 	context "context"

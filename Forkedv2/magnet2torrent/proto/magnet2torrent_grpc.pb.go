@@ -4,7 +4,7 @@
 // - protoc             v5.28.3
 // source: proto/magnet2torrent.proto
 
-package __
+package magnet2torrent
 
 import (
 	context "context"

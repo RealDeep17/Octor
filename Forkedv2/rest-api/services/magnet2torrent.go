@@ -9,7 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	m2t "github.com/webtor-io/magnet2torrent/magnet2torrent"
+	m2t "github.com/webtor-io/magnet2torrent/proto"
 	"google.golang.org/grpc"
 )
 
@@ -39,7 +39,7 @@ func RegisterMagnet2TorrentFlags(f []cli.Flag) []cli.Flag {
 		cli.IntFlag{
 			Name:   magnet2torrentPortFlag,
 			Usage:  "magnet2torrent port",
-			Value:  50051,
+			Value:  50053,
 			EnvVar: "MAGNET2TORRENT_SERVICE_PORT, MAGNET2TORRENT_PORT",
 		},
 	)

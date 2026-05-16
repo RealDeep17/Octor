@@ -1,7 +1,7 @@
 import os
 import re
 
-root_dir = r"e:\project\octor"
+root_dir = os.path.dirname(os.path.abspath(__file__))
 
 def safe_replace(path, pattern, replacement):
     if not os.path.exists(path):
