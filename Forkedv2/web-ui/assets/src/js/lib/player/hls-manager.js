@@ -28,6 +28,17 @@ export { Hls };
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
+function emitHlsError(data) {
+    window.dispatchEvent(new CustomEvent('player_hls_error', {
+        detail: {
+            type: data?.type,
+            details: data?.details,
+            fatal: !!data?.fatal,
+            url: data?.url,
+        },
+    }));
+}
+
 export function createHls(videoEl, sourceUrl, onReady) {
     if (!Hls || !Hls.isSupported() || isIOS) {
         // Native HLS (Safari/iOS) — browser handles m3u8 natively
@@ -62,6 +73,14 @@ function setupHlsEvents(hls) {
     });
 
     hls.on(Hls.Events.ERROR, (event, data) => {
+        if (
+            data.fatal ||
+            data.details === Hls.ErrorDetails.LEVEL_EMPTY_ERROR ||
+            data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT ||
+            data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR
+        ) {
+            emitHlsError(data);
+        }
         if (data.fatal) {
             switch (data.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:

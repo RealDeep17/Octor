@@ -1,11 +1,23 @@
-infra-data/
-server/
-REFERENCE-ONLY/
+# Local-only top-level workspace state.
+/infra-data/
+/REFERENCE-ONLY/
+/server/
+
+# OS/editor noise.
 .DS_Store
+**/.DS_Store
+.!*!*
+*.swp
+*.swo
+
+# Dependency trees.
 node_modules/
 vendor/
+
+# Local environment files. Keep checked-in examples such as example.env visible.
 .env
 .env.*
+custom.env
 
 # Python
 venv/
@@ -15,15 +27,14 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Application Data & Logs
-data/
-log/
-logs/
-dbs/
+# Application data and logs. These are intentionally anchored to avoid hiding
+# source directories in service repos.
+/data/
+/log/
+/logs/
+/dbs/
 *.log
 *.db
 *.sqlite
 badger_data/
-.!*!*
-*.swp
-*.swo
+badger-data/

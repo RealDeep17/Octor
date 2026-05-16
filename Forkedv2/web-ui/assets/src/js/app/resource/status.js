@@ -32,22 +32,23 @@ function renderBadge(status) {
     if (!config) return '';
 
     let label = status.label || '';
-    let peers = '';
     if (status.state === 'caching' || status.state === 'vaulting') {
         label = `${label} ${Math.round(status.progress)}%`;
     }
-    // Show peers for non-terminal states
+
+    let seeds = '';
     if (status.state !== 'cached' && status.state !== 'vaulted' && status.seeders > 0) {
-        peers = ` <span class="opacity-70">(${status.seeders} peers)</span>`;
+        seeds = ` <span class="opacity-70">${status.seeders} seed${status.seeders === 1 ? '' : 's'}</span>`;
     }
 
-    return `<div class="${config.classes}">${config.icon} ${label}${peers}</div>`;
+    return `<div class="${config.classes}">${config.icon} ${label}${seeds}</div>`;
 }
 
 av(async function() {
     const container = this;
     const resourceId = container.dataset.resourceId;
     if (!resourceId) return;
+    const itemId = container.dataset.itemId || '';
 
     const badge = container.querySelector('#torrent-status-badge');
     if (!badge) return;
@@ -60,33 +61,72 @@ av(async function() {
 
     const lang = document.documentElement.lang;
     const langPrefix = lang && lang !== 'en' ? `/${lang}` : '';
-    const source = new EventSource(`${langPrefix}/${resourceId}/status?_csrf=${encodeURIComponent(csrfToken)}`);
-    container._statusSource = source;
-
-    source.onmessage = (e) => {
-        try {
-            const status = JSON.parse(e.data);
-            badge.innerHTML = renderBadge(status);
-            if (status.state === 'vaulted') {
-                source.close();
-                container._statusSource = null;
-            }
-        } catch (err) {
-            // Ignore parse errors
-        }
+    const statusURL = (active = false) => {
+        const params = new URLSearchParams({ _csrf: csrfToken });
+        if (active) params.set('active', '1');
+        if (itemId) params.set('item_id', itemId);
+        return `${langPrefix}/${resourceId}/status?${params.toString()}`;
     };
 
-    source.onerror = () => {
-        if (source.readyState === EventSource.CLOSED) {
+    const openStatus = (active = false) => {
+        if (container._statusSource) {
+            container._statusSource.close();
             container._statusSource = null;
         }
+
+        const source = new EventSource(statusURL(active));
+        container._statusSource = source;
+        container._statusActive = active;
+
+        source.onmessage = (e) => {
+            try {
+                const status = JSON.parse(e.data);
+                badge.innerHTML = renderBadge(status);
+                if (status.state === 'vaulted') {
+                    source.close();
+                    container._statusSource = null;
+                }
+            } catch (err) {
+                // Ignore parse errors
+            }
+        };
+
+        source.onerror = () => {
+            if (source.readyState === EventSource.CLOSED) {
+                container._statusSource = null;
+            }
+        };
     };
+
+    const activatesCacheStatus = (form) => {
+        if (!form) return false;
+        return form.classList.contains('stream-video')
+            || form.classList.contains('stream-audio')
+            || form.classList.contains('download')
+            || form.classList.contains('download-dir')
+            || (form.getAttribute('action') || '').includes('/vault/add');
+    };
+
+    const onSubmit = (event) => {
+        if (container._statusActive) return;
+        if (!activatesCacheStatus(event.target)) return;
+        openStatus(true);
+    };
+
+    document.addEventListener('submit', onSubmit, true);
+    container._statusSubmitListener = onSubmit;
+
+    openStatus(false);
 
 }, function() {
     const container = this;
     if (container._statusSource) {
         container._statusSource.close();
         container._statusSource = null;
+    }
+    if (container._statusSubmitListener) {
+        document.removeEventListener('submit', container._statusSubmitListener, true);
+        container._statusSubmitListener = null;
     }
 });
 

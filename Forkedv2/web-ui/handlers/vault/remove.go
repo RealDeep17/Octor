@@ -2,9 +2,12 @@ package vault
 
 import (
 	"context"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/web"
 )
@@ -20,6 +23,14 @@ func (h *Handler) removePledge(c *gin.Context) {
 	if err != nil {
 		web.RedirectWithError(c, err)
 		return
+	}
+	if h.api != nil {
+		claims := api.GetClaimsFromContext(c)
+		purgeCtx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+		defer cancel()
+		if purgeErr := h.api.PurgeResourceCache(purgeCtx, claims, resourceID); purgeErr != nil {
+			logrus.WithError(purgeErr).WithField("resource_id", resourceID).Warn("failed to purge seeder cache after vault removal")
+		}
 	}
 
 	// Redirect with success
@@ -54,8 +65,6 @@ func (h *Handler) deletePledge(ctx context.Context, resourceID string, user *aut
 	if pledge == nil {
 		return errors.New("pledge not found")
 	}
-
-
 
 	// Remove the pledge
 	err = h.vault.RemovePledge(ctx, pledge)

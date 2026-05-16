@@ -152,7 +152,7 @@ function attachRow(row) {
                 } else if (etaEl) etaEl.classList.add('hidden');
 
                 if (status.seeders > 0 && peersEl) {
-                    peersEl.textContent = `${status.seeders} peers`;
+                    peersEl.textContent = `${status.seeders} seed${status.seeders === 1 ? '' : 's'}`;
                     peersEl.classList.remove('hidden');
                 } else if (peersEl) peersEl.classList.add('hidden');
                 statsLine.classList.remove('hidden');
