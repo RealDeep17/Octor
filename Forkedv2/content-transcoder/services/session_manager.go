@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	sessionInactivityRelease = 60 * time.Second // release run after 60s inactivity
-	sessionInactivityExpiry  = 10 * time.Minute  // remove session after 10min inactivity
-	sessionReaperInterval    = 10 * time.Second
+	sessionInactivityRelease = 12 * time.Second
+	sessionInactivityExpiry  = 10 * time.Minute
+	sessionReaperInterval    = 2 * time.Second
 )
 
 // SessionManager manages all active transcoding sessions.

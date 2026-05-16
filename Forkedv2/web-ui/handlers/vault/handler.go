@@ -6,7 +6,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/jobs"
 	vaultModels "github.com/webtor-io/web-ui/models/vault"
+	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/i18n"
 	"github.com/webtor-io/web-ui/services/template"
@@ -16,7 +18,9 @@ import (
 
 type Handler struct {
 	vault *vault.Vault
+	api   *api.Api
 	pg    *cs.PG
+	jobs  *j.Jobs
 	tb    *template.BuilderWithLayout[*web.Context]
 }
 
@@ -41,10 +45,12 @@ type PledgeListData struct {
 	IsFree                bool
 }
 
-func RegisterHandler(r *gin.Engine, v *vault.Vault, tm *template.Manager[*web.Context], pg *cs.PG) {
+func RegisterHandler(r *gin.Engine, v *vault.Vault, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs) {
 	h := &Handler{
 		vault: v,
+		api:   api,
 		pg:    pg,
+		jobs:  jobs,
 		tb: tm.MustRegisterViews("vault/*").
 			WithLayout("main"),
 	}

@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	ra "github.com/webtor-io/rest-api/services"
 	"github.com/webtor-io/web-ui/helpers"
 	"github.com/webtor-io/web-ui/models"
@@ -27,12 +27,12 @@ import (
 )
 
 type StreamContent struct {
-	ExportTag           *ra.ExportTag
-	Resource            *ra.ResourceResponse
-	Item                *ra.ListItem
-	MediaProbe          *api.MediaProbe
-	OpenSubtitles       []api.OpenSubtitleTrack
-	UserSubtitles       []models.UserSubtitleTrack
+	ExportTag            *ra.ExportTag
+	Resource             *ra.ResourceResponse
+	Item                 *ra.ListItem
+	MediaProbe           *api.MediaProbe
+	OpenSubtitles        []api.OpenSubtitleTrack
+	UserSubtitles        []models.UserSubtitleTrack
 	UserSubtitlesEnabled bool
 	// EIURL is the ExportItem "stream" URL — the torrent-http-proxy
 	// origin carrying whatever auth the cluster embeds (subdomain,
@@ -46,6 +46,7 @@ type StreamContent struct {
 	DomainSettings      *embed.DomainSettingsData
 	TranscoderSession   *api.TranscoderSession
 	SessionSeekURL      string
+	SessionDeleteURL    string
 	// GraceDurationSec is non-zero only for free-tier users when grace rules
 	// are enabled. Surfaced to the player JS so it knows when to show the
 	// soft signup CTA after the grace window passes.
@@ -254,6 +255,15 @@ func sessionSeekURL(baseURL string, sessionID string) (string, error) {
 	return u.String(), nil
 }
 
+func sessionDeleteURL(baseURL string, sessionID string) (string, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse base URL")
+	}
+	u.Path += "/session/" + sessionID
+	return u.String(), nil
+}
+
 func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Context, resourceID string, itemID string, template string, settings *models.StreamSettings, vsud *models.VideoStreamUserData, dsd *embed.DomainSettingsData) (err error) {
 	sc := &StreamContent{
 		Settings:       settings,
@@ -452,6 +462,10 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 				Type: "application/vnd.apple.mpegurl",
 			}}
 			sc.SessionSeekURL = result.SeekURL
+			sc.SessionDeleteURL, err = sessionDeleteURL(result.BaseURL, result.Session.ID)
+			if err != nil {
+				return errors.Wrap(err, "failed to construct session delete URL")
+			}
 		}
 	}
 	sc.VideoStreamUserData = vsud
@@ -755,22 +769,22 @@ func (s *ActionScript) warmUp(ctx context.Context, j *job.Job, m string, u strin
 }
 
 type ActionScript struct {
-	api           *api.Api
-	c             *web.Context
-	i18n          *i18n.Service
-	userSubtitles *us.Service
-	resourceId    string
-	itemId        string
-	action        string
-	tb            template.Builder[*web.Context]
-	settings      *models.StreamSettings
-	vsud          *models.VideoStreamUserData
-	dsd           *embed.DomainSettingsData
-	warmup        WarmupSettings
-	grace         GraceSettings
-	forceSlow     bool
+	api             *api.Api
+	c               *web.Context
+	i18n            *i18n.Service
+	userSubtitles   *us.Service
+	resourceId      string
+	itemId          string
+	action          string
+	tb              template.Builder[*web.Context]
+	settings        *models.StreamSettings
+	vsud            *models.VideoStreamUserData
+	dsd             *embed.DomainSettingsData
+	warmup          WarmupSettings
+	grace           GraceSettings
+	forceSlow       bool
 	forceDirectPlay bool
-	debug         string
+	debug           string
 }
 
 func (s *ActionScript) t(key string) string {
@@ -916,19 +930,19 @@ func Action(tb template.Builder[*web.Context], api *api.Api, i18nSvc *i18n.Servi
 		resourceId: resourceID,
 		itemId:     itemID,
 		Script: &ActionScript{
-			tb:            tb,
-			api:           api,
-			i18n:          i18nSvc,
-			userSubtitles: userSubtitles,
-			c:             c,
-			resourceId:    resourceID,
-			itemId:        itemID,
-			action:        action,
-			settings:      settings,
-			vsud:          vsud,
-			dsd:           dsd,
-			warmup:        warmup,
-			grace:         grace,
+			tb:              tb,
+			api:             api,
+			i18n:            i18nSvc,
+			userSubtitles:   userSubtitles,
+			c:               c,
+			resourceId:      resourceID,
+			itemId:          itemID,
+			action:          action,
+			settings:        settings,
+			vsud:            vsud,
+			dsd:             dsd,
+			warmup:          warmup,
+			grace:           grace,
 			forceSlow:       forceSlow,
 			forceDirectPlay: forceDirectPlay,
 			debug:           debug,

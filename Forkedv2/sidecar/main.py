@@ -59,7 +59,7 @@ THEPORNDB_API_KEY   = os.getenv("THEPORNDB_API_KEY") or os.getenv("TPDB_API_KEY"
 TPDB_BASE           = os.getenv("TPDB_BASE", "https://api.theporndb.net")
 SIDECAR_ENRICHMENT_ENABLED = os.getenv("SIDECAR_ENRICHMENT_ENABLED", "true").lower() != "false"
 
-SETTINGS_FILE = Path("/data/settings.json")
+SETTINGS_FILE = Path(os.getenv("SIDECAR_DATA_DIR", "./data") + "/settings.json")
 
 # Minimum fuzzy match score to accept a candidate (namer uses 89.9 for partial, 94.9 for full)
 MATCH_THRESHOLD = 65.0

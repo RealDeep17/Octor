@@ -11,6 +11,11 @@ import '../../../styles/player.css';
 
 let _currentPlayer = null;
 
+function closeTranscoderSession(deletePath) {
+    if (!deletePath) return;
+    fetch(deletePath, { method: 'DELETE', keepalive: true }).catch(() => {});
+}
+
 /**
  * Main Player Preact component.
  * Wraps <video>/<audio>, renders custom controls, manages HLS + session seeking.
@@ -310,7 +315,27 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
         return () => { if (castBtn) castBtn.remove(); };
     }, [features.chromecast, isVideo]);
 
-    // Session cleanup removed — sessions have server-side TTL
+    useEffect(() => {
+        if (!isSession || !sessionDeletePath) return;
+        let closed = false;
+        const closeOnce = () => {
+            if (closed) return;
+            closed = true;
+            closeTranscoderSession(sessionDeletePath);
+        };
+        const onEnded = () => closeOnce();
+        const onPageHide = () => closeOnce();
+        videoEl.addEventListener('ended', onEnded);
+        window.addEventListener('pagehide', onPageHide);
+        window.addEventListener('beforeunload', onPageHide);
+        return () => {
+            videoEl.removeEventListener('ended', onEnded);
+            window.removeEventListener('pagehide', onPageHide);
+            window.removeEventListener('beforeunload', onPageHide);
+            closeOnce();
+        };
+    }, [isSession, sessionDeletePath]);
+
 
     // Captions modal toggle — use original (non-cloned) checkbox outside player
     const handleCaptionsClick = useCallback(() => {
@@ -735,6 +760,8 @@ function wireLogo(container, playerContainer) {
 export function destroyPlayer() {
     if (!_currentPlayer) return;
     const { mountEl, playerContainer, videoEl } = _currentPlayer;
+
+    closeTranscoderSession(videoEl.dataset.sessionDeletePath);
 
     // Destroy HLS
     if (window.hlsPlayer) {

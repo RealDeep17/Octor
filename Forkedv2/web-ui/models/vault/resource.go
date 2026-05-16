@@ -128,6 +128,8 @@ func MarkResourceExpiredAndUnfunded(ctx context.Context, db pg.DBI, resourceID s
 		Set("expired_at = ?", now).
 		Set("funded_at = NULL").
 		Set("funded = false").
+		Set("vaulted = false").
+		Set("vaulted_at = NULL").
 		Where("resource_id = ?", resourceID).
 		Update()
 	if err != nil {

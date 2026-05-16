@@ -22,7 +22,7 @@ const (
 // TranscodeRun represents a single shared FFmpeg process transcoding a source
 // from a specific seek position. Multiple sessions can share a run.
 type TranscodeRun struct {
-	key       string  // identity: hashDir + ":seek:" + seekTime
+	key       string // identity: hashDir + ":seek:" + seekTime
 	hashDir   string
 	seekTime  float64
 	outputDir string // {hashDir}/runs/seek-{seekTime}/
@@ -113,6 +113,7 @@ func (r *TranscodeRun) startLocked() error {
 	}
 
 	params = redirectSegmentListParams(params)
+	params = injectRealtimeInputParam(params)
 
 	if r.seekTime > 0 {
 		params = injectSeekParams(params, r.seekTime, r.isVideoCopy())
@@ -271,6 +272,22 @@ func removeParam(params []string, flag string) []string {
 		if p != flag {
 			result = append(result, p)
 		}
+	}
+	return result
+}
+
+// injectRealtimeInputParam prevents FFmpeg from transcoding far ahead of the
+// viewer. Without -re, local/HTTP inputs can be consumed as fast as CPU allows,
+// producing most or all HLS segments even after playback stops.
+func injectRealtimeInputParam(params []string) []string {
+	result := make([]string, 0, len(params)+1)
+	inserted := false
+	for _, p := range params {
+		if p == "-i" && !inserted {
+			result = append(result, "-re")
+			inserted = true
+		}
+		result = append(result, p)
 	}
 	return result
 }

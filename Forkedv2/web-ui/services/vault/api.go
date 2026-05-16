@@ -188,6 +188,7 @@ func (s *Api) PutResource(ctx context.Context, resourceID string) (*Resource, er
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to put resource")
 	}
+	s.resourcesCache.Drop(resourceID)
 	return resource, nil
 }
 
@@ -199,6 +200,7 @@ func (s *Api) DeleteResource(ctx context.Context, resourceID string) (*Resource,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to delete resource")
 	}
+	s.resourcesCache.Drop(resourceID)
 	if !found {
 		return nil, nil
 	}

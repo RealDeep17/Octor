@@ -7,7 +7,6 @@ import (
 	"github.com/webtor-io/web-ui/handlers/about"
 	wa "github.com/webtor-io/web-ui/handlers/action"
 	wau "github.com/webtor-io/web-ui/handlers/auth"
-	hi18n "github.com/webtor-io/web-ui/handlers/i18n"
 	"github.com/webtor-io/web-ui/handlers/discover"
 	"github.com/webtor-io/web-ui/handlers/discover_ai"
 	"github.com/webtor-io/web-ui/handlers/discover_watchlist"
@@ -18,6 +17,7 @@ import (
 	"github.com/webtor-io/web-ui/handlers/event"
 	"github.com/webtor-io/web-ui/handlers/ext"
 	"github.com/webtor-io/web-ui/handlers/geo"
+	hi18n "github.com/webtor-io/web-ui/handlers/i18n"
 	wi "github.com/webtor-io/web-ui/handlers/index"
 	"github.com/webtor-io/web-ui/handlers/instructions"
 	wj "github.com/webtor-io/web-ui/handlers/job"
@@ -44,13 +44,13 @@ import (
 	jj "github.com/webtor-io/web-ui/jobs"
 	as "github.com/webtor-io/web-ui/services/abuse_store"
 	at "github.com/webtor-io/web-ui/services/access_token"
+	ac "github.com/webtor-io/web-ui/services/anthropic_client"
 	ci "github.com/webtor-io/web-ui/services/cache_index"
 	"github.com/webtor-io/web-ui/services/common"
 	"github.com/webtor-io/web-ui/services/geoip"
 	si18n "github.com/webtor-io/web-ui/services/i18n"
 	lr "github.com/webtor-io/web-ui/services/link_resolver"
 	"github.com/webtor-io/web-ui/services/notification"
-	ac "github.com/webtor-io/web-ui/services/anthropic_client"
 	rec "github.com/webtor-io/web-ui/services/recommendations"
 	rum "github.com/webtor-io/web-ui/services/request_url_mapper"
 	"github.com/webtor-io/web-ui/services/turnstile"
@@ -327,7 +327,7 @@ func serve(c *cli.Context) error {
 
 	// Setting VaultHandler
 	if v != nil {
-		vh.RegisterHandler(r, v, tm, pg)
+		vh.RegisterHandler(r, v, tm, sapi, pg, jobs)
 	}
 
 	// Setting ResourceHandler
