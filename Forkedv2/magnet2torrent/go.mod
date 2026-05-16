@@ -131,3 +131,5 @@ require (
 )
 
 replace github.com/anacrolix/utp => github.com/webtor-io/utp v0.2.1-0.20260503123918-24e7018d4f71
+
+replace github.com/webtor-io/common-services => ../common-services

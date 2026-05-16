@@ -287,12 +287,11 @@ func (s *BaseURLBuilder) getBaseDomain() string {
 	if s.domain == "" {
 		return ""
 	}
-	if s.premiumDomain != "" {
+	// In self-hosted mode, we usually don't use premium domains or roles
+	// but we keep the logic for compatibility if premiumDomain is explicitly set.
+	if s.premiumDomain != "" && s.usePremiumDomain {
 		role, err := s.getRole()
-		if err != nil {
-			return ""
-		}
-		if role != "free" && s.usePremiumDomain {
+		if err == nil && role != "" && role != "free" {
 			return s.premiumDomain
 		}
 	}

@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/stretchr/testify/mock"
-	m2tp "github.com/webtor-io/magnet2torrent/magnet2torrent"
+	m2tp "github.com/webtor-io/magnet2torrent/proto"
 	tsp "github.com/webtor-io/torrent-store/proto"
 	"google.golang.org/grpc"
 )

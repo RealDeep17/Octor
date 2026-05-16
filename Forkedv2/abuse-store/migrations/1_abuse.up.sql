@@ -15,7 +15,6 @@ CREATE TABLE abuse (
     created_at  timestamp with time zone DEFAULT now() NOT NULL
 );
 
-ALTER TABLE abuse OWNER TO abusestore;
 
 ALTER TABLE ONLY abuse
     ADD CONSTRAINT abuse_id PRIMARY KEY (abuse_id);

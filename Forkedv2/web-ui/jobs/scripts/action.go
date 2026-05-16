@@ -12,20 +12,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/pkg/errors"
+	ra "github.com/webtor-io/rest-api/services"
 	"github.com/webtor-io/web-ui/helpers"
 	"github.com/webtor-io/web-ui/models"
+	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/embed"
 	"github.com/webtor-io/web-ui/services/i18n"
+	"github.com/webtor-io/web-ui/services/job"
+	"github.com/webtor-io/web-ui/services/template"
 	us "github.com/webtor-io/web-ui/services/user_subtitle"
 	"github.com/webtor-io/web-ui/services/web"
-
-	log "github.com/sirupsen/logrus"
-	ra "github.com/webtor-io/rest-api/services"
-	"github.com/webtor-io/web-ui/services/template"
-
-	"github.com/webtor-io/web-ui/services/api"
-	"github.com/webtor-io/web-ui/services/job"
 )
 
 type StreamContent struct {
@@ -220,6 +218,7 @@ func directPlayURL(downloadURL string) string {
 	}
 	q := u.Query()
 	q.Del("download")
+	q.Set("redirect", "true")
 	u.RawQuery = q.Encode()
 	return u.String()
 }
@@ -339,6 +338,19 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 	}
 	downloadURL := exportResponse.ExportItems["download"].URL
 
+	// Step 0: Handle global Direct Play override
+	directPlayFallback := false
+	if s.forceDirectPlay && se.Meta.Transcode {
+		log.Info("global FORCE_DIRECT_PLAY enabled; bypassing transcoder for all content")
+		directURL := directPlayURL(downloadURL)
+		sc.ExportTag.Sources = []ra.ExportSource{{
+			Src:  directURL,
+			Type: "video/mp4",
+		}}
+		directPlayFallback = true
+		se.Meta.Transcode = false
+	}
+
 	// Step 1: Torrent warmup (skip for cached/vault content; also skipped on
 	// forceSlow — the user already accepted slow playback, so we save the warmup
 	// budget and let the transcoder pull cold instead).
@@ -367,7 +379,7 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 			mp, probeErr = s.api.GetMediaProbe(mpCtx, mpItem.URL)
 		}
 	}
-	directPlayFallback := false
+	directPlayFallback = false
 	if probeErr != nil {
 		if se.Meta.Transcode {
 			log.WithError(probeErr).Warn("content probe failed; falling back to direct byte-range playback")
@@ -425,14 +437,22 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 	if se.Meta.Transcode && !directPlayFallback && (exportResponse.Source.MediaFormat == ra.Video || exportResponse.Source.MediaFormat == ra.Audio) {
 		result, serr := s.bufferSessionHLS(ctx, j, exportResponse.ExportItems["stream"].URL, 30*time.Second)
 		if serr != nil {
-			return errors.Wrap(serr, "failed to buffer session HLS")
+			log.WithError(serr).Warn("failed to buffer session HLS; falling back to direct byte-range playback")
+			directURL := directPlayURL(downloadURL)
+			sc.ExportTag.Sources = []ra.ExportSource{{
+				Src:  directURL,
+				Type: "video/mp4",
+			}}
+			directPlayFallback = true
+			se.Meta.Transcode = false
+		} else {
+			sc.TranscoderSession = result.Session
+			sc.ExportTag.Sources = []ra.ExportSource{{
+				Src:  result.HLSURL,
+				Type: "application/vnd.apple.mpegurl",
+			}}
+			sc.SessionSeekURL = result.SeekURL
 		}
-		sc.TranscoderSession = result.Session
-		sc.ExportTag.Sources = []ra.ExportSource{{
-			Src:  result.HLSURL,
-			Type: "application/vnd.apple.mpegurl",
-		}}
-		sc.SessionSeekURL = result.SeekURL
 	}
 	sc.VideoStreamUserData = vsud
 	sc.UserSubtitlesEnabled = s.userSubtitles.Enabled()
@@ -749,6 +769,7 @@ type ActionScript struct {
 	warmup        WarmupSettings
 	grace         GraceSettings
 	forceSlow     bool
+	forceDirectPlay bool
 	debug         string
 }
 
@@ -843,7 +864,7 @@ func (s *ErrorWrapperScript) Run(ctx context.Context, j *job.Job) (err error) {
 	return err
 }
 
-func Action(tb template.Builder[*web.Context], api *api.Api, i18nSvc *i18n.Service, userSubtitles *us.Service, c *web.Context, resourceID string, itemID string, action string, settings *models.StreamSettings, dsd *embed.DomainSettingsData, vsud *models.VideoStreamUserData, warmup WarmupSettings, grace GraceSettings, forceSlow bool, debug string) (r job.Runnable, id string) {
+func Action(tb template.Builder[*web.Context], api *api.Api, i18nSvc *i18n.Service, userSubtitles *us.Service, c *web.Context, resourceID string, itemID string, action string, settings *models.StreamSettings, dsd *embed.DomainSettingsData, vsud *models.VideoStreamUserData, warmup WarmupSettings, grace GraceSettings, forceSlow bool, forceDirectPlay bool, debug string) (r job.Runnable, id string) {
 	vsudID := vsud.AudioID + "/" + vsud.SubtitleID + "/" + fmt.Sprintf("%+v", vsud.AcceptLangTags)
 	settingsID := fmt.Sprintf("%+v", settings)
 	now := time.Now().UTC()
@@ -879,11 +900,15 @@ func Action(tb template.Builder[*web.Context], api *api.Api, i18nSvc *i18n.Servi
 	if forceSlow {
 		forceSlowKey = "fs"
 	}
+	fdpKey := ""
+	if forceDirectPlay {
+		fdpKey = "fdp"
+	}
 	debugKey := ""
 	if debug != "" {
 		debugKey = "dbg-" + debug
 	}
-	id = fmt.Sprintf("%x", sha1.Sum([]byte(resourceID+"/"+itemID+"/"+action+"/"+c.ApiClaims.Role+"/"+settingsID+"/"+vsudID+"/"+cacheKey+"/"+c.Lang+"/"+userKey+"/"+userSubsKey+"/"+forceSlowKey+"/"+debugKey)))
+	id = fmt.Sprintf("%x", sha1.Sum([]byte(resourceID+"/"+itemID+"/"+action+"/"+c.ApiClaims.Role+"/"+settingsID+"/"+vsudID+"/"+cacheKey+"/"+c.Lang+"/"+userKey+"/"+userSubsKey+"/"+forceSlowKey+"/"+fdpKey+"/"+debugKey)))
 	return &ErrorWrapperScript{
 		tb:         tb,
 		c:          c,
@@ -904,8 +929,9 @@ func Action(tb template.Builder[*web.Context], api *api.Api, i18nSvc *i18n.Servi
 			dsd:           dsd,
 			warmup:        warmup,
 			grace:         grace,
-			forceSlow:     forceSlow,
-			debug:         debug,
+			forceSlow:       forceSlow,
+			forceDirectPlay: forceDirectPlay,
+			debug:           debug,
 		},
 	}, id
 }

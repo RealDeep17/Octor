@@ -2,7 +2,9 @@ package providers
 
 import (
 	"context"
+	"os"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"time"
 
 	badger "github.com/dgraph-io/badger/v3"
@@ -31,14 +33,24 @@ type Badger struct {
 }
 
 func NewBadger(c *cli.Context) *Badger {
-	opt := badger.DefaultOptions("/tmp/badger")
-	db, _ := badger.Open(opt)
+	path := "badger_data"
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		_ = os.Mkdir(path, 0755)
+	}
+	opt := badger.DefaultOptions(path)
+	db, err := badger.Open(opt)
+	if err != nil {
+		log.WithError(err).Fatal("failed to open badger")
+	}
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
 			if err := db.RunValueLogGC(0.7); err != nil {
-				return
+				if !errors.Is(err, badger.ErrNoRewrite) {
+					log.WithError(err).Error("badger GC error")
+				}
+				continue
 			}
 		}
 	}()

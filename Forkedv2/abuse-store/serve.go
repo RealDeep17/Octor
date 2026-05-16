@@ -24,6 +24,8 @@ func makeServeCMD() cli.Command {
 func configureServe(c *cli.Command) {
 
 	c.Flags = cs.RegisterProbeFlags(c.Flags)
+	c.Flags = cs.RegisterPprofFlags(c.Flags)
+	c.Flags = cs.RegisterPromFlags(c.Flags)
 	c.Flags = cs.RegisterPGFlags(c.Flags)
 	c.Flags = cs.RegisterNATSFlags(c.Flags)
 	c.Flags = s.RegisterGRPCFlags(c.Flags)

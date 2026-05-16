@@ -14,7 +14,7 @@ import (
 )
 
 type TorrentStore struct {
-	lazymap.LazyMap[[]file]
+	*lazymap.LazyMap[[]file]
 	ts *TorrentStoreClient
 }
 

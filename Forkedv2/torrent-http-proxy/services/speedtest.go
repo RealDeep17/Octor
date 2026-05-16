@@ -11,7 +11,7 @@ import (
 const (
 	speedtestDefaultSize = 10 * 1024 * 1024 // 10MB
 	speedtestMinSize     = 1 * 1024 * 1024  // 1MB
-	speedtestMaxSize     = 50 * 1024 * 1024  // 50MB
+	speedtestMaxSize     = 50 * 1024 * 1024 // 50MB
 )
 
 // zeroReader implements io.Reader that produces zero bytes.
@@ -55,8 +55,6 @@ func (s *Web) handleSpeedtest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.Itoa(size))
 	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusOK)
-
 	w.WriteHeader(http.StatusOK)
 
 	// Stream zero bytes without throttling

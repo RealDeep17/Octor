@@ -73,6 +73,10 @@ func (s *BaseTagBuilder) BuildURL(i *ListItem) (*MyURL, error) {
 	return s.ub.Build(s.r, i, s.g, ExportTypeStream)
 }
 
+func (s *BaseTagBuilder) BuildDownloadURL(i *ListItem) (*MyURL, error) {
+	return s.ub.Build(s.r, i, s.g, ExportTypeDownload)
+}
+
 func (s *BaseTagBuilder) BuildSource(u *MyURL) *ExportSource {
 	ext := filepath.Ext(u.Path)
 	t := ""
@@ -92,6 +96,17 @@ func (s *BaseTagBuilder) BuildAVTag(n ExportTagName) (*ExportTag, error) {
 		return nil, err
 	}
 	src := s.BuildSource(url)
+	sources := []ExportSource{*src}
+
+	// Add direct download source as fallback for video
+	if s.i.MediaFormat == Video {
+		durl, err := s.BuildDownloadURL(s.i)
+		if err == nil && durl != nil {
+			dsrc := s.BuildSource(durl)
+			sources = append(sources, *dsrc)
+		}
+	}
+
 	preload := ExportPreloadTypeNone
 	if url.cached {
 		preload = ExportPreloadTypeAuto
@@ -99,9 +114,7 @@ func (s *BaseTagBuilder) BuildAVTag(n ExportTagName) (*ExportTag, error) {
 	return &ExportTag{
 		Name:    n,
 		Preload: preload,
-		Sources: []ExportSource{
-			*src,
-		},
+		Sources: sources,
 	}, nil
 }
 

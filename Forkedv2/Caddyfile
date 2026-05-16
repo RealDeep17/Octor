@@ -8,7 +8,7 @@ http://localhost:8081, http://127.0.0.1:8081 {
     route {
         # 1. Route service-specific prefixes to the proxy
         @seeder_services {
-            path /speedtest* /webseed* /torrent* /stat* /ext*
+            path /speedtest/download* /webseed* /torrent* /stat* /ext*
         }
         handle @seeder_services {
             reverse_proxy localhost:50052
@@ -40,7 +40,7 @@ http://localhost:8081, http://127.0.0.1:8081 {
 {$OCTOR_HOST} {
     route {
         @seeder_services {
-            path /speedtest* /webseed* /torrent* /stat* /ext*
+            path /speedtest/download* /webseed* /torrent* /stat* /ext*
         }
         handle @seeder_services {
             reverse_proxy localhost:50052
