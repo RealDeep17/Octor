@@ -19,15 +19,25 @@ import (
 // flag itself is registered exactly once via RegisterFlags.
 const FlagAnthropicAPIKey = "anthropic-api-key"
 
-// RegisterFlags adds the API-key flag to the given slice. Must be called
-// once per CLI command that needs Claude access. Calling it twice on the
-// same command produces a duplicate-flag panic from urfave/cli.
+// FlagAnthropicBaseURL allows redirecting all Claude calls to a custom
+// endpoint (e.g. a local Gemini proxy). When empty the SDK default
+// (https://api.anthropic.com) is used unchanged.
+const FlagAnthropicBaseURL = "anthropic-base-url"
+
+// RegisterFlags adds the API-key and base-URL flags to the given slice.
+// Must be called once per CLI command that needs Claude access. Calling it
+// twice on the same command produces a duplicate-flag panic from urfave/cli.
 func RegisterFlags(f []cli.Flag) []cli.Flag {
 	return append(f,
 		cli.StringFlag{
 			Name:   FlagAnthropicAPIKey,
 			Usage:  "Anthropic API key (shared by AI recommendations and AI enrichment)",
 			EnvVar: "ANTHROPIC_API_KEY",
+		},
+		cli.StringFlag{
+			Name:   FlagAnthropicBaseURL,
+			Usage:  "Override Anthropic API base URL — set to a local proxy to use Gemini instead",
+			EnvVar: "ANTHROPIC_BASE_URL",
 		},
 	)
 }
@@ -47,9 +57,14 @@ func New(c *cli.Context) *anthropic.Client {
 		log.Info("anthropic_client: ANTHROPIC_API_KEY empty — Claude features disabled")
 		return nil
 	}
-	cl := anthropic.NewClient(
+	opts := []option.RequestOption{
 		option.WithAPIKey(key),
 		option.WithHeader("anthropic-beta", "prompt-caching-2024-07-31"),
-	)
+	}
+	if baseURL := strings.TrimSpace(c.String(FlagAnthropicBaseURL)); baseURL != "" {
+		opts = append(opts, option.WithBaseURL(baseURL))
+		log.WithField("base_url", baseURL).Info("anthropic_client: using custom base URL (Gemini proxy)")
+	}
+	cl := anthropic.NewClient(opts...)
 	return &cl
 }
