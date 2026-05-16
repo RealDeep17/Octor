@@ -93,7 +93,9 @@ func (s *AccessToken) RegisterHandler(r *gin.Engine) {
 func (s *AccessToken) getToken(ctx context.Context, tokenStr string) (*models.AccessToken, error) {
 	token, err := uuid.FromString(tokenStr)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid token (token: %s)", tokenStr)
+		// If it's not a UUID, it might be a JWT token for HLS segments.
+		// Return nil, nil to allow downstream handlers to proceed.
+		return nil, nil
 	}
 
 	db := s.pg.Get()

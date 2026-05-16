@@ -13,12 +13,12 @@ import (
 	"github.com/webtor-io/web-ui/services/job"
 )
 
-func (s *Jobs) Embed(c *web.Context, cl *http.Client, settings *models.EmbedSettings, dsd *embed.DomainSettingsData) (j *job.Job, err error) {
-	es, hash, err := scripts.Embed(s.tb, cl, c, s.api, s.i18n, settings, "", dsd, s.warmup)
+func (s *Jobs) Embed(c *web.Context, cl *http.Client, resourceID string, settings *models.EmbedSettings, dsd *embed.DomainSettingsData) (j *job.Job, err error) {
+	es, hash, err := scripts.Embed(s.tb, cl, c, s.api, s.i18n, settings, resourceID, "", dsd, s.warmup, s.grace, s.forceDirectPlay, "")
 	if err != nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	j = s.q.GetOrCreate("embded").Enqueue(ctx, cancel, hash, es, false, s.errorFormatter(c))
+	j = s.q.GetOrCreate("embed").Enqueue(ctx, cancel, hash, es, false, s.errorFormatter(c))
 	return
 }

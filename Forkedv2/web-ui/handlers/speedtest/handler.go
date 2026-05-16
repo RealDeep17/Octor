@@ -3,6 +3,7 @@ package speedtest
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
@@ -26,6 +27,13 @@ type Handler struct {
 	sapi *api.Api
 	pg   *cs.PG
 }
+
+const (
+	speedtestDownloadPath = "/speedtest/download"
+	speedtestDefaultSize  = 10 * 1024 * 1024
+	speedtestMinSize      = 1 * 1024 * 1024
+	speedtestMaxSize      = 50 * 1024 * 1024
+)
 
 type Data struct {
 	TierName  string
@@ -92,6 +100,7 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*w.Context], sapi *api.
 		pg:   pg,
 	}
 	r.GET("/speedtest", h.get)
+	r.GET(speedtestDownloadPath, h.download)
 	r.GET("/speedtest/:id", h.getShared)
 	r.POST("/speedtest", h.postResult)
 }
@@ -116,7 +125,7 @@ func (s *Handler) get(c *gin.Context) {
 	if err != nil {
 		log.WithError(err).Warn("failed to get speedtest urls")
 	} else {
-		urls = u
+		urls = normalizeSpeedtestURLs(c.Request, u)
 	}
 	s.tb.Build("speedtest/index").HTML(http.StatusOK, ctx.WithData(&Data{
 		TierName:  tierName,
@@ -124,6 +133,72 @@ func (s *Handler) get(c *gin.Context) {
 		AutoStart: c.Request.URL.Query().Has("again"),
 		URLs:      urls,
 	}))
+}
+
+func isLocalhost(host string) bool {
+	hostname, _, err := net.SplitHostPort(host)
+	if err == nil {
+		host = hostname
+	}
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+func requestScheme(r *http.Request) string {
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		return proto
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func normalizeSpeedtestURLs(r *http.Request, urls []api.SpeedtestURL) []api.SpeedtestURL {
+	out := make([]api.SpeedtestURL, 0, len(urls))
+	for _, item := range urls {
+		u, err := url.Parse(item.URL)
+		if err == nil && isLocalhost(u.Host) && isLocalhost(r.Host) {
+			u.Scheme = requestScheme(r)
+			u.Host = r.Host
+			u.Path = speedtestDownloadPath
+			item.URL = u.String()
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+type zeroReader struct{}
+
+func (z zeroReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p), nil
+}
+
+func (s *Handler) download(c *gin.Context) {
+	size := speedtestDefaultSize
+	if sizeStr := c.Query("size"); sizeStr != "" {
+		if parsed, err := strconv.Atoi(sizeStr); err == nil {
+			size = parsed
+		}
+	}
+	if size < speedtestMinSize {
+		size = speedtestMinSize
+	}
+	if size > speedtestMaxSize {
+		size = speedtestMaxSize
+	}
+
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Length", strconv.Itoa(size))
+	c.Header("Cache-Control", "no-store")
+	c.Status(http.StatusOK)
+	if _, err := io.CopyN(c.Writer, zeroReader{}, int64(size)); err != nil {
+		log.WithError(err).Debug("speedtest stream interrupted")
+	}
 }
 
 func (s *Handler) postResult(c *gin.Context) {

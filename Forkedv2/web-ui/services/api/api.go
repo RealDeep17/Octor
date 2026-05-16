@@ -40,8 +40,6 @@ const (
 	apiHostFlag                     = "webtor-rest-api-host"
 	apiPortFlag                     = "webtor-rest-api-port"
 	apiExpireFlag                   = "webtor-rest-api-expire"
-	rapidApiKeyFlag                 = "rapidapi-key"
-	rapidApiHostFlag                = "rapidapi-host"
 	useInternalTorrentHTTPProxyFlag = "use-internal-torrent-http-proxy"
 	torrentHTTPProxyHostFlag        = "torrent-http-proxy-host"
 	torrentHTTPProxyPortFlag        = "torrent-http-proxy-port"
@@ -82,18 +80,6 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 			Usage:  "webtor api secret",
 			Value:  "",
 			EnvVar: "WEBTOR_API_SECRET",
-		},
-		cli.StringFlag{
-			Name:   rapidApiHostFlag,
-			Usage:  "RapidAPI host",
-			Value:  "",
-			EnvVar: "RAPIDAPI_HOST",
-		},
-		cli.StringFlag{
-			Name:   rapidApiKeyFlag,
-			Usage:  "RapidAPI key",
-			Value:  "",
-			EnvVar: "RAPIDAPI_KEY",
 		},
 		cli.BoolFlag{
 			Name:   useInternalTorrentHTTPProxyFlag,
@@ -256,13 +242,6 @@ func New(c *cli.Context, cl *http.Client) *Api {
 	secret := c.String(apiSecretFlag)
 	expire := c.Int(apiExpireFlag)
 	key := c.String(apiKeyFlag)
-	rapidApiHost := c.String(rapidApiHostFlag)
-	rapidApiKey := c.String(rapidApiKeyFlag)
-	if rapidApiHost != "" {
-		host = rapidApiHost
-		port = 443
-		secure = true
-	}
 	protocol := "http"
 	if secure {
 		protocol = "https"
@@ -277,14 +256,6 @@ func New(c *cli.Context, cl *http.Client) *Api {
 		r.Header.Set("X-Token", tokenString)
 		r.Header.Set("X-Api-Key", key)
 		return r, nil
-	}
-	if rapidApiHost != "" && rapidApiKey != "" {
-		log.Info("using RapidAPI")
-		prepareRequest = func(r *http.Request, cl *Claims) (*http.Request, error) {
-			r.Header.Set("X-RapidAPI-Host", rapidApiHost)
-			r.Header.Set("X-RapidAPI-Key", rapidApiKey)
-			return r, nil
-		}
 	}
 	log.Infof("api endpoint %v", u)
 	apiURL, _ := url.Parse(c.String(common.DomainFlag))

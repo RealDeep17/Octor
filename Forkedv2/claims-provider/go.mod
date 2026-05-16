@@ -48,3 +48,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250811230008-5f3141c8851a // indirect
 	mellium.im/sasl v0.3.2 // indirect
 )
+
+replace github.com/webtor-io/lazymap => ../lazymap
+
+replace github.com/webtor-io/common-services => ../common-services

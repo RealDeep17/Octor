@@ -19,6 +19,7 @@ const (
 	graceRulesEnabledFlag         = "grace-rules-enabled"
 	graceDurationSecFlag          = "grace-duration-sec"
 	graceRateFlag                 = "grace-rate"
+	forceDirectPlayFlag           = "force-direct-play"
 )
 
 func RegisterFlags(f []cli.Flag) []cli.Flag {
@@ -58,6 +59,11 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 			EnvVar: "GRACE_RATE",
 			Value:  "50M",
 		},
+		cli.BoolFlag{
+			Name:   forceDirectPlayFlag,
+			Usage:  "force direct play for all content to save VPS resources",
+			EnvVar: "FORCE_DIRECT_PLAY",
+		},
 	)
 }
 
@@ -70,6 +76,7 @@ type Jobs struct {
 	userSubtitles *us.Service
 	warmup        scripts.WarmupSettings
 	grace         scripts.GraceSettings
+	forceDirectPlay bool
 }
 
 // T translates a message key using the language from web.Context.
@@ -105,5 +112,6 @@ func New(c *cli.Context, q *job.Queues, tm *template.Manager[*web.Context], api 
 			DurationSec: c.Int(graceDurationSecFlag),
 			Rate:        c.String(graceRateFlag),
 		},
+		forceDirectPlay: c.Bool(forceDirectPlayFlag),
 	}
 }

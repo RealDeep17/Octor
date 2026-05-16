@@ -82,16 +82,16 @@ func init() {
 
 func NewWeb(c *cli.Context, parser *URLParser, r *Resolver, pr *HTTPProxy, claims *Claims, bp *HybridBucketPool, ch *ClickHouse, ah *AccessHistory, sl *SessionLimiter) *Web {
 	return &Web{
-		host:           c.String(webHostFlag),
-		port:           c.Int(webPortFlag),
-		baseURL:        fmt.Sprintf("http://%s:%d", c.String(torrentHTTPProxyHostFlag), c.Int(torrentHTTPProxyPortFlag)),
-		parser:         parser,
-		r:              r,
-		pr:             pr,
-		claims:         claims,
-		bucket:         bp,
-		clickHouse:     ch,
-		ah:             ah,
+		host:             c.String(webHostFlag),
+		port:             c.Int(webPortFlag),
+		baseURL:          fmt.Sprintf("http://%s:%d", c.String(torrentHTTPProxyHostFlag), c.Int(torrentHTTPProxyPortFlag)),
+		parser:           parser,
+		r:                r,
+		pr:               pr,
+		claims:           claims,
+		bucket:           bp,
+		clickHouse:       ch,
+		ah:               ah,
 		bandwidthLimit:   c.Bool(useBandwidthLimitFlag),
 		sl:               sl,
 		enforceSessionIP: c.Bool(enforceSessionIPFlag),
@@ -417,14 +417,30 @@ func (s *Web) Serve() error {
 		_, _ = fmt.Fprintf(w, "Remote addr:\t%v\n", r.RemoteAddr)
 	})
 
+	mux.HandleFunc("/speedtest/download", s.handleSpeedtest)
 	mux.HandleFunc("/speedtest", s.handleSpeedtest)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Token, X-Token, st-auth-mode, rid, x-session-id")
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if r.URL.Path == "/" ||
 			strings.HasPrefix(r.URL.Path, "/favicon") ||
 			strings.HasPrefix(r.URL.Path, "/ads.txt") ||
 			strings.HasPrefix(r.URL.Path, "/robots.txt") {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
 			w.WriteHeader(200)
 			return
 		}
@@ -446,7 +462,13 @@ func (s *Web) Serve() error {
 			"Path":     src.Path,
 		})
 
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Token, X-Token, st-auth-mode, rid, x-session-id")
+		}
 
 		newPath := ""
 

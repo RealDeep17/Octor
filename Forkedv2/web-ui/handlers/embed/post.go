@@ -77,7 +77,7 @@ func (s *Handler) post(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to set embed claims"))
 		return
 	}
-	embedJob, err := s.jobs.Embed(web.NewContext(c), s.cl, args.EmbedSettings, dsd)
+	embedJob, err := s.jobs.Embed(web.NewContext(c), s.cl, args.ID, args.EmbedSettings, dsd)
 	if err != nil {
 		tpl.HTML(http.StatusBadRequest, web.NewContext(c).WithData(pd).WithErr(err))
 		return

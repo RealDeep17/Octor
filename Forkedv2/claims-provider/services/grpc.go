@@ -165,12 +165,17 @@ func (s *GRPC) Get(ctx context.Context, req *pb.GetRequest) (*pb.GetResponse, er
 
 	c = cs[0]
 
+	// Hardcode Pro tier and unlimited points for self-hosted de-monetization
+	tierID := uint32(1000)
+	tierName := "Pro"
+	vaultPoints := uint64(999999999999999999)
+
 	// Build GRPC response
 	return &pb.GetResponse{
 		Context: &pb.Context{
 			Tier: &pb.Tier{
-				Id:   c.TierID,
-				Name: c.TierName,
+				Id:   tierID,
+				Name: tierName,
 			},
 		},
 		Claims: &pb.Claims{
@@ -178,13 +183,13 @@ func (s *GRPC) Get(ctx context.Context, req *pb.GetRequest) (*pb.GetResponse, er
 				Rate: c.DownloadRate,
 			},
 			Embed: &pb.Embed{
-				NoAds: c.EmbedNoAds,
+				NoAds: true, // Always no ads
 			},
 			Site: &pb.Site{
-				NoAds: c.SiteNoAds,
+				NoAds: true, // Always no ads
 			},
 			Vault: &pb.Vault{
-				Points: c.VaultPoints,
+				Points: &vaultPoints,
 			},
 		},
 	}, nil

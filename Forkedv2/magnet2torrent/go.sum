@@ -443,8 +443,6 @@ github.com/vmihailenco/tagparser v0.1.2 h1:gnjoVuB/kljJ5wICEEOpx98oXMWPLj22G67Vb
 github.com/vmihailenco/tagparser v0.1.2/go.mod h1:OeAg3pn3UbLjkWt+rN9oFYB6u/cQgqMEUPoW2WPyhdI=
 github.com/vmihailenco/tagparser/v2 v2.0.0 h1:y09buUbR+b5aycVFQs/g70pqKVZNBmxwAhO7/IwNM9g=
 github.com/vmihailenco/tagparser/v2 v2.0.0/go.mod h1:Wri+At7QHww0WTrCBeu4J6bNtoV6mEfg5OIWRZA9qds=
-github.com/webtor-io/common-services v0.0.0-20260323152956-4a4e97f013f7 h1:Kuvd4Xk3anrvOw8O9GNsJZuPSCiqKFrLGcjajBCEl3I=
-github.com/webtor-io/common-services v0.0.0-20260323152956-4a4e97f013f7/go.mod h1:jSGKiO/KVhavntTXhPXzjvt3sMMbCIYaCnxMhOklvEQ=
 github.com/webtor-io/torrent v0.0.0-20260503123952-6864bc1a2649 h1:e7etqcN3yMZhfOCcupmETz3pkWCqYOnCOoZ+LPSMJ4w=
 github.com/webtor-io/torrent v0.0.0-20260503123952-6864bc1a2649/go.mod h1:+grExvB/R/rMshKJNTTPNxKFLsxqbETsXsyQDHSQfUA=
 github.com/webtor-io/utp v0.2.1-0.20260503123918-24e7018d4f71 h1:ZYVgRxIEJzttPQt82Gq9DXpiHcrK0OIQeO53x0Jzg3k=

@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	speedtestDefaultSize = 50 * 1024 * 1024 // 50MB
+	speedtestDefaultSize  = 50 * 1024 * 1024 // 50MB
+	speedtestDownloadPath = "/speedtest/download"
 )
 
 type SpeedTest struct {
@@ -174,7 +175,7 @@ func (s *SpeedTest) buildURL(domainStr string, g ParamGetter) (string, error) {
 	u := url.URL{
 		Scheme:   du.Scheme,
 		Host:     domain,
-		Path:     "/speedtest",
+		Path:     speedtestDownloadPath,
 		RawQuery: q.Encode(),
 	}
 
