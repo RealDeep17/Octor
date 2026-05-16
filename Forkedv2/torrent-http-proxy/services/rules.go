@@ -12,6 +12,7 @@ type responseRuleHandler func(r *http.Response, rc *RulesContext) error
 // the proxy hook directly.
 var responseRuleHandlers = []responseRuleHandler{
 	rewriteManifestForGrace,
+	// injectDownloadFilename,
 }
 
 // applyResponseRules is the single entry point for rule-driven response
