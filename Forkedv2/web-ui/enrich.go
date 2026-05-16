@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/go-pg/migrations/v8"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -11,6 +12,7 @@ import (
 	"github.com/webtor-io/web-ui/models"
 	ac "github.com/webtor-io/web-ui/services/anthropic_client"
 	"github.com/webtor-io/web-ui/services/api"
+	"github.com/webtor-io/web-ui/services/migration"
 )
 
 func makeEnrichCMD() cli.Command {
@@ -86,7 +88,8 @@ func enrichPopular(c *cli.Context) error {
 	pg := cs.NewPG(c)
 	defer pg.Close()
 
-	m := cs.NewPGMigration(pg)
+	col := migrations.NewCollection()
+	m := migration.NewPGMigration(pg, col)
 	if err := m.Run(); err != nil {
 		return err
 	}
@@ -126,7 +129,8 @@ func enrich(c *cli.Context) error {
 	defer pg.Close()
 
 	// Setting Migrations
-	m := cs.NewPGMigration(pg)
+	col := migrations.NewCollection()
+	m := migration.NewPGMigration(pg, col)
 	err := m.Run()
 	if err != nil {
 		return err

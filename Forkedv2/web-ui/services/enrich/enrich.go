@@ -516,7 +516,7 @@ func (s *Enricher) Enrich(ctx context.Context, hash string, claims *api.Claims, 
 		return nil
 	}
 	log.Infof("start processing media info %+v", mi)
-	sidecarEnrichment := false
+	sidecarEnrichment := true
 	if claims != nil && claims.Subject != "" {
 		userID, err := uuid.FromString(claims.Subject)
 		if err == nil {
@@ -698,9 +698,39 @@ func (s *Enricher) lookupByHint(ctx context.Context, hintVideoID string, t model
 // every later mapper AND the AI fallback. The first error is surfaced
 // only when every path ultimately fails so retry semantics
 // (`enrich --force-error`) stay intact.
+func isAdultContent(vc *models.VideoContent) bool {
+	if vc == nil || vc.Metadata == nil {
+		return false
+	}
+	if p, ok := vc.Metadata["porn"].(bool); ok && p {
+		return true
+	}
+	return false
+}
+
+// searchAllMappers walks every Map mapper for the given VideoContent.
+// On the first hit it runs tryUpgrade and returns the (possibly
+// upgraded) metadata with a nil error. On all-miss returns (nil, err)
+// where err is the first mapper error encountered, or nil if every
+// mapper cleanly missed.
+//
+// Per-mapper errors are absorbed instead of aborting the chain — a
+// single transient failure on a higher-priority mapper (classic case:
+// free OMDB key hitting its 1000/day rate limit) would otherwise mask
+// every later mapper AND the AI fallback. The first error is surfaced
+// only when every path ultimately fails so retry semantics
+// (`enrich --force-error`) stay intact.
 func (s *Enricher) searchAllMappers(ctx context.Context, vc *models.VideoContent, t models.ContentType, f bool) (*models.VideoMetadata, error) {
 	var firstErr error
+	isAdult := isAdultContent(vc)
 	for i, m := range s.mappers {
+		if isAdult && m.GetName() != "OMDB" {
+			log.WithFields(log.Fields{
+				"title":  vc.Title,
+				"mapper": m.GetName(),
+			}).Info("searchAllMappers: skipping non-OMDB mapper for adult content")
+			continue
+		}
 		md, err := m.Map(ctx, vc, t, f)
 		if err != nil {
 			log.WithError(err).WithField("mapper", m.GetName()).Warn("mapper failed, continuing to next")
@@ -711,6 +741,9 @@ func (s *Enricher) searchAllMappers(ctx context.Context, vc *models.VideoContent
 		}
 		if md == nil {
 			continue
+		}
+		if isAdult {
+			return md, nil
 		}
 		// Try to upgrade through higher-priority mappers using the
 		// videoID just resolved. The most common payoff is the

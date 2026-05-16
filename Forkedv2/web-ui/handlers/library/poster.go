@@ -21,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/models"
 )
@@ -155,24 +156,30 @@ func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterA
 }
 
 func (s *Handler) getResizedJPEGPosterWithCache(ctx context.Context, db *pg.DB, s3Cl *cs.S3Client, args *PosterArgs) (*bytes.Buffer, error) {
-	if s3Cl == nil {
+	// Skip cache entirely when S3 is not configured or the bucket name is
+	// empty — an empty bucket causes MinIO to reject the request with an
+	// error that is NOT ErrCodeNoSuchKey, which previously propagated as a
+	// hard 500 and silently removed the poster from the UI.
+	if s3Cl == nil || s.posterCacheS3Bucket == "" {
 		return s.getResizedJPEGPoster(ctx, db, args)
 	}
 	cl := s3Cl.Get()
 	b, err := s.getPosterFromCache(ctx, cl, args)
 	if err != nil {
-		return nil, err
-	}
-	if b != nil {
+		// Cache read failure is non-fatal: log and fall through to a
+		// direct fetch so the poster still renders.
+		log.WithError(err).Warn("poster: S3 cache get failed, falling through to direct fetch")
+	} else if b != nil {
 		return b, nil
 	}
 	b, err = s.getResizedJPEGPoster(ctx, db, args)
 	if err != nil {
 		return nil, err
 	}
-	err = s.putPosterToCache(ctx, cl, args, b)
-	if err != nil {
-		return nil, err
+	// Cache write failure is also non-fatal: the image was fetched
+	// successfully, so serve it and just skip caching this time.
+	if err = s.putPosterToCache(ctx, cl, args, b); err != nil {
+		log.WithError(err).Warn("poster: S3 cache put failed, serving uncached")
 	}
 	return b, nil
 }

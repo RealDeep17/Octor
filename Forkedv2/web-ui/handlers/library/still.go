@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/models"
 )
@@ -101,24 +102,22 @@ func (s *Handler) still(c *gin.Context) {
 }
 
 func (s *Handler) getResizedJPEGStillWithCache(ctx context.Context, db *pg.DB, s3Cl *cs.S3Client, args *StillArgs) (*bytes.Buffer, error) {
-	if s3Cl == nil {
+	if s3Cl == nil || s.posterCacheS3Bucket == "" {
 		return s.getResizedJPEGStill(ctx, db, args)
 	}
 	cl := s3Cl.Get()
 	b, err := s.getStillFromCache(ctx, cl, args)
 	if err != nil {
-		return nil, err
-	}
-	if b != nil {
+		log.WithError(err).Warn("still: S3 cache get failed, falling through to direct fetch")
+	} else if b != nil {
 		return b, nil
 	}
 	b, err = s.getResizedJPEGStill(ctx, db, args)
 	if err != nil {
 		return nil, err
 	}
-	err = s.putStillToCache(ctx, cl, args, b)
-	if err != nil {
-		return nil, err
+	if err = s.putStillToCache(ctx, cl, args, b); err != nil {
+		log.WithError(err).Warn("still: S3 cache put failed, serving uncached")
 	}
 	return b, nil
 }
