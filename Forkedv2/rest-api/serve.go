@@ -30,6 +30,7 @@ func configureServe(c *cli.Command) {
 	c.Flags = s.RegisterNodesStatFlags(c.Flags)
 	c.Flags = s.RegisterVideoInfoServiceFlags(c.Flags)
 	c.Flags = s.RegisterCacheMapFlags(c.Flags)
+	c.Flags = s.RegisterResourceMapFlags(c.Flags)
 }
 
 func serve(c *cli.Context) error {
@@ -65,7 +66,7 @@ func serve(c *cli.Context) error {
 	defer m2t.Close()
 
 	// Setting ResourceMap
-	rm := s.NewResourceMap(ts, m2t)
+	rm := s.NewResourceMap(ts, m2t, c)
 
 	// Setting List
 	li := s.NewList()

@@ -3,9 +3,10 @@ package providers
 import (
 	"context"
 	"os"
+	"time"
+
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"time"
 
 	badger "github.com/dgraph-io/badger/v3"
 	"github.com/urfave/cli"
@@ -14,15 +15,22 @@ import (
 
 const (
 	BadgerExpireFlag = "badger-expire"
+	BadgerPathFlag   = "badger-path"
 )
 
 func RegisterBadgerFlags(f []cli.Flag) []cli.Flag {
 	return append(f,
 		cli.IntFlag{
 			Name:   BadgerExpireFlag,
-			Usage:  "badger expire (sec)",
+			Usage:  "badger expire (sec); set 0 to disable ttl",
 			Value:  3600,
 			EnvVar: "BADGER_EXPIRE",
+		},
+		cli.StringFlag{
+			Name:   BadgerPathFlag,
+			Usage:  "badger database path",
+			Value:  "badger_data",
+			EnvVar: "BADGER_PATH",
 		},
 	)
 }
@@ -33,9 +41,9 @@ type Badger struct {
 }
 
 func NewBadger(c *cli.Context) *Badger {
-	path := "badger_data"
+	path := c.String(BadgerPathFlag)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		_ = os.Mkdir(path, 0755)
+		_ = os.MkdirAll(path, 0755)
 	}
 	opt := badger.DefaultOptions(path)
 	db, err := badger.Open(opt)
@@ -64,6 +72,14 @@ func (s *Badger) Name() string {
 	return "badger"
 }
 
+func (s *Badger) entry(h string, val []byte) *badger.Entry {
+	e := badger.NewEntry([]byte(h), val)
+	if s.exp > 0 {
+		e = e.WithTTL(s.exp)
+	}
+	return e
+}
+
 func (s *Badger) Touch(_ context.Context, h string) (ok bool, err error) {
 	err = s.db.Update(func(txn *badger.Txn) error {
 		i, err := txn.Get([]byte(h))
@@ -71,8 +87,7 @@ func (s *Badger) Touch(_ context.Context, h string) (ok bool, err error) {
 			return ss.ErrNotFound
 		} else {
 			err = i.Value(func(val []byte) error {
-				e := badger.NewEntry([]byte(h), val).WithTTL(s.exp)
-				return txn.SetEntry(e)
+				return txn.SetEntry(s.entry(h, val))
 			})
 			return err
 		}
@@ -85,8 +100,7 @@ func (s *Badger) Touch(_ context.Context, h string) (ok bool, err error) {
 
 func (s *Badger) Push(_ context.Context, h string, torrent []byte) (ok bool, err error) {
 	err = s.db.Update(func(txn *badger.Txn) error {
-		e := badger.NewEntry([]byte(h), torrent).WithTTL(s.exp)
-		return txn.SetEntry(e)
+		return txn.SetEntry(s.entry(h, torrent))
 	})
 	if err != nil {
 		return false, err

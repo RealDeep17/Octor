@@ -20,6 +20,8 @@ type Cleaner struct {
 	cleaning bool
 	keep     string
 	free     string
+	maxAge   time.Duration
+	interval time.Duration
 }
 
 type StoreStat struct {
@@ -27,11 +29,13 @@ type StoreStat struct {
 	hash  string
 }
 
-func NewCleaner(p string, keep string, free string) *Cleaner {
+func NewCleaner(p string, keep string, free string, maxAge time.Duration, interval time.Duration) *Cleaner {
 	return &Cleaner{
-		p:    p,
-		keep: keep,
-		free: free,
+		p:        p,
+		keep:     keep,
+		free:     free,
+		maxAge:   maxAge,
+		interval: interval,
 	}
 }
 
@@ -54,6 +58,9 @@ func (s *Cleaner) getKeep(v string, total uint64) (keep uint64, err error) {
 }
 
 func (s *Cleaner) clean() error {
+	if err := s.dropExpired(); err != nil {
+		return err
+	}
 	free, err := s.getFreeSpace()
 	if err != nil {
 		return err
@@ -95,6 +102,27 @@ func (s *Cleaner) clean() error {
 		}
 	}
 	log.Info("finish cleaning")
+	return nil
+}
+
+func (s *Cleaner) dropExpired() error {
+	if s.maxAge <= 0 {
+		return nil
+	}
+	stats, err := s.getStats()
+	if err != nil {
+		return err
+	}
+	cutoff := time.Now().Add(-s.maxAge)
+	for _, v := range stats {
+		if v.touch.IsZero() || v.touch.After(cutoff) {
+			continue
+		}
+		log.Infof("drop expired hash=%v touch=%v max_age=%v", v.hash, v.touch.String(), s.maxAge)
+		if err := s.drop(v.hash); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -149,9 +177,13 @@ func (s *Cleaner) getStats() ([]StoreStat, error) {
 		} else if f.IsDir() {
 			h := f.Name()
 			if _, ok := ss[h]; !ok {
+				info, err := f.Info()
+				if err != nil {
+					return nil, err
+				}
 				ss[h] = StoreStat{
 					hash:  h,
-					touch: time.Time{},
+					touch: info.ModTime(),
 				}
 			}
 		}
@@ -166,8 +198,11 @@ func (s *Cleaner) getStats() ([]StoreStat, error) {
 }
 
 func (s *Cleaner) Serve() error {
-	log.Infof("serving Cleaner for %v", s.p)
-	s.t = time.NewTicker(5 * time.Minute)
+	log.Infof("serving Cleaner for %v max_age=%v interval=%v", s.p, s.maxAge, s.interval)
+	if s.interval <= 0 {
+		s.interval = 5 * time.Minute
+	}
+	s.t = time.NewTicker(s.interval)
 	for ; true; <-s.t.C {
 		if !s.cleaning {
 			s.cleaning = true
