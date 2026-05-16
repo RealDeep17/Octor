@@ -16,6 +16,7 @@ const (
 	useInternalTorrentHTTPProxyFlag = "use-internal-torrent-http-proxy"
 	torrentHTTPProxyHostFlag        = "torrent-http-proxy-host"
 	torrentHTTPProxyPortFlag        = "torrent-http-proxy-port"
+	cacheStatusExpireFlag           = "cache-status-expire"
 )
 
 func RegisterCacheMapFlags(f []cli.Flag) []cli.Flag {
@@ -36,6 +37,12 @@ func RegisterCacheMapFlags(f []cli.Flag) []cli.Flag {
 			EnvVar: "TORRENT_HTTP_PROXY_SERVICE_PORT",
 			Value:  80,
 		},
+		cli.DurationFlag{
+			Name:   cacheStatusExpireFlag,
+			Usage:  "temporary cached-media status lookup expiration",
+			EnvVar: "CACHED_TEMP_EXPIRE,REST_API_CACHE_STATUS_EXPIRE",
+			Value:  30 * time.Second,
+		},
 	)
 }
 
@@ -50,7 +57,7 @@ type CacheMap struct {
 func NewCacheMap(c *cli.Context, cl *http.Client) *CacheMap {
 	return &CacheMap{
 		LazyMap: lazymap.New[bool](&lazymap.Config{
-			Expire: 30 * time.Second,
+			Expire: c.Duration(cacheStatusExpireFlag),
 		}),
 		cl:                          cl,
 		useInternalTorrentHTTPProxy: c.Bool(useInternalTorrentHTTPProxyFlag),

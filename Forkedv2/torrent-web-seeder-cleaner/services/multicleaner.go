@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -16,6 +17,8 @@ type MultiCleaner struct {
 	p        string
 	keep     string
 	free     string
+	maxAge   time.Duration
+	interval time.Duration
 	cleaners []*Cleaner
 }
 
@@ -24,6 +27,8 @@ func NewMultiCleaner(c *cli.Context) *MultiCleaner {
 		p:        c.String(DataDirFlag),
 		keep:     c.String(CleanerKeepFreeFlag),
 		free:     c.String(CleanerFreeFlag),
+		maxAge:   c.Duration(CleanerMaxAgeFlag),
+		interval: c.Duration(CleanerIntervalFlag),
 		cleaners: []*Cleaner{},
 	}
 }
@@ -46,10 +51,10 @@ func (s *MultiCleaner) Serve() error {
 			}
 		}
 		for _, d := range dirs {
-			s.cleaners = append(s.cleaners, NewCleaner(dir+"/"+d, s.keep, s.free))
+			s.cleaners = append(s.cleaners, NewCleaner(dir+"/"+d, s.keep, s.free, s.maxAge, s.interval))
 		}
 	} else {
-		s.cleaners = append(s.cleaners, NewCleaner(s.p, s.keep, s.free))
+		s.cleaners = append(s.cleaners, NewCleaner(s.p, s.keep, s.free, s.maxAge, s.interval))
 	}
 	if len(s.cleaners) == 0 {
 		return errors.Errorf("no cleaners for %v", s.p)

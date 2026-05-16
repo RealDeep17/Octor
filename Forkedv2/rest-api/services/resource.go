@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/urfave/cli"
 	"github.com/webtor-io/lazymap"
 
 	m2tp "github.com/webtor-io/magnet2torrent/proto"
@@ -69,6 +70,19 @@ type ResourceMap struct {
 	torrentStoreTimeout time.Duration
 }
 
+const resourceCacheExpireFlag = "resource-cache-expire"
+
+func RegisterResourceMapFlags(f []cli.Flag) []cli.Flag {
+	return append(f,
+		cli.DurationFlag{
+			Name:   resourceCacheExpireFlag,
+			Usage:  "resource metadata cache expiration",
+			EnvVar: "CACHED_METADATA_EXPIRE,REST_API_RESOURCE_CACHE_EXPIRE",
+			Value:  10 * time.Minute,
+		},
+	)
+}
+
 type TorrentStoreGetter interface {
 	Get() (tsp.TorrentStoreClient, error)
 }
@@ -77,11 +91,15 @@ type Magnet2TorrentGetter interface {
 	Get() (m2tp.Magnet2TorrentClient, error)
 }
 
-func NewResourceMap(ts TorrentStoreGetter, m2t Magnet2TorrentGetter) *ResourceMap {
+func NewResourceMap(ts TorrentStoreGetter, m2t Magnet2TorrentGetter, cliCtx ...*cli.Context) *ResourceMap {
+	cacheExpire := 10 * time.Minute
+	if len(cliCtx) > 0 && cliCtx[0] != nil {
+		cacheExpire = cliCtx[0].Duration(resourceCacheExpireFlag)
+	}
 	return &ResourceMap{
 		LazyMap: lazymap.New[*Resource](&lazymap.Config{
 			Concurrency: 100,
-			Expire:      600 * time.Second,
+			Expire:      cacheExpire,
 			Capacity:    1000,
 		}),
 		ts:                  ts,
