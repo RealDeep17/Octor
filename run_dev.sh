@@ -283,13 +283,13 @@ export DuckDNS_Token="${DUCKDNS_TOKEN}"
 echo "${SUDO_PASSWORD}" | sudo -S -E ./caddy-custom stop > /dev/null 2>&1
 echo "${SUDO_PASSWORD}" | sudo -S -E ./caddy-custom run --config Caddyfile > logs/caddy.log 2>&1 &
 
-# Q. DuckDNS IP Auto-Updater
-(
-    while true; do
-        curl -s "https://www.duckdns.org/update?domains=octor&token=${DUCKDNS_TOKEN}&ip=" > /dev/null
-        sleep 300
-    done
-) &
+# Q. DuckDNS IP Auto-Updater (DISABLED to prevent changing octor.duckdns.org IP)
+# (
+#     while true; do
+#         curl -s "https://www.duckdns.org/update?domains=octor&token=${DUCKDNS_TOKEN}&ip=" > /dev/null
+#         sleep 300
+#     done
+# ) &
 
 echo "\n🎉 All services starting with non-conflicting ports!"
 echo "   - Primary: ${OCTOR_DOMAIN}"
