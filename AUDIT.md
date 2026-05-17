@@ -8,14 +8,14 @@ This audit identifies technical debt, port conflicts, and legacy SaaS remnants i
 ### 1. Port Mapping Conflicts
 Microservices currently rely on `common-services` defaults which collide when running natively on the host.
 - **Recommendation**: Standardize all services to use the 5-digit port mapping (8xxx/50xxx/51xxx/52xxx/53xxx).
-- **Status**: Partially fixed. `run_dev.sh` uses overrides and recent service wiring updates moved Magnet2Torrent and HLS routing toward the local port map. Remaining `go.mod` and default-port churn should be reviewed service by service.
+- **Status**: ✅ STABLE. `run_dev.sh` and `run_dev_skip.sh` are synchronized and use the 5-digit map consistently. Protobuf conflicts are suppressed via env vars.
 
 ### 2. Legacy SaaS Logic (SaaS Leftovers)
 The codebase is still entangled with monetization and multi-tier features intended for a hosted service.
-- **`claims-provider`**: Contains `Tier` and `VaultPoints` logic in `models/claims.go` and `services/store.go`.
-- **`rest-api`**: `url_builder.go` checks for `premiumDomain` and different base domains based on roles.
-- **`web-ui`**: UI still displays some tier-based info and restricts features.
-- **Recommendation**: Scrub these fields and default all users to "premium/unrestricted" roles for the self-hosted version.
+- **`claims-provider`**: `models/claims.go` still defines `TierID`, `VaultPoints`, and `NoAds` flags. The `public.get_member_claims_by_email` function likely still logic-gates these.
+- **`rest-api`**: `url_builder.go` checks for `premiumDomain` and `role != "free"`.
+- **`web-ui`**: Sidecar enrichment is toggled by `SidecarEnrichment` in `user_stremio_settings`.
+- **Recommendation**: Scrub these fields or default them to "unlimited" in the database layer. All self-hosted users should be `premium` by default.
 
 ### 3. Hardcoded Infrastructure References
 - **Domain**: `octor.duckdns.org` is hardcoded in `Caddyfile`, `run_dev.sh`, and several Go files.
@@ -49,7 +49,15 @@ Some services (e.g., `rest-api`, `torrent-http-proxy`) have Prometheus metrics r
 | `*/proto/*.pb.go` | (FIXED) Generated package names no longer use invalid `__` package references. | High |
 
 ## 📅 Next Steps
-1. Scrub SaaS logic from `claims-provider`.
-2. Move hardcoded domains to `.env`.
-3. Standardize Prometheus flags across all services.
+1. Scrub SaaS logic from `claims-provider` and `rest-api` URL builder.
+2. Implement native build pipeline (Makefile) for VPS deployment to avoid `go run` overhead.
+3. Consolidate `Caddyfile` logic into a standard `/etc/caddy/Caddyfile` for Ubuntu 24.04.
 4. Move local multi-module development from committed `replace` churn toward a `go.work` file.
+5. Standardize observability across all services (some are still missing Prometheus endpoints).
+
+## 🚀 VPS Migration Checklist (Ubuntu 24.04)
+- [ ] Setup `/srv/octor` directory structure.
+- [ ] Configure `custom.env` with production domain and S3 keys.
+- [ ] Build ARM64 binaries for OCI-A1.
+- [ ] Install native Caddy with DNS-01 (DuckDNS) support.
+- [ ] Configure Systemd units for all 15+ microservices.
