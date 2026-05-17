@@ -9,16 +9,16 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - ../server/infra-data/postgres:/var/lib/postgresql/data
+      - ./infra-data/postgres:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
 
   redis:
     image: redis:7-alpine
     container_name: octor-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
-      - ../server/infra-data/redis:/data
+      - ./infra-data/redis:/data
 
   nats:
     image: nats:2-alpine
@@ -37,5 +37,5 @@ services:
       - MINIO_ROOT_USER=octoradmin
       - MINIO_ROOT_PASSWORD=octorpassword
     volumes:
-      - ../server/infra-data/minio:/data
+      - ./infra-data/minio:/data
     command: server /data --console-address ":9001"

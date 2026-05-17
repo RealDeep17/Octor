@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -60,9 +61,21 @@ func (s *server) newClient() (*torrent.Client, error) {
 	cfg := torrent.NewDefaultClientConfig()
 	cfg.ListenPort = 0
 	cfg.Seed = false
-	cfg.DisableWebtorrent = true
-	cfg.DisableWebseeds = true
+	cfg.DisableWebtorrent = false
+	cfg.DisableWebseeds = false
 	cfg.DefaultStorage = noopStorage{}
+	cfg.DisableIPv6 = true
+
+	// Aggressive peer dialing & limits for ultra-fast metadata resolution
+	cfg.EstablishedConnsPerTorrent = 150
+	cfg.HalfOpenConnsPerTorrent = 100
+	cfg.TorrentPeersHighWater = 200
+	cfg.TorrentPeersLowWater = 50
+	cfg.TotalHalfOpenConns = 300
+	cfg.NominalDialTimeout = 2 * time.Second
+	cfg.MinDialTimeout = 1 * time.Second
+	cfg.HandshakesTimeout = 2 * time.Second
+
 	return torrent.NewClient(cfg)
 }
 
@@ -77,7 +90,7 @@ func (s *server) Magnet2Torrent(ctx context.Context, in *pb.Magnet2TorrentReques
 
 	log.WithField("magnet", in.Magnet).Info("processing new request")
 
-	// Create a fresh client per request to avoid shared state panics.
+	// Create a fresh client per request to ensure clean, stateless microservice isolation
 	client, err := s.newClient()
 	if err != nil {
 		log.WithError(err).Error("failed to create torrent client")
@@ -85,7 +98,25 @@ func (s *server) Magnet2Torrent(ctx context.Context, in *pb.Magnet2TorrentReques
 	}
 	defer client.Close()
 
-	t, err := client.AddMagnet(in.Magnet)
+	// Append stable public trackers directly to the magnet string so the parser picks them up immediately
+	magnetStr := in.Magnet
+	publicTrackers := []string{
+		"udp://tracker.opentrackr.org:1337/announce",
+		"udp://open.stealth.si:80/announce",
+		"udp://tracker.torrent.eu.org:451/announce",
+		"udp://tracker.coppersurfer.tk:6969/announce",
+		"udp://tracker.leechers-paradise.org:6969/announce",
+		"udp://tracker.openbittorrent.com:6969/announce",
+		"udp://opentracker.i2p.rocks:6969/announce",
+		"udp://explodie.org:6969/announce",
+		"udp://tracker.tiny-vps.com:6969/announce",
+		"udp://open.demonii.com:1337/announce",
+	}
+	for _, tr := range publicTrackers {
+		magnetStr += "&tr=" + url.QueryEscape(tr)
+	}
+
+	t, err := client.AddMagnet(magnetStr)
 	if err != nil {
 		log.WithError(err).Error("failed adding new magnet to the client")
 		return nil, err
