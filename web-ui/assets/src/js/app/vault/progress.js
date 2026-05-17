@@ -114,7 +114,7 @@ function attachRow(row) {
     const savedLabel = row.dataset.vaultSavedLabel || '';
     const badge = row.querySelector('[data-vault-progress-badge]');
 
-    const url = `${langPath(`/${resourceId}/status`)}?_csrf=${encodeURIComponent(csrf)}`;
+    const url = `${langPath(`/${resourceId}/status`)}?_csrf=${encodeURIComponent(csrf)}&active=1`;
     const source = new EventSource(url);
 
     source.onmessage = (e) => {

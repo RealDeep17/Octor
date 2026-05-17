@@ -93,6 +93,7 @@ module.exports = async (env, options) => {
             chunkFilename: '[name].[chunkhash].js',
             path: path.resolve(__dirname, 'assets', 'dist'),
             clean: true,
+            publicPath: '/assets/',
         },
         devServer: {
             port: 8083,

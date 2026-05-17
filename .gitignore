@@ -3,6 +3,7 @@
 /REFERENCE-ONLY/
 /server/
 .old
+/bin/
 # OS/editor noise.
 .DS_Store
 **/.DS_Store

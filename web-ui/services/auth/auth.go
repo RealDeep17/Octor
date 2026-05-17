@@ -215,7 +215,7 @@ func makeUserFromContext(c *gin.Context) *User {
 	u := &User{}
 	uc := c.Request.Context().Value(UserContext{})
 	su, ok := uc.(*models.User)
-	if ok {
+	if ok && su != nil {
 		u.ID = su.UserID
 		u.Email = su.Email
 		u.Tier = su.Tier
@@ -313,25 +313,43 @@ func (s *Auth) myVerifySession(options *sessmodels.VerifySessionOptions, otherHa
 func (s *Auth) createUser(ctx context.Context, sess sessmodels.SessionContainer) (u *models.User, isNew bool, err error) {
 	db := s.pg.Get()
 	if db == nil {
+		log.Error("createUser: db is nil")
 		return
 	}
 	userID := sess.GetUserID()
+	log.Infof("createUser: starting for userID=%s", userID)
 
 	if s.overrideUserEmail != "" {
-	return models.GetOrCreateUser(ctx, db, s.overrideUserEmail)
-}
+		log.Infof("createUser: using overrideUserEmail=%s", s.overrideUserEmail)
+		return models.GetOrCreateUser(ctx, db, s.overrideUserEmail)
+	}
 
-// Try to get user from passwordless first
-userInfo, err := passwordless.GetUserByID(userID)
-if err == nil && userInfo != nil && userInfo.Email != nil {
-	return models.GetOrCreateUser(ctx, db, *userInfo.Email)
-}
+	// Try to get user from passwordless first
+	userInfo, plErr := passwordless.GetUserByID(userID)
+	if plErr == nil && userInfo != nil && userInfo.Email != nil {
+		log.Infof("createUser: found passwordless user email=%s", *userInfo.Email)
+		return models.GetOrCreateUser(ctx, db, *userInfo.Email)
+	} else if plErr != nil {
+		log.Infof("createUser: passwordless GetUserByID returned error: %v", plErr)
+	} else {
+		log.Info("createUser: passwordless user or email is nil")
+	}
 
 	// If not found in passwordless, try third-party
-	tpUserInfo, err := thirdparty.GetUserByID(userID)
-	if err == nil && tpUserInfo != nil && tpUserInfo.Email != "" {
+	tpUserInfo, tpErr := thirdparty.GetUserByID(userID)
+	if tpErr == nil && tpUserInfo != nil && tpUserInfo.Email != "" {
+		log.Infof("createUser: found thirdparty user email=%s", tpUserInfo.Email)
 		return models.GetOrCreateUser(ctx, db, tpUserInfo.Email)
+	} else {
+		if tpErr != nil {
+			log.Errorf("createUser: thirdparty GetUserByID returned error: %v", tpErr)
+		} else if tpUserInfo == nil {
+			log.Warn("createUser: thirdparty tpUserInfo is nil")
+		} else {
+			log.Warnf("createUser: thirdparty user email is empty: %+v", tpUserInfo)
+		}
 	}
+	log.Warnf("createUser: failed to identify user by ID=%s in either recipe", userID)
 	return
 }
 
