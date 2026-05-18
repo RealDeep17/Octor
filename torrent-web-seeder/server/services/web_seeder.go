@@ -311,7 +311,7 @@ func (s *WebSeeder) getTorrentReader(ctx context.Context, w http.ResponseWriter,
 	for _, f := range t.Files() {
 		if f.Path() == p {
 			torReader := f.NewReader()
-			torReader.SetResponsive()
+			// torReader.SetResponsive()
 			torReader.SetReadaheadFunc(NewReadaheadFunc(s.maxReadahead))
 			return NewTouchWriter(w, s.tm, h), torReader, nil
 		}
