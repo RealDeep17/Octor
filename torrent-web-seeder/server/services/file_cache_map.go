@@ -76,10 +76,7 @@ func (s *FileCacheMap) get(h string, path string) (string, error) {
 }
 
 func (s *FileCacheMap) Get(h string, path string) (string, error) {
-	key := h + path
-	return s.LazyMap.Get(key, func() (string, error) {
-		return s.get(h, path)
-	})
+	return s.get(h, path)
 }
 
 func (s *FileCacheMap) Purge(h string) error {

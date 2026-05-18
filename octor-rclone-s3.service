@@ -1,0 +1,25 @@
+[Unit]
+Description=Octor Rclone S3 Union Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+ExecStartPre=/usr/bin/mkdir -p /mnt/seeder-ram/rclone-vfs
+ExecStart=/usr/bin/rclone --config /home/ubuntu/.config/rclone/rclone.conf serve s3 ALPHA_UNION: \
+    --addr 127.0.0.1:9000 \
+    --s3-access-key-id octoradmin \
+    --s3-secret-access-key octorpassword \
+    --vfs-cache-mode writes \
+    --vfs-cache-max-age 1h \
+    --vfs-cache-max-size 10G \
+    --cache-dir /mnt/seeder-ram/rclone-vfs \
+    --transfers 8 \
+    --drive-chunk-size 64M \
+    --buffer-size 512M
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

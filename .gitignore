@@ -1,8 +1,6 @@
 # Local-only top-level workspace state.
 /infra-data/
-/REFERENCE-ONLY/
 /server/
-.old
 /bin/
 # OS/editor noise.
 .DS_Store

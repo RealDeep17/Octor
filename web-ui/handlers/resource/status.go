@@ -296,6 +296,8 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 	var lastVaultAt time.Time
 	var lastVaultSpeedBytes int64
 	var lastVaultSpeedAt time.Time
+	var emaSpeed float64 // exponential moving average for download speed (α=0.3)
+	const emaAlpha = 0.3  // weight for newest sample, (1-α) for history
 
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
@@ -345,7 +347,7 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 					if deltaBytes > 0 && deltaSeconds > 0 {
 						speed := int64(math.Round(float64(deltaBytes) / deltaSeconds))
 						if lastVaultSpeedBytes > 0 {
-							speed = int64(math.Round(float64(lastVaultSpeedBytes)*0.6 + float64(speed)*0.4))
+							speed = int64(math.Round(float64(lastVaultSpeedBytes)*0.7 + float64(speed)*0.3))
 						}
 						lastVaultSpeedBytes = speed
 						lastVaultSpeedAt = now
@@ -435,7 +437,17 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 					deltaBytes := completed - lastStats.Completed
 					deltaSeconds := now.Sub(lastEventAt).Seconds()
 					if deltaBytes > 0 && deltaSeconds > 0 {
-						speedBytes = int64(math.Round(float64(deltaBytes) / deltaSeconds))
+						instant := float64(deltaBytes) / deltaSeconds
+						if emaSpeed == 0 {
+							emaSpeed = instant // seed on first sample
+						} else {
+							emaSpeed = (1-emaAlpha)*emaSpeed + emaAlpha*instant
+						}
+						speedBytes = int64(math.Round(emaSpeed))
+					} else if deltaSeconds >= 2.0 {
+						// No progress for 2s — decay toward zero
+						emaSpeed *= (1 - emaAlpha)
+						speedBytes = int64(math.Round(emaSpeed))
 					}
 				}
 				remainingBytes := ev.Total - completed

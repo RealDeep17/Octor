@@ -15,6 +15,7 @@ import (
 	sv "github.com/webtor-io/web-ui/services/common"
 
 	defaultErrors "errors"
+	"sync"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -73,19 +74,20 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 }
 
 type Auth struct {
-	url                 string
-	smtpUser            string
-	smtpPass            string
-	smtpSecure          bool
-	smtpHost            string
-	smtpPort            int
-	domain              string
-	cl                  *http.Client
-	pg                  *cs.PG
-	googleClientID      string
-	googleClientSecret  string
-	hasSupetokens       bool
-	overrideUserEmail   string
+	url                string
+	smtpUser           string
+	smtpPass           string
+	smtpSecure         bool
+	smtpHost           string
+	smtpPort           int
+	domain             string
+	cl                 *http.Client
+	pg                 *cs.PG
+	googleClientID     string
+	googleClientSecret string
+	hasSupetokens      bool
+	overrideUserEmail  string
+	userEmailCache     sync.Map // userID → email, avoids repeated SuperTokens round-trips
 }
 
 func New(c *cli.Context, cl *http.Client, pg *cs.PG) *Auth {
@@ -317,39 +319,37 @@ func (s *Auth) createUser(ctx context.Context, sess sessmodels.SessionContainer)
 		return
 	}
 	userID := sess.GetUserID()
-	log.Infof("createUser: starting for userID=%s", userID)
 
 	if s.overrideUserEmail != "" {
-		log.Infof("createUser: using overrideUserEmail=%s", s.overrideUserEmail)
 		return models.GetOrCreateUser(ctx, db, s.overrideUserEmail)
 	}
 
-	// Try to get user from passwordless first
+	// Fast path: in-process cache avoids ~1s SuperTokens network call on every request
+	if cached, ok := s.userEmailCache.Load(userID); ok {
+		return models.GetOrCreateUser(ctx, db, cached.(string))
+	}
+
+	// Try passwordless recipe first
 	userInfo, plErr := passwordless.GetUserByID(userID)
 	if plErr == nil && userInfo != nil && userInfo.Email != nil {
 		log.Infof("createUser: found passwordless user email=%s", *userInfo.Email)
+		s.userEmailCache.Store(userID, *userInfo.Email)
 		return models.GetOrCreateUser(ctx, db, *userInfo.Email)
 	} else if plErr != nil {
-		log.Infof("createUser: passwordless GetUserByID returned error: %v", plErr)
-	} else {
-		log.Info("createUser: passwordless user or email is nil")
+		log.Infof("createUser: passwordless GetUserByID error: %v", plErr)
 	}
 
-	// If not found in passwordless, try third-party
+	// Try third-party recipe
 	tpUserInfo, tpErr := thirdparty.GetUserByID(userID)
 	if tpErr == nil && tpUserInfo != nil && tpUserInfo.Email != "" {
 		log.Infof("createUser: found thirdparty user email=%s", tpUserInfo.Email)
+		s.userEmailCache.Store(userID, tpUserInfo.Email)
 		return models.GetOrCreateUser(ctx, db, tpUserInfo.Email)
-	} else {
-		if tpErr != nil {
-			log.Errorf("createUser: thirdparty GetUserByID returned error: %v", tpErr)
-		} else if tpUserInfo == nil {
-			log.Warn("createUser: thirdparty tpUserInfo is nil")
-		} else {
-			log.Warnf("createUser: thirdparty user email is empty: %+v", tpUserInfo)
-		}
+	} else if tpErr != nil {
+		log.Errorf("createUser: thirdparty GetUserByID error: %v", tpErr)
 	}
-	log.Warnf("createUser: failed to identify user by ID=%s in either recipe", userID)
+
+	log.Warnf("createUser: failed to identify userID=%s", userID)
 	return
 }
 
