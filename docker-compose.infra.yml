@@ -27,15 +27,3 @@ services:
       - "4222:4222"
       - "8222:8222"
 
-  minio:
-    image: minio/minio
-    container_name: octor-minio
-    ports:
-      - "9090:9000"
-      - "9001:9001"
-    environment:
-      - MINIO_ROOT_USER=octoradmin
-      - MINIO_ROOT_PASSWORD=octorpassword
-    volumes:
-      - ./infra-data/minio:/data
-    command: server /data --console-address ":9001"
