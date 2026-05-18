@@ -274,6 +274,23 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 9. Get Object
+	if r.Method == http.MethodGet {
+		finalPath := filepath.Join(bucketDir, key)
+		file, err := os.Open(finalPath)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		defer file.Close()
+		info, _ := file.Stat()
+		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+		w.Header().Set("ETag", "\"completed-etag\"")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.Copy(w, file)
+		return
+	}
+
 	// 8. Put Object (Single part upload fallback)
 	if r.Method == http.MethodPut {
 		finalPath := filepath.Join(bucketDir, key)
