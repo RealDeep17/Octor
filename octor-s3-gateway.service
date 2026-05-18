@@ -1,0 +1,16 @@
+[Unit]
+Description=Octor Custom Zero-Leak S3 Gateway
+After=network.target octor-rclone-mount.service
+Requires=octor-rclone-mount.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/srv/octor/s3-gateway
+ExecStart=/srv/octor/bin/s3-gateway
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
