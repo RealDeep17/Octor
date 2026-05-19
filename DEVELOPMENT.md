@@ -52,6 +52,46 @@ Enrichment is managed by `web-ui`. It uses a multi-tier fallback system:
 3.  **Kinopoisk**: Tertiary source for Russian content.
 4.  **AI Resolver**: Last-resort identification using Claude (Anthropic).
 
+## 🔵 Admin Dashboard & Universal WebDAV Integration
+
+The `WebDav-Web-UI_Universal_Viewing-Admin` branch extends Octor with user-scoped administration controls and universal WebDAV client integrations.
+
+### Admin Webtor UI Routing
+The administration panel integrates seamlessly with standard Webtor-style views under `/admin/*`:
+- `/admin/library`: Shows all users' torrents with resource-level deduplication, including owner email tags on metadata rows and user-count badges on media cards.
+- `/admin/library/movies` & `/admin/library/series`: Lists all media records filtered with real metadata, posters, years, and ratings.
+- `/admin/vault`: Displays all users' active pledges and resources.
+- *Scoping:* Admin views support dynamic user scoping via a `?user=<uuid>` parameter. The administrators list is specified by the `ADMIN_EMAILS` variable inside `custom.env`.
+
+### Model Modifications
+To support multi-user admin visibility, `web-ui/models/library.go` links library records with a database user relation:
+```go
+User *User `pg:"rel:has-one,fk:user_id"`
+```
+
+### WebDAV Universal Virtual Directories
+WebDAV exposes an administrative virtual tree structure for authenticated administrators:
+```text
+admin/
+├── torrents/        (Read-Only, deduped global library torrents)
+├── movies/          (Read-Only, deduped global movies)
+├── tvseries/        (Read-Only, deduped global series)
+├── all/             (Read-Only, deduped all-user combined files)
+└── users/
+    └── {email}/
+        ├── torrents (Read-Write, scoped to user library)
+        ├── movies   (Read-Write, scoped to user movies)
+        ├── tvseries (Read-Write, scoped to user series)
+        └── all      (Read-Write, scoped to user combined files)
+```
+*Security:* The `admin/` directory path is entirely blocked/hidden from standard users. Per-user moves are strictly scoped and blocked from crossing boundary limits between different users.
+
+### Testing and Verification
+Run targeted unit tests using the standard protobuf registration warning workaround:
+```bash
+GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn /usr/bin/go test ./web-ui/handlers/admin ./web-ui/handlers/webdav ./web-ui/services/admin ./web-ui/models
+```
+
 ## 🚀 Deployment (VPS)
 
 The target production environment is an OCI-A1 VPS (ARM64).
