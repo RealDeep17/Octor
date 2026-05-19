@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## [2.3.0] - 2026-05-19
+
+### Fixed
+- **FUSE Block-Write Queue Latency Bottleneck (R&D)**: Resolved the severe write performance crawl (30 KB/s limit) over FUSE Union mounts (`--vfs-cache-mode off`) to Google Drive by implementing an optimized 16MB sequential RAM write buffer via Go's `bufio.Writer` inside `s3-gateway`. Skyrocketed write speed to **23+ MB/s** and eliminated microservice timeouts/stuck queues.
+- **Seeder SSD Cache Piece Thrashing**: Wiped out stale SQLite `.torrent.db` indexing issues that served corrupted/zeroed blocks (SHA-1 mismatches). Scaled up `PER_TORRENT_CACHE_BUDGET` from `1.5GB` test limit to `25GB` production limit in `custom.env` to prevent LRU eviction from thrashing active streaming/reading blocks of large files.
+- **Microservice Port Collisions & Routing**: Wired up `custom.env` loading in `octor-s3-gateway.service` systemd configuration using `EnvironmentFile` to securely bind dynamic buffer size controls.
+- **Video Fallback & Audio Silence**: Resolved standard browser audio silence by configuring HLS transcode configurations to support high-performance HEVC/H.265 video-copy HLS streaming with real-time audio transcoding to stereo AAC on the fly.
+- **Default AAC Encoder Crash**: Fixed content-transcoder runtime crashes by switching the default audio encoder from `libfdk_aac` to standard `aac` in the system FFmpeg configurations.
+
+### Added
+- **Dynamic Gateway Write Buffer Size**: Exposed `S3_GATEWAY_WRITE_BUFFER_SIZE` inside `custom.env`, allowing full runtime control over the RAM sequential write buffer size (defaults to 16MB; set to `0` to cleanly disable).
+- **Admin Universal WebDAV Virtual Directories**: Implemented high-level `admin/` scoped WebDAV directories: read-only global directories (`admin/torrents`, `admin/movies`, `admin/tvseries`, `admin/all`) and per-user read-write scoped subdirectories (`admin/users/{email}/all`). WebDAV moves are strictly validated and user-scoped.
+- **Universal Admin Webtor UI**: Added dedicated admin analytics and library views (`/admin/library`, `/admin/library/movies`, `/admin/library/series`, `/admin/vault`) displaying all users' active media card listings and active pledges with owner email identification, deduped at the resource level.
+- **Library User Relation Binding**: Integrated pg relation model mapping `User *User pg:"rel:has-one,fk:user_id"` to link all torrent library records to user tables dynamically.
+- **Multi-Branch Root Markdown Rule**: Configured root `.gitignore` rules to completely ignore temporary root markdown files while preserving core documentation (`README.md`, `CHANGELOG.md`, `DEVELOPMENT.md`, `TODO.md`) across all active branches.
+
+### Changed
+- **Developer Documentation Consolidation**: Remade `TODO.md` with a comprehensive multi-branch specification matrix, updated `DEVELOPMENT.md` by fully merging `ADMIN_UNIVERSAL_VIEW_PLAN.md` into it, and deleted the redundant `AUDIT.md`, `OCTOR_VPS_BUNDLE.md`, and `ADMIN_UNIVERSAL_VIEW_PLAN.md` files.
+- **SuperTokens User ID Caching**: Integrated an in-memory LRU cache in `GetUserByID` calls to eliminate page load lag and redundant database query overhead.
+
+---
+
 ## [Unreleased] - 2026-05-16
 
 ### Fixed
