@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/xml"
@@ -59,19 +60,32 @@ type activeUpload struct {
 	key        string
 	finalPath  string
 	destFile   *os.File
+	writer     *bufio.Writer
 	nextPart   int
 	parts      []partInfo
 	totalBytes int64
 }
 
 var (
-	mu            sync.Mutex
-	activeUploads = make(map[string]*activeUpload)
+	mu              sync.Mutex
+	activeUploads   = make(map[string]*activeUpload)
+	writeBufferSize = 16 * 1024 * 1024 // Default to 16MB sequential write buffer
 )
 
 func main() {
 	if err := os.MkdirAll(storageDir, 0777); err != nil {
 		log.Fatalf("failed to create storage dir: %v", err)
+	}
+
+	if envBufSize := os.Getenv("S3_GATEWAY_WRITE_BUFFER_SIZE"); envBufSize != "" {
+		if val, err := strconv.Atoi(envBufSize); err == nil {
+			writeBufferSize = val
+			log.Printf("Using S3_GATEWAY_WRITE_BUFFER_SIZE from environment: %d bytes", writeBufferSize)
+		} else {
+			log.Printf("Invalid S3_GATEWAY_WRITE_BUFFER_SIZE '%s', defaulting to %d bytes", envBufSize, writeBufferSize)
+		}
+	} else {
+		log.Printf("S3_GATEWAY_WRITE_BUFFER_SIZE not set, defaulting to %d bytes", writeBufferSize)
 	}
 
 	http.HandleFunc("/", handleS3)
@@ -130,6 +144,12 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		var writer *bufio.Writer
+		if writeBufferSize > 0 {
+			writer = bufio.NewWriterSize(destFile, writeBufferSize)
+			log.Printf("[S3] Wrapping upload with sequential RAM write buffer: size=%d bytes", writeBufferSize)
+		}
+
 		mu.Lock()
 		activeUploads[upID] = &activeUpload{
 			uploadID:  upID,
@@ -137,6 +157,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 			key:       key,
 			finalPath: finalPath,
 			destFile:  destFile,
+			writer:    writer,
 			nextPart:  1,
 		}
 		mu.Unlock()
@@ -178,7 +199,12 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		}
 		mu.Unlock()
 
-		written, err := io.Copy(u.destFile, r.Body)
+		var written int64
+		if u.writer != nil {
+			written, err = io.Copy(u.writer, r.Body)
+		} else {
+			written, err = io.Copy(u.destFile, r.Body)
+		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
 			return
@@ -215,6 +241,12 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		mu.Unlock()
 
 		totalSize := u.totalBytes
+		if u.writer != nil {
+			if err := u.writer.Flush(); err != nil {
+				writeError(w, http.StatusInternalServerError, "InternalError", fmt.Sprintf("Failed to flush file buffers: %v", err), r.URL.Path)
+				return
+			}
+		}
 		err := u.destFile.Close()
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "InternalError", fmt.Sprintf("Failed to finalize file on Google Drive: %v", err), r.URL.Path)
@@ -335,10 +367,24 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		}
 		defer destFile.Close()
 
-		written, err := io.Copy(destFile, r.Body)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
-			return
+		var written int64
+		if writeBufferSize > 0 {
+			bw := bufio.NewWriterSize(destFile, writeBufferSize)
+			written, err = io.Copy(bw, r.Body)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
+				return
+			}
+			if err := bw.Flush(); err != nil {
+				writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
+				return
+			}
+		} else {
+			written, err = io.Copy(destFile, r.Body)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
+				return
+			}
 		}
 
 		w.Header().Set("ETag", "\"completed-etag\"")
