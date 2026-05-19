@@ -121,9 +121,6 @@ func (h *HLS) GetFFmpegParams(out string) ([]string, error) {
 			if h.cfg.disableVideoTranscoding {
 				return nil, errors.Errorf("video transcoding is disabled")
 			}
-			if h.primary[0].s.GetHeight() > 1080 {
-				return nil, errors.Errorf("resoulution over 1080p is not supported")
-			}
 		}
 	}
 	params := []string{}
@@ -182,7 +179,7 @@ func (h *HLSStream) GetCodecParams() []string {
 	params := []string{
 		fmt.Sprintf("-c:%v", h.st),
 	}
-	if h.st == Video && (h.force || h.s.GetCodecName() != "h264") {
+	if h.st == Video && (h.force || (h.s.GetCodecName() != "h264" && h.s.GetCodecName() != "hevc" && h.s.GetCodecName() != "h265")) {
 		params = append(
 			params,
 			"h264",
@@ -387,7 +384,11 @@ func (s *HLS) MakeMasterPlaylist(out string) error {
 		if p.r != nil {
 			rate = p.r.Rate() * 1000
 		}
-		res.WriteString(fmt.Sprintf("#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=%v,CODECS=\"avc1.42e00a,mp4a.40.2\"", rate))
+		videoCodec := "avc1.42e00a"
+		if p.s.GetCodecName() == "hevc" || p.s.GetCodecName() == "h265" {
+			videoCodec = "hvc1.1.6.L150.B0"
+		}
+		res.WriteString(fmt.Sprintf("#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=%v,CODECS=\"%s,mp4a.40.2\"", rate, videoCodec))
 		if len(s.audio) > 0 {
 			res.WriteString(`,AUDIO="audio"`)
 		}
