@@ -860,8 +860,8 @@ func (s *Vault) putResourceToVaultAPI(ctx context.Context, tx *pg.Tx, resource *
 		return true, nil
 	}
 
-	// If resource doesn't exist in Vault, add it via PUT
-	if vaultResource == nil {
+	// If resource doesn't exist in Vault, or is in a failed/deleting/inactive status, re-add/re-queue it via PUT
+	if vaultResource == nil || (vaultResource.Status != StatusQueued && vaultResource.Status != StatusProcessing) {
 		_, err = s.vaultApi.PutResource(ctx, resource.ResourceID)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to put resource to vault api")

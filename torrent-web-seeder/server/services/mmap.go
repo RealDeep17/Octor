@@ -77,7 +77,6 @@ func (s *mmapClientImpl) OpenTorrent(_ context.Context, info *metainfo.Info, inf
 		mmaps:    mmaps,
 		closeCh:  make(chan struct{}),
 		cl:       s.cl,
-		evicted:  make(map[int]struct{}),
 	}
 
 	if evictionEnabled {
@@ -158,8 +157,6 @@ type mmapTorrentStorage struct {
 	closeCh   chan struct{}
 	cl        *torrent.Client // for VerifyData on eviction
 	verifyCh  chan int        // evicted piece indices queued for VerifyData
-	evictedMu sync.RWMutex
-	evicted   map[int]struct{}
 	// evictMu serializes piece reads against eviction. Sharded by piece
 	// index so eviction of one piece does not block reads of unrelated
 	// pieces. ReadAt takes RLock; evictPiece takes Lock — guaranteeing
@@ -245,8 +242,6 @@ func (ts *mmapTorrentStorage) Close() error {
 	return ts.span.Close()
 }
 
-var errPieceEvicted = errors.New("piece is evicted")
-
 type mmapStoragePiece struct {
 	t             *mmapTorrentStorage
 	p             metainfo.Piece
@@ -274,14 +269,6 @@ func (me mmapStoragePiece) ReadAt(b []byte, off int64) (int, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 
-	me.t.evictedMu.RLock()
-	_, isEvicted := me.t.evicted[idx]
-	me.t.evictedMu.RUnlock()
-
-	if isEvicted {
-		return 0, errPieceEvicted
-	}
-
 	if me.t.lru != nil {
 		me.t.lru.Touch(idx)
 	}
@@ -293,15 +280,6 @@ func (me mmapStoragePiece) ReadAt(b []byte, off int64) (int, error) {
 }
 
 func (me mmapStoragePiece) WriteAt(b []byte, off int64) (int, error) {
-	idx := me.p.Index()
-	mu := me.t.pieceLock(idx)
-	mu.Lock()
-	defer mu.Unlock()
-
-	me.t.evictedMu.Lock()
-	delete(me.t.evicted, idx)
-	me.t.evictedMu.Unlock()
-
 	return me.sectionWriter.WriteAt(b, off)
 }
 
@@ -423,16 +401,12 @@ func (ts *mmapTorrentStorage) evictPiece(idx int) {
 
 	mu := ts.pieceLock(idx)
 	mu.Lock()
-	defer mu.Unlock()
-
 	if err := ts.pc.Set(pk, false); err != nil {
+		mu.Unlock()
 		log.WithError(err).Errorf("failed to mark piece %d incomplete during eviction", idx)
 		return
 	}
-
-	ts.evictedMu.Lock()
-	ts.evicted[idx] = struct{}{}
-	ts.evictedMu.Unlock()
+	mu.Unlock()
 
 	ts.uncompleteAffectedFiles(idx)
 
