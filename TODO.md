@@ -20,7 +20,7 @@ graph TD
   * **Default AAC Encoder Switch:** Changed the audio encoder from `libfdk_aac` to standard `aac` in the `content-transcoder` configurations. This resolved microservice crashes caused by missing non-free packages in standard FFmpeg VPS builds.
   * **SuperTokens Caching:** Implemented in-memory LRU caching for SuperTokens `GetUserByID` calls, eliminating severe page load lags and redundant authorization queries.
 * **What Failed & What We Learned:**
-  * *Failed:* Trying to stream `.mkv` containers directly to Safari or iOS players natively. Matroska is not natively supported by the standard HLS specification without segmenting.
+  * *Failed:* Trying to stream `.mkv` containers directly to Safari or iOS players natively.Audio got silenced, not supported if complex codec like dolby vision etc.
   * *Failed:* Real-time 4K H.264/H.265 full video transcoding. The 4-core Ampere CPU immediately hits 100% utilization, frames drop, and the VPS locks up. **Video-Copy + Audio-Transcode is the absolute golden rule.**
 
 ### 2. 🔵 `WebDav-Web-UI_Universal_Viewing-Admin` (Access & Admin Control Branch)
@@ -50,7 +50,7 @@ graph TD
 - [x] Clear local `.torrent.db` state and restart `octor-torrent-web-seeder` to prevent stale SHA-1 mismatch loops.
 - [x] Verify S3 Gateway successfully boots and prints `Wrapping upload with sequential RAM write buffer: size=16777216 bytes`.
 - [x] **Live Ingestion Speed Check**: Confirm average upload speeds of 15-50 MB/s directly to Google Drive with 0% local SSD cache leakage.
-- [ ] **Verify LRU Eviction Under Pressure**: Initiate a large torrent with seeder limits configured to `1.5GB`. Confirm older blocks are successfully evicted via `FALLOC_FL_PUNCH_HOLE` while the vault stream advances past 1.5GB to 100% completion.
+- [x] **Verify LRU Eviction Under Pressure**: Initiate a large torrent with seeder limits configured to `1.5GB`. Confirm older blocks are successfully evicted via `FALLOC_FL_PUNCH_HOLE` while the vault stream advances past 1.5GB to 100% completion.
 
 ### Phase 2: Production Ingestion Scaling (1TB File Vaulting)
 - [ ] Scale production limits inside `custom.env` to maximum capacity.
