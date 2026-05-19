@@ -325,6 +325,7 @@ func TestEvictRaceNoZeroReads(t *testing.T) {
 		mmaps:    mmaps,
 		closeCh:  make(chan struct{}),
 		verifyCh: make(chan int, numPieces*64),
+		evicted:  make(map[int]struct{}),
 	}
 	defer close(ts.closeCh)
 
@@ -335,15 +336,15 @@ func TestEvictRaceNoZeroReads(t *testing.T) {
 		for k := range buf {
 			buf[k] = pattern(idx)
 		}
-		if _, err := span.WriteAt(buf, int64(idx)*pieceLen); err != nil {
+		p := ts.Piece(info.Piece(idx)).(mmapStoragePiece)
+		if _, err := p.WriteAt(buf, 0); err != nil {
 			t.Errorf("WriteAt piece %d: %v", idx, err)
 			return
 		}
-		if err := pc.Set(metainfo.PieceKey{InfoHash: infoHash, Index: idx}, true); err != nil {
-			t.Errorf("pc.Set: %v", err)
+		if err := p.MarkComplete(); err != nil {
+			t.Errorf("MarkComplete: %v", err)
 			return
 		}
-		lru.Add(idx, int64(pieceLen))
 	}
 
 	for i := 0; i < numPieces; i++ {
@@ -448,6 +449,7 @@ func TestReadAtRefusesEvictedPiece(t *testing.T) {
 		mmaps:    mmaps,
 		closeCh:  make(chan struct{}),
 		verifyCh: make(chan int, 4),
+		evicted:  make(map[int]struct{}),
 	}
 	defer close(ts.closeCh)
 
@@ -455,15 +457,15 @@ func TestReadAtRefusesEvictedPiece(t *testing.T) {
 	for k := range buf {
 		buf[k] = 0xCC
 	}
-	if _, err := span.WriteAt(buf, 0); err != nil {
+	p := ts.Piece(info.Piece(0)).(mmapStoragePiece)
+
+	// Write the piece via the real WriteAt lifecycle, which clears evicted
+	if _, err := p.WriteAt(buf, 0); err != nil {
 		t.Fatalf("WriteAt: %v", err)
 	}
-	if err := pc.Set(metainfo.PieceKey{InfoHash: infoHash, Index: 0}, true); err != nil {
-		t.Fatalf("pc.Set: %v", err)
+	if err := p.MarkComplete(); err != nil {
+		t.Fatalf("MarkComplete: %v", err)
 	}
-	lru.Add(0, pieceLen)
-
-	p := ts.Piece(info.Piece(0)).(mmapStoragePiece)
 
 	// Pre-eviction: succeeds with the pattern.
 	got := make([]byte, pieceLen)
@@ -476,12 +478,26 @@ func TestReadAtRefusesEvictedPiece(t *testing.T) {
 		}
 	}
 
-	// After pc.Set(false): defense-in-depth must short-circuit ReadAt.
+	// pc.Set(false) alone does NOT block verification-style reads (since we support anacrolix recheck)
 	if err := pc.Set(metainfo.PieceKey{InfoHash: infoHash, Index: 0}, false); err != nil {
 		t.Fatalf("pc.Set false: %v", err)
 	}
+	if _, err := p.ReadAt(got, 0); err != nil {
+		t.Fatalf("ReadAt after simple pc.Set(false) should succeed for verification reads, got err=%v", err)
+	}
+
+	// But calling evictPiece must block reads!
+	ts.evictPiece(0)
 	if n, err := p.ReadAt(got, 0); err == nil {
-		t.Fatalf("ReadAt after eviction: expected error, got n=%d", n)
+		t.Fatalf("ReadAt after real eviction: expected error, got n=%d", n)
+	}
+
+	// Refilling via WriteAt clears the evicted flag and makes it readable again!
+	if _, err := p.WriteAt(buf, 0); err != nil {
+		t.Fatalf("WriteAt refill failed: %v", err)
+	}
+	if _, err := p.ReadAt(got, 0); err != nil {
+		t.Fatalf("ReadAt after WriteAt refill should succeed, got err=%v", err)
 	}
 }
 
