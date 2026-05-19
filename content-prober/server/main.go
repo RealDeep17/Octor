@@ -199,7 +199,7 @@ func (s *server) handleHTTPProbe(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.SetFormatter(&joonix.FluentdFormatter{})
+	log.SetFormatter(joonix.NewFormatter())
 	app := cli.NewApp()
 	app.Name = "content-prober-server"
 	app.Usage = "runs content prober"
