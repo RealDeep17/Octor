@@ -37,3 +37,10 @@ __pycache__/
 *.sqlite
 badger_data/
 badger-data/
+
+# Ignore all root-level markdown files except core repository docs
+/*.md
+!/README.md
+!/CHANGELOG.md
+!/DEVELOPMENT.md
+!/TODO.md
