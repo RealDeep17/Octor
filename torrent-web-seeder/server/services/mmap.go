@@ -77,6 +77,7 @@ func (s *mmapClientImpl) OpenTorrent(_ context.Context, info *metainfo.Info, inf
 		mmaps:    mmaps,
 		closeCh:  make(chan struct{}),
 		cl:       s.cl,
+		evicted:  make(map[int]struct{}),
 	}
 
 	if evictionEnabled {
@@ -146,17 +147,19 @@ func (s *mmapClientImpl) Close() error {
 }
 
 type mmapTorrentStorage struct {
-	infoHash metainfo.Hash
-	span     *mmapSpan.MMapSpan
-	pc       storage.PieceCompletion
-	lru      *PieceLRU
-	info     *metainfo.Info
-	files    []*os.File  // file handles for hole-punching
-	fileLens []int64     // file lengths for piece→file mapping
-	mmaps    []mmap.MMap // raw mmap regions per file, for madvise after eviction
-	closeCh  chan struct{}
-	cl       *torrent.Client // for VerifyData on eviction
-	verifyCh chan int        // evicted piece indices queued for VerifyData
+	infoHash  metainfo.Hash
+	span      *mmapSpan.MMapSpan
+	pc        storage.PieceCompletion
+	lru       *PieceLRU
+	info      *metainfo.Info
+	files     []*os.File  // file handles for hole-punching
+	fileLens  []int64     // file lengths for piece→file mapping
+	mmaps     []mmap.MMap // raw mmap regions per file, for madvise after eviction
+	closeCh   chan struct{}
+	cl        *torrent.Client // for VerifyData on eviction
+	verifyCh  chan int        // evicted piece indices queued for VerifyData
+	evictedMu sync.RWMutex
+	evicted   map[int]struct{}
 	// evictMu serializes piece reads against eviction. Sharded by piece
 	// index so eviction of one piece does not block reads of unrelated
 	// pieces. ReadAt takes RLock; evictPiece takes Lock — guaranteeing
@@ -242,6 +245,8 @@ func (ts *mmapTorrentStorage) Close() error {
 	return ts.span.Close()
 }
 
+var errPieceEvicted = errors.New("piece is evicted")
+
 type mmapStoragePiece struct {
 	t             *mmapTorrentStorage
 	p             metainfo.Piece
@@ -264,12 +269,21 @@ func (me mmapStoragePiece) ReadAt(b []byte, off int64) (int, error) {
 	// and the piece could never be re-acquired. Result: any piece that
 	// had been evicted at least once became permanently un-redownloadable.
 	// Trust the caller to only ReadAt after seeing Completion=true.
-	mu := me.t.pieceLock(me.p.Index())
+	idx := me.p.Index()
+	mu := me.t.pieceLock(idx)
 	mu.RLock()
 	defer mu.RUnlock()
 
+	me.t.evictedMu.RLock()
+	_, isEvicted := me.t.evicted[idx]
+	me.t.evictedMu.RUnlock()
+
+	if isEvicted {
+		return 0, errPieceEvicted
+	}
+
 	if me.t.lru != nil {
-		me.t.lru.Touch(me.p.Index())
+		me.t.lru.Touch(idx)
 	}
 	n, err := me.sectionReader.ReadAt(b, off)
 	if n > 0 && me.t.lru != nil {
@@ -279,6 +293,15 @@ func (me mmapStoragePiece) ReadAt(b []byte, off int64) (int, error) {
 }
 
 func (me mmapStoragePiece) WriteAt(b []byte, off int64) (int, error) {
+	idx := me.p.Index()
+	mu := me.t.pieceLock(idx)
+	mu.Lock()
+	defer mu.Unlock()
+
+	me.t.evictedMu.Lock()
+	delete(me.t.evicted, idx)
+	me.t.evictedMu.Unlock()
+
 	return me.sectionWriter.WriteAt(b, off)
 }
 
@@ -400,12 +423,17 @@ func (ts *mmapTorrentStorage) evictPiece(idx int) {
 
 	mu := ts.pieceLock(idx)
 	mu.Lock()
+	defer mu.Unlock()
 
 	if err := ts.pc.Set(pk, false); err != nil {
-		mu.Unlock()
 		log.WithError(err).Errorf("failed to mark piece %d incomplete during eviction", idx)
 		return
 	}
+
+	ts.evictedMu.Lock()
+	ts.evicted[idx] = struct{}{}
+	ts.evictedMu.Unlock()
+
 	ts.uncompleteAffectedFiles(idx)
 
 	for _, region := range ts.pieceFileRegions(piece) {
@@ -435,8 +463,6 @@ func (ts *mmapTorrentStorage) evictPiece(idx int) {
 	promCachePieceCount.Dec()
 	promCacheEvictions.Inc()
 
-	mu.Unlock()
-
 	log.Infof("evicted piece %d, freed %d bytes, used=%d budget=%d",
 		idx, freedBytes, ts.lru.Used(), ts.lru.budget)
 
@@ -461,9 +487,12 @@ func (ts *mmapTorrentStorage) uncompleteAffectedFiles(pieceIndex int) {
 	} else {
 		offset := 0
 		for _, f := range ts.info.Files {
+			if f.Length == 0 {
+				continue
+			}
 			path := ts.info.Name + "/" + strings.Join(f.Path, "/")
 			startPiece := offset / int(ts.info.PieceLength)
-			endPiece := (offset + int(f.Length)) / int(ts.info.PieceLength)
+			endPiece := (offset + int(f.Length) - 1) / int(ts.info.PieceLength)
 			offset += int(f.Length)
 			if pieceIndex >= startPiece && pieceIndex <= endPiece {
 				affectedFiles = append(affectedFiles, path)
