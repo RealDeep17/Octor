@@ -7,16 +7,18 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	adminsvc "github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/webdav"
 )
 
 type RootDirectory struct {
 	BaseDirectory
+	Admin    *adminsvc.Admin
 	Children map[string]webdav.FileSystem
 }
 
 func (s *RootDirectory) Open(ctx context.Context, path string) (io.ReadCloser, *url.URL, error) {
-	c := s.getChild(path)
+	c := s.getChild(ctx, path)
 	if c == nil {
 		return nil, nil, webdav.NewHTTPError(404, errors.New("file not found"))
 	}
@@ -29,12 +31,15 @@ func (s *RootDirectory) Open(ctx context.Context, path string) (io.ReadCloser, *
 func (s *RootDirectory) ReadDir(ctx context.Context, path string, recursive bool) ([]webdav.FileInfo, error) {
 	if isRoot(path) {
 		var dirs []webdav.FileInfo
-		for k, _ := range s.Children {
+		for k := range s.Children {
+			if k == "admin" && !s.canUseAdmin(ctx) {
+				continue
+			}
 			dirs = append(dirs, newDirectoryFileInfo(k))
 		}
 		return dirs, nil
 	}
-	c := s.getChild(path)
+	c := s.getChild(ctx, path)
 	if c == nil {
 		return nil, webdav.NewHTTPError(404, errors.New("file not found"))
 	}
@@ -50,7 +55,7 @@ func (s *RootDirectory) Stat(ctx context.Context, path string) (*webdav.FileInfo
 		fi := newDirectoryFileInfo("/")
 		return &fi, nil
 	}
-	c := s.getChild(path)
+	c := s.getChild(ctx, path)
 	if c == nil {
 		return nil, webdav.NewHTTPError(404, errors.New("file not found"))
 	}
@@ -69,7 +74,7 @@ func (s *RootDirectory) RemoveAll(ctx context.Context, path string, opts *webdav
 	if isRoot(path) {
 		return webdav.NewHTTPError(403, errors.New("operation not permitted"))
 	}
-	c := s.getChild(path)
+	c := s.getChild(ctx, path)
 	if c == nil {
 		return webdav.NewHTTPError(404, errors.New("file not found"))
 	}
@@ -79,7 +84,7 @@ func (s *RootDirectory) RemoveAll(ctx context.Context, path string, opts *webdav
 	return c.Child.RemoveAll(ctx, c.NewPath, opts)
 }
 func (s *RootDirectory) Create(ctx context.Context, path string, body io.ReadCloser, opts *webdav.CreateOptions) (*webdav.FileInfo, bool, error) {
-	c := s.getChild(path)
+	c := s.getChild(ctx, path)
 	if c == nil {
 		return nil, false, webdav.NewHTTPError(403, errors.New("operation not permitted"))
 	}
@@ -93,7 +98,7 @@ func (s *RootDirectory) Create(ctx context.Context, path string, body io.ReadClo
 	return addPrefix(fi, c.Root), ok, nil
 }
 func (s *RootDirectory) Move(ctx context.Context, path, dest string, options *webdav.MoveOptions) (bool, error) {
-	c := s.getChild(path)
+	c := s.getChild(ctx, path)
 	if c == nil {
 		return false, webdav.NewHTTPError(404, errors.New("file not found"))
 	}
@@ -110,13 +115,16 @@ type ChildResponse struct {
 	Root    string
 }
 
-func (s *RootDirectory) getChild(path string) *ChildResponse {
+func (s *RootDirectory) getChild(ctx context.Context, path string) *ChildResponse {
 	for name, d := range s.Children {
+		if name == "admin" && !s.canUseAdmin(ctx) {
+			continue
+		}
 		cr := "/" + name + "/"
 		if strings.HasPrefix(path, cr) {
 			return &ChildResponse{
 				Child:   d,
-				Name:    path,
+				Name:    name,
 				NewPath: s.removePrefix(path, name),
 				Root:    cr,
 			}
@@ -127,4 +135,15 @@ func (s *RootDirectory) getChild(path string) *ChildResponse {
 
 func (s *RootDirectory) removePrefix(path string, name string) string {
 	return strings.TrimPrefix(path, "/"+name)
+}
+
+func (s *RootDirectory) canUseAdmin(ctx context.Context) bool {
+	if s.Admin == nil {
+		return false
+	}
+	wcc, err := getWebContext(ctx)
+	if err != nil {
+		return false
+	}
+	return s.Admin.IsAdminUser(wcc.User)
 }

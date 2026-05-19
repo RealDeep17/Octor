@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/models"
 	"github.com/webtor-io/web-ui/services/webdav"
@@ -16,7 +17,9 @@ type ContentDirectory struct {
 	BaseDirectory
 	*TorrentDirectory
 	Library
-	pg *cs.PG
+	pg       *cs.PG
+	UserID   *uuid.UUID
+	AllUsers bool
 }
 
 func (s *ContentDirectory) Open(ctx context.Context, path string) (io.ReadCloser, *url.URL, error) {
@@ -78,16 +81,27 @@ func (s *ContentDirectory) ReadDir(ctx context.Context, path string, recursive b
 	return addPrefixes(fis, lr.Root), nil
 }
 
+func (s *ContentDirectory) userID(ctx context.Context) (uuid.UUID, error) {
+	if s.UserID != nil {
+		return *s.UserID, nil
+	}
+	wcc, err := getWebContext(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return wcc.User.ID, nil
+}
+
 func (s *ContentDirectory) getContentWithContext(ctx context.Context) ([]*models.Library, error) {
 	db := s.pg.Get()
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
-	wcc, err := getWebContext(ctx)
+	userID, err := s.userID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return s.GetContent(ctx, db, wcc.User.ID)
+	return s.GetContent(ctx, db, userID)
 }
 
 func (s *ContentDirectory) getContentItem(ctx context.Context, path string) (*ContentItemResponse, error) {
@@ -97,11 +111,16 @@ func (s *ContentDirectory) getContentItem(ctx context.Context, path string) (*Co
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
-	wcc, err := getWebContext(ctx)
+	userID, err := s.userID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	l, err := models.GetLibraryByTorrentName(ctx, db, wcc.User.ID, name)
+	var l *models.Library
+	if s.AllUsers {
+		l, err = models.GetLibraryByTorrentNameAny(ctx, db, name)
+	} else {
+		l, err = models.GetLibraryByTorrentName(ctx, db, userID, name)
+	}
 	if err != nil {
 		return nil, err
 	}

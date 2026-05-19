@@ -6,6 +6,7 @@ import (
 
 	"github.com/webtor-io/web-ui/handlers/about"
 	wa "github.com/webtor-io/web-ui/handlers/action"
+	ha "github.com/webtor-io/web-ui/handlers/admin"
 	wau "github.com/webtor-io/web-ui/handlers/auth"
 	"github.com/webtor-io/web-ui/handlers/discover"
 	"github.com/webtor-io/web-ui/handlers/discover_ai"
@@ -44,6 +45,7 @@ import (
 	jj "github.com/webtor-io/web-ui/jobs"
 	as "github.com/webtor-io/web-ui/services/abuse_store"
 	at "github.com/webtor-io/web-ui/services/access_token"
+	admins "github.com/webtor-io/web-ui/services/admin"
 	ac "github.com/webtor-io/web-ui/services/anthropic_client"
 	ci "github.com/webtor-io/web-ui/services/cache_index"
 	"github.com/webtor-io/web-ui/services/common"
@@ -97,6 +99,7 @@ func configureServe(c *cli.Command) {
 	c.Flags = w.RegisterFlags(c.Flags)
 	c.Flags = common.RegisterFlags(c.Flags)
 	c.Flags = auth.RegisterFlags(c.Flags)
+	c.Flags = admins.RegisterFlags(c.Flags)
 	c.Flags = claims.RegisterClientFlags(c.Flags)
 	c.Flags = sess.RegisterFlags(c.Flags)
 	c.Flags = sta.RegisterFlags(c.Flags)
@@ -208,6 +211,9 @@ func serve(c *cli.Context) error {
 		}
 		a.RegisterHandler(r)
 	}
+
+	// Setting Admin
+	adminSvc := admins.New(c)
 
 	// Setting Access Token
 	ats := at.New(pg)
@@ -330,6 +336,9 @@ func serve(c *cli.Context) error {
 		vh.RegisterHandler(r, v, tm, sapi, pg, jobs)
 	}
 
+	// Setting AdminHandler
+	ha.RegisterHandler(r, tm, pg, v, en, adminSvc)
+
 	// Setting ResourceHandler
 	wr.RegisterHandler(c, r, tm, sapi, jobs, pg, v, en)
 
@@ -433,7 +442,7 @@ func serve(c *cli.Context) error {
 	backends.RegisterHandler(r, ats, pg, linkResolver)
 
 	// Setting WebDAV
-	webdav.RegisterHandler(c, r, pg, ats, sapi, jobs)
+	webdav.RegisterHandler(c, r, pg, ats, sapi, jobs, adminSvc)
 
 	// Setting Tests
 	tests.RegisterHandler(r, tm)

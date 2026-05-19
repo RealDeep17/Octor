@@ -10,6 +10,7 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
 	services "github.com/webtor-io/common-services"
 	ra "github.com/webtor-io/rest-api/services"
 	j "github.com/webtor-io/web-ui/jobs"
@@ -20,9 +21,11 @@ import (
 
 type TorrentLibraryDirectory struct {
 	*BaseDirectory
-	pg   *services.PG
-	api  *api.Api
-	jobs *j.Jobs
+	pg       *services.PG
+	api      *api.Api
+	jobs     *j.Jobs
+	UserID   *uuid.UUID
+	AllUsers bool
 }
 
 func (s *TorrentLibraryDirectory) Open(ctx context.Context, name string) (io.ReadCloser, *url.URL, error) {
@@ -62,6 +65,10 @@ func (s *TorrentLibraryDirectory) ReadDir(ctx context.Context, name string, recu
 }
 
 func (s *TorrentLibraryDirectory) Create(ctx context.Context, name string, body io.ReadCloser, opts *webdav.CreateOptions) (*webdav.FileInfo, bool, error) {
+	if s.AllUsers {
+		return nil, false, webdav.NewHTTPError(403, errors.New("operation not permitted"))
+	}
+
 	if !strings.HasSuffix(name, ".torrent") {
 		return nil, false, webdav.NewHTTPError(400, errors.New("bad request"))
 	}
@@ -85,6 +92,10 @@ func (s *TorrentLibraryDirectory) Create(ctx context.Context, name string, body 
 }
 
 func (s *TorrentLibraryDirectory) RemoveAll(ctx context.Context, name string, opts *webdav.RemoveAllOptions) error {
+	if s.AllUsers {
+		return webdav.NewHTTPError(403, errors.New("operation not permitted"))
+	}
+
 	l, err := s.getLibraryByName(ctx, torrentToName(name))
 	if err != nil {
 		return err
@@ -96,6 +107,10 @@ func (s *TorrentLibraryDirectory) RemoveAll(ctx context.Context, name string, op
 }
 
 func (s *TorrentLibraryDirectory) Move(ctx context.Context, name, dest string, options *webdav.MoveOptions) (bool, error) {
+	if s.AllUsers {
+		return false, webdav.NewHTTPError(403, errors.New("operation not permitted"))
+	}
+
 	ls, err := s.getLibraryByName(ctx, torrentToName(name))
 	if err != nil {
 		return false, err
@@ -111,8 +126,19 @@ func (s *TorrentLibraryDirectory) Move(ctx context.Context, name, dest string, o
 	return true, nil
 }
 
-func (s *TorrentLibraryDirectory) storeToLibrary(ctx context.Context, resourceID string, info *metainfo.Info, name string, torrentSize int64) (*models.Library, error) {
+func (s *TorrentLibraryDirectory) userID(ctx context.Context) (uuid.UUID, error) {
+	if s.UserID != nil {
+		return *s.UserID, nil
+	}
 	wcc, err := getWebContext(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return wcc.User.ID, nil
+}
+
+func (s *TorrentLibraryDirectory) storeToLibrary(ctx context.Context, resourceID string, info *metainfo.Info, name string, torrentSize int64) (*models.Library, error) {
+	userID, err := s.userID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -120,11 +146,13 @@ func (s *TorrentLibraryDirectory) storeToLibrary(ctx context.Context, resourceID
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
-	l, err := models.AddTorrentToLibrary(ctx, db, wcc.User.ID, resourceID, info, name, torrentSize)
+	l, err := models.AddTorrentToLibrary(ctx, db, userID, resourceID, info, name, torrentSize)
 	if err != nil {
 		return nil, err
 	}
-	_, _ = s.jobs.Enrich(wcc, resourceID)
+	if wcc, err := getWebContext(ctx); err == nil {
+		_, _ = s.jobs.Enrich(wcc, resourceID)
+	}
 	return l, nil
 }
 
@@ -166,11 +194,11 @@ func (s *TorrentLibraryDirectory) removeFromLibrary(ctx context.Context, l *mode
 	if db == nil {
 		return errors.New("db is nil")
 	}
-	wcc, err := getWebContext(ctx)
+	userID, err := s.userID(ctx)
 	if err != nil {
 		return err
 	}
-	return models.RemoveFromLibrary(ctx, db, wcc.User.ID, l.Torrent.ResourceID)
+	return models.RemoveFromLibrary(ctx, db, userID, l.Torrent.ResourceID)
 }
 
 func (s *TorrentLibraryDirectory) updateLibraryName(ctx context.Context, l *models.Library) error {
@@ -186,11 +214,14 @@ func (s *TorrentLibraryDirectory) getLibraryList(ctx context.Context) ([]*models
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
-	wcc, err := getWebContext(ctx)
+	userID, err := s.userID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return models.GetLibraryTorrentsList(ctx, db, wcc.User.ID, models.SortTypeName)
+	if s.AllUsers {
+		return models.GetLibraryTorrentsListAll(ctx, db, models.SortTypeName)
+	}
+	return models.GetLibraryTorrentsList(ctx, db, userID, models.SortTypeName)
 }
 
 func (s *TorrentLibraryDirectory) getLibraryByName(ctx context.Context, name string) (*models.Library, error) {
@@ -198,11 +229,14 @@ func (s *TorrentLibraryDirectory) getLibraryByName(ctx context.Context, name str
 	if db == nil {
 		return nil, errors.New("db is nil")
 	}
-	wcc, err := getWebContext(ctx)
+	userID, err := s.userID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return models.GetLibraryByName(ctx, db, wcc.User.ID, name)
+	if s.AllUsers {
+		return models.GetLibraryByNameAny(ctx, db, name)
+	}
+	return models.GetLibraryByName(ctx, db, userID, name)
 }
 
 var _ webdav.FileSystem = (*TorrentLibraryDirectory)(nil)

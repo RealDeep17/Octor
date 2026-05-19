@@ -45,6 +45,7 @@ type Library struct {
 
 	Torrent   *TorrentResource `pg:"rel:has-one,fk:resource_id"`
 	MediaInfo *MediaInfo       `pg:"rel:has-one,fk:resource_id"`
+	User      *User            `pg:"rel:has-one,fk:user_id"`
 	Name      string
 }
 
@@ -396,4 +397,93 @@ func GetLibrarySeriesList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort So
 	}
 
 	return list, nil
+}
+
+func GetLibraryByNameAny(ctx context.Context, db *pg.DB, name string) (*Library, error) {
+	var lib Library
+	err := db.Model(&lib).
+		Context(ctx).
+		Where("library.name = ?", name).
+		Relation("Torrent").
+		Limit(1).
+		Select()
+	if errors.Is(err, pg.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch library torrent by name")
+	}
+	return &lib, nil
+}
+
+func GetLibraryByTorrentNameAny(ctx context.Context, db *pg.DB, name string) (*Library, error) {
+	var lib Library
+	err := db.Model(&lib).
+		Context(ctx).
+		Join("join torrent_resource as t on t.resource_id = library.resource_id").
+		Where("t.name = ?", name).
+		Relation("Torrent").
+		Limit(1).
+		Select()
+	if errors.Is(err, pg.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch library torrent by torrent name")
+	}
+	return &lib, nil
+}
+
+func GetLibraryTorrentsListAll(ctx context.Context, db *pg.DB, sort SortType) ([]*Library, error) {
+	var list []*Library
+	query := db.Model(&list).
+		Context(ctx).
+		ColumnExpr("DISTINCT ON (library.resource_id) library.*").
+		Relation("Torrent")
+	applyAllUsersLibrarySort(query, sort)
+	if err := query.Select(); err != nil {
+		return nil, errors.Wrap(err, "failed to fetch all-user library list")
+	}
+	return list, nil
+}
+
+func GetLibraryMovieTorrentListAll(ctx context.Context, db *pg.DB, sort SortType) ([]*Library, error) {
+	var list []*Library
+	query := db.Model(&list).
+		Context(ctx).
+		ColumnExpr("DISTINCT ON (library.resource_id) library.*").
+		Join("join movie as m").
+		JoinOn("m.resource_id = library.resource_id").
+		Relation("Torrent")
+	applyAllUsersLibrarySort(query, sort)
+	if err := query.Select(); err != nil {
+		return nil, errors.Wrap(err, "failed to fetch all-user movie torrent list")
+	}
+	return list, nil
+}
+
+func GetLibrarySeriesTorrentListAll(ctx context.Context, db *pg.DB, sort SortType) ([]*Library, error) {
+	var list []*Library
+	query := db.Model(&list).
+		Context(ctx).
+		ColumnExpr("DISTINCT ON (library.resource_id) library.*").
+		Join("join series as s").
+		JoinOn("s.resource_id = library.resource_id").
+		Relation("Torrent")
+	applyAllUsersLibrarySort(query, sort)
+	if err := query.Select(); err != nil {
+		return nil, errors.Wrap(err, "failed to fetch all-user series torrent list")
+	}
+	return list, nil
+}
+
+func applyAllUsersLibrarySort(query *pg.Query, sort SortType) {
+	// DISTINCT ON requires resource_id to lead ORDER BY. The secondary key keeps
+	// the chosen representative deterministic while preserving deduplication.
+	switch sort {
+	case SortTypeName:
+		query.OrderExpr("library.resource_id, torrent.name ASC")
+	default:
+		query.OrderExpr("library.resource_id, library.created_at DESC")
+	}
 }

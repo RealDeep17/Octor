@@ -12,6 +12,7 @@ import (
 	"github.com/webtor-io/web-ui/handlers/common"
 	j "github.com/webtor-io/web-ui/jobs"
 	at "github.com/webtor-io/web-ui/services/access_token"
+	adminsvc "github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/claims"
@@ -27,11 +28,11 @@ type Handler struct {
 	wh   *webdav.Handler
 }
 
-func RegisterHandler(c *cli.Context, r *gin.Engine, pg *cs.PG, at *at.AccessToken, sapi *api.Api, jobs *j.Jobs) {
+func RegisterHandler(c *cli.Context, r *gin.Engine, pg *cs.PG, at *at.AccessToken, sapi *api.Api, jobs *j.Jobs, admin *adminsvc.Admin) {
 	if c.Bool(co.DisableWebDAVFlag) {
 		return
 	}
-	fs := NewFileSystem(pg, sapi, jobs, "webdav")
+	fs := NewFileSystem(pg, sapi, jobs, "webdav", admin)
 	wh := &webdav.Handler{FileSystem: fs}
 	h := &Handler{
 		pg:   pg,
