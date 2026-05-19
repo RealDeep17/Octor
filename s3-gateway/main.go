@@ -12,10 +12,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const (
-	storageDir = "/srv/octor/drive-mount"
+	storageDir = "/srv/octor/infra-data/drive-mount"
 	port       = ":9000"
 )
 
@@ -46,6 +47,28 @@ func generateUploadID() string {
 	return hex.EncodeToString(b)
 }
 
+type partInfo struct {
+	partNumber int
+	size       int64
+	etag       string
+}
+
+type activeUpload struct {
+	uploadID   string
+	bucket     string
+	key        string
+	finalPath  string
+	destFile   *os.File
+	nextPart   int
+	parts      []partInfo
+	totalBytes int64
+}
+
+var (
+	mu            sync.Mutex
+	activeUploads = make(map[string]*activeUpload)
+)
+
 func main() {
 	if err := os.MkdirAll(storageDir, 0777); err != nil {
 		log.Fatalf("failed to create storage dir: %v", err)
@@ -53,14 +76,13 @@ func main() {
 
 	http.HandleFunc("/", handleS3)
 
-	log.Printf("Starting Custom Zero-Leak S3 Gateway on port %s...", port)
+	log.Printf("Starting Zero-Buffer Direct-Stream S3 Gateway on port %s...", port)
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 }
 
 func handleS3(w http.ResponseWriter, r *http.Request) {
-	// Parse bucket and key
 	path := strings.Trim(r.URL.Path, "/")
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) == 0 || parts[0] == "" {
@@ -97,12 +119,27 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 	// 1. Create Multipart Upload
 	if isUploads && r.Method == http.MethodPost {
 		upID := generateUploadID()
-		// Ensure metadata dir for this upload exists
-		metaDir := filepath.Join(bucketDir, ".uploads", key, upID)
-		if err := os.MkdirAll(metaDir, 0777); err != nil {
+		finalPath := filepath.Join(bucketDir, key)
+		if err := os.MkdirAll(filepath.Dir(finalPath), 0777); err != nil {
 			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
 			return
 		}
+		destFile, err := os.OpenFile(finalPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
+			return
+		}
+
+		mu.Lock()
+		activeUploads[upID] = &activeUpload{
+			uploadID:  upID,
+			bucket:    bucket,
+			key:       key,
+			finalPath: finalPath,
+			destFile:  destFile,
+			nextPart:  1,
+		}
+		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
@@ -112,7 +149,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
   <Key>%s</Key>
   <UploadId>%s</UploadId>
 </InitiateMultipartUploadResult>`, bucket, key, upID)
-		log.Printf("[S3] Initiated Multipart Upload: Bucket=%s, Key=%s, UploadId=%s", bucket, key, upID)
+		log.Printf("[S3] Initiated Zero-Buffer Multipart Stream: Bucket=%s, Key=%s, UploadId=%s", bucket, key, upID)
 		return
 	}
 
@@ -124,77 +161,65 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		metaDir := filepath.Join(bucketDir, ".uploads", key, uploadID)
-		partPath := filepath.Join(metaDir, fmt.Sprintf("part-%d", partNum))
+		mu.Lock()
+		u, ok := activeUploads[uploadID]
+		mu.Unlock()
 
-		partFile, err := os.OpenFile(partPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+		if !ok {
+			writeError(w, http.StatusNotFound, "NoSuchUpload", "The specified multipart upload does not exist.", r.URL.Path)
+			return
+		}
+
+		mu.Lock()
+		if partNum != u.nextPart {
+			mu.Unlock()
+			writeError(w, http.StatusBadRequest, "InvalidPart", fmt.Sprintf("Expected sequential part %d but got %d", u.nextPart, partNum), r.URL.Path)
+			return
+		}
+		mu.Unlock()
+
+		written, err := io.Copy(u.destFile, r.Body)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
 			return
 		}
-		defer partFile.Close()
 
-		written, err := io.Copy(partFile, r.Body)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
-			return
-		}
+		etag := fmt.Sprintf("\"part-%d-etag\"", partNum)
 
-		w.Header().Set("ETag", fmt.Sprintf("\"part-%d-etag\"", partNum))
+		mu.Lock()
+		u.parts = append(u.parts, partInfo{
+			partNumber: partNum,
+			size:       written,
+			etag:       etag,
+		})
+		u.totalBytes += written
+		u.nextPart++
+		mu.Unlock()
+
+		w.Header().Set("ETag", etag)
 		w.WriteHeader(http.StatusOK)
-		log.Printf("[S3] Uploaded Part %d: Bucket=%s, Key=%s, Size=%d bytes", partNum, bucket, key, written)
+		log.Printf("[S3] Streamed Part %d directly to Google Drive: Bucket=%s, Key=%s, Size=%d bytes", partNum, bucket, key, written)
 		return
 	}
 
 	// 3. Complete Multipart Upload
 	if uploadID != "" && r.Method == http.MethodPost {
-		metaDir := filepath.Join(bucketDir, ".uploads", key, uploadID)
-		finalPath := filepath.Join(bucketDir, key)
-
-		// Parse the part list to know exactly what parts to concatenate
-		type CompleteMultipartUpload struct {
-			Parts []struct {
-				PartNumber int    `xml:"PartNumber"`
-				ETag       string `xml:"ETag"`
-			} `xml:"Part"`
-		}
-		var cmp CompleteMultipartUpload
-		if err := xml.NewDecoder(r.Body).Decode(&cmp); err != nil {
-			writeError(w, http.StatusBadRequest, "MalformedXML", err.Error(), r.URL.Path)
+		mu.Lock()
+		u, ok := activeUploads[uploadID]
+		if !ok {
+			mu.Unlock()
+			writeError(w, http.StatusNotFound, "NoSuchUpload", "The specified multipart upload does not exist.", r.URL.Path)
 			return
 		}
+		delete(activeUploads, uploadID)
+		mu.Unlock()
 
-		// Open final destination file
-		if err := os.MkdirAll(filepath.Dir(finalPath), 0777); err != nil {
-			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
-			return
-		}
-		destFile, err := os.OpenFile(finalPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+		totalSize := u.totalBytes
+		err := u.destFile.Close()
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
+			writeError(w, http.StatusInternalServerError, "InternalError", fmt.Sprintf("Failed to finalize file on Google Drive: %v", err), r.URL.Path)
 			return
 		}
-		defer destFile.Close()
-
-		var totalSize int64
-		for _, p := range cmp.Parts {
-			partPath := filepath.Join(metaDir, fmt.Sprintf("part-%d", p.PartNumber))
-			srcFile, err := os.Open(partPath)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, "InternalError", fmt.Sprintf("Missing part %d: %v", p.PartNumber, err), r.URL.Path)
-				return
-			}
-			written, err := io.Copy(destFile, srcFile)
-			srcFile.Close()
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
-				return
-			}
-			totalSize += written
-		}
-
-		// Clean up part files
-		_ = os.RemoveAll(metaDir)
 
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
@@ -205,23 +230,37 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
   <Key>%s</Key>
   <ETag>"completed-etag"</ETag>
 </CompleteMultipartUploadResult>`, bucket, key, bucket, key)
-		log.Printf("[S3] Completed Multipart Upload: Bucket=%s, Key=%s, TotalSize=%d bytes", bucket, key, totalSize)
+		log.Printf("[S3] Completed Zero-Buffer Multipart Stream: Bucket=%s, Key=%s, TotalSize=%d bytes", bucket, key, totalSize)
 		return
 	}
 
 	// 4. Abort Multipart Upload
 	if uploadID != "" && r.Method == http.MethodDelete {
-		metaDir := filepath.Join(bucketDir, ".uploads", key, uploadID)
-		_ = os.RemoveAll(metaDir)
+		mu.Lock()
+		u, ok := activeUploads[uploadID]
+		if ok {
+			delete(activeUploads, uploadID)
+			_ = u.destFile.Close()
+			_ = os.Remove(u.finalPath)
+		}
+		mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
-		log.Printf("[S3] Aborted Multipart Upload: Bucket=%s, Key=%s, UploadId=%s", bucket, key, uploadID)
+		log.Printf("[S3] Aborted Multipart Stream: Bucket=%s, Key=%s, UploadId=%s", bucket, key, uploadID)
 		return
 	}
 
 	// 5. List Parts (Resume support)
 	if uploadID != "" && r.Method == http.MethodGet {
-		metaDir := filepath.Join(bucketDir, ".uploads", key, uploadID)
-		files, _ := os.ReadDir(metaDir)
+		mu.Lock()
+		u, ok := activeUploads[uploadID]
+		if !ok {
+			mu.Unlock()
+			writeError(w, http.StatusNotFound, "NoSuchUpload", "The specified multipart upload does not exist.", r.URL.Path)
+			return
+		}
+		partsCopy := make([]partInfo, len(u.parts))
+		copy(partsCopy, u.parts)
+		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
@@ -232,20 +271,13 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
   <UploadId>%s</UploadId>
   <IsTruncated>false</IsTruncated>`, bucket, key, uploadID)
 
-		for _, f := range files {
-			if strings.HasPrefix(f.Name(), "part-") {
-				partNumStr := strings.TrimPrefix(f.Name(), "part-")
-				partNum, _ := strconv.Atoi(partNumStr)
-				info, err := f.Info()
-				if err == nil {
-					_, _ = fmt.Fprintf(w, `
+		for _, p := range partsCopy {
+			_, _ = fmt.Fprintf(w, `
   <Part>
     <PartNumber>%d</PartNumber>
-    <ETag>"part-%d-etag"</ETag>
+    <ETag>%s</ETag>
     <Size>%d</Size>
-  </Part>`, partNum, partNum, info.Size())
-				}
-			}
+  </Part>`, p.partNumber, p.etag, p.size)
 		}
 		_, _ = w.Write([]byte("\n</ListPartsResult>"))
 		return
@@ -256,7 +288,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		finalPath := filepath.Join(bucketDir, key)
 		info, err := os.Stat(finalPath)
 		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "NoSuchKey", "The specified key does not exist.", r.URL.Path)
 			return
 		}
 		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
@@ -279,15 +311,13 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		finalPath := filepath.Join(bucketDir, key)
 		file, err := os.Open(finalPath)
 		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "NoSuchKey", "The specified key does not exist.", r.URL.Path)
 			return
 		}
 		defer file.Close()
 		info, _ := file.Stat()
-		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 		w.Header().Set("ETag", "\"completed-etag\"")
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.Copy(w, file)
+		http.ServeContent(w, r, key, info.ModTime(), file)
 		return
 	}
 

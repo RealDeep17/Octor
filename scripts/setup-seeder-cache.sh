@@ -78,12 +78,14 @@ truncate -s "$RAM_CACHE_SIZE" "$IMG_FILE"
 echo "setup-seeder-cache: formatting ext4 (no journal for maximum speed)..."
 mkfs.ext4 -F -O ^has_journal -m 0 -E lazy_itable_init=0,lazy_journal_init=0 "$IMG_FILE" >/dev/null 2>&1
 
-echo "setup-seeder-cache: attaching loop device..."
-LOOP_DEV=$(losetup --find --show "$IMG_FILE")
+echo "setup-seeder-cache: attaching loop device with direct-io..."
+LOOP_DEV=$(losetup --find --show --direct-io=on "$IMG_FILE")
 
-echo "setup-seeder-cache: mounting $LOOP_DEV at $DATA_DIR ..."
-# NOTE: data=writeback is omitted here because the filesystem has no journal.
-mount -o noatime,nodiratime "$LOOP_DEV" "$DATA_DIR"
+echo "setup-seeder-cache: mounting $LOOP_DEV at $DATA_DIR with discard..."
+# We explicitly mount with 'discard' (TRIM support) so that hole-punching (FALLOC_FL_PUNCH_HOLE)
+# is instantly passed down through the loop device to free physical blocks in the backing tmpfs.
+mount -o noatime,nodiratime,discard "$LOOP_DEV" "$DATA_DIR"
 chown -R ubuntu:ubuntu "$DATA_DIR"
 
-echo "setup-seeder-cache: RAM ext4 ready at $DATA_DIR (size=$RAM_CACHE_SIZE)"
+echo "setup-seeder-cache: RAM ext4 ready at $DATA_DIR (size=$RAM_CACHE_SIZE, discard enabled)"
+

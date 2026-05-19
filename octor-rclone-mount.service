@@ -7,15 +7,15 @@ Before=docker.service
 Type=simple
 User=ubuntu
 Group=ubuntu
-ExecStartPre=/usr/bin/mkdir -p /srv/octor/drive-mount
-ExecStart=/usr/bin/rclone --config /home/ubuntu/.config/rclone/rclone.conf mount ALPHA_UNION: /srv/octor/drive-mount \
+ExecStartPre=/usr/bin/mkdir -p /srv/octor/infra-data/drive-mount
+ExecStart=/usr/bin/rclone --config /home/ubuntu/.config/rclone/rclone.conf mount ALPHA_UNION: /srv/octor/infra-data/drive-mount \
     --vfs-cache-mode off \
-    --buffer-size 32M \
-    --drive-chunk-size 32M \
-    --transfers 2 \
+    --buffer-size 128M \
+    --drive-chunk-size 256M \
+    --transfers 8 \
     --allow-other \
     --umask 000
-ExecStop=/usr/bin/fusermount -uz /srv/octor/drive-mount
+ExecStop=/usr/bin/fusermount -uz /srv/octor/infra-data/drive-mount
 Restart=always
 RestartSec=5
 

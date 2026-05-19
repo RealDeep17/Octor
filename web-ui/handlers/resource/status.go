@@ -50,7 +50,7 @@ type TorrentStatsData struct {
 // resolveStatus is a pure function that determines the combined torrent status
 // from vault DB state, vault API state, and torrent seeding stats.
 // Priority: vaulted > vaulting > cached > caching > idle.
-func resolveStatus(dbResource *vaultModels.Resource, apiResource *vault.Resource, stats *TorrentStatsData) *TorrentStatus {
+func resolveStatus(dbResource *vaultModels.Resource, apiResource *vault.Resource, stats *TorrentStatsData, vaultSpeedBytes int64) *TorrentStatus {
 	vaultState := resolveVaultState(dbResource, apiResource)
 	cachingState := resolveCachingState(stats)
 
@@ -60,15 +60,18 @@ func resolveStatus(dbResource *vaultModels.Resource, apiResource *vault.Resource
 	if vaultState.State == "vaulting" {
 		if stats != nil {
 			vaultState.Seeders = stats.Seeders
-			vaultState.SpeedBytes = stats.SpeedBytes
-			vaultState.RemainingBytes = stats.RemainingBytes
-			vaultState.ETASeconds = stats.ETASeconds
-			if stats.Total > 0 {
-				vaultState.TotalStr = formatBytes(stats.Total)
-				vaultState.CompletedStr = formatBytes(stats.Completed)
-			}
-			vaultState.Detail = buildStatusDetail(stats)
 		}
+		vaultState.SpeedBytes = vaultSpeedBytes
+		if vaultSpeedBytes > 0 && vaultState.RemainingBytes > 0 {
+			vaultState.ETASeconds = int64(math.Ceil(float64(vaultState.RemainingBytes) / float64(vaultSpeedBytes)))
+		} else {
+			vaultState.ETASeconds = 0
+		}
+		vaultState.Detail = buildStatusDetail(&TorrentStatsData{
+			SpeedBytes:     vaultState.SpeedBytes,
+			RemainingBytes: vaultState.RemainingBytes,
+			ETASeconds:     vaultState.ETASeconds,
+		})
 		return vaultState
 	}
 	if cachingState.State == "cached" {
@@ -227,7 +230,7 @@ func (s *Handler) prepareInitialStatus(ctx context.Context, resourceID string) *
 		log.WithError(err).Warn("failed to get vault resource for initial status")
 		return &TorrentStatus{State: "idle"}
 	}
-	return resolveStatus(dbResource, nil, nil)
+	return resolveStatus(dbResource, nil, nil, 0)
 }
 
 // status is the SSE endpoint handler for real-time torrent status updates.
@@ -381,18 +384,7 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 		if lastStats != nil {
 			stats = lastStats
 		}
-		status := resolveStatus(lastDBResource, lastAPIResource, stats)
-		if status.State == "vaulting" && lastStats == nil && lastVaultSpeedBytes > 0 {
-			status.SpeedBytes = lastVaultSpeedBytes
-			if status.RemainingBytes > 0 {
-				status.ETASeconds = int64(math.Ceil(float64(status.RemainingBytes) / float64(lastVaultSpeedBytes)))
-			}
-			status.Detail = buildStatusDetail(&TorrentStatsData{
-				SpeedBytes:     status.SpeedBytes,
-				RemainingBytes: status.RemainingBytes,
-				ETASeconds:     status.ETASeconds,
-			})
-		}
+		status := resolveStatus(lastDBResource, lastAPIResource, stats, lastVaultSpeedBytes)
 		data, _ := json.Marshal(status)
 		jsonStr := string(data)
 		if jsonStr == lastJSON {
