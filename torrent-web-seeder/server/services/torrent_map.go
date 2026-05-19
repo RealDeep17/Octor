@@ -158,11 +158,16 @@ func (s *TorrentMap) Get(ctx context.Context, h string) (*torrent.Torrent, error
 	if err != nil {
 		return nil, err
 	}
-	t.DownloadAll()
+	if s.tc.perTorrentCacheBudget == 0 {
+		t.DownloadAll()
+	}
 	ti, ok := s.timers[h]
 	if ok {
 		ti.timer.Reset(s.ttl)
 	} else {
+		if s.tc.perTorrentCacheBudget > 0 {
+			log.Infof("Sequential download mode enabled for infohash=%v (tight cache budget: %d bytes)", h, s.tc.perTorrentCacheBudget)
+		}
 		log.Infof("torrent added infohash=%v", h)
 		promActiveTorrentCount.Inc()
 		startTime := time.Now()
