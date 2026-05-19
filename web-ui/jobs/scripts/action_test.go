@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	claimsproto "github.com/webtor-io/claims-provider/proto"
+	ra "github.com/webtor-io/rest-api/services"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/claims"
 	"github.com/webtor-io/web-ui/services/web"
@@ -22,6 +23,45 @@ func ctxWith(rate, tier string) *web.Context {
 }
 
 func almostEqual(a, b float64) bool { return math.Abs(a-b) < 1e-6 }
+
+func TestDetachDirectVideoFallback(t *testing.T) {
+	tag := &ra.ExportTag{
+		Sources: []ra.ExportSource{
+			{Src: "https://media.example/movie~vod/hls/abc/index.m3u8", Type: "application/vnd.apple.mpegurl"},
+			{Src: "https://media.example/movie.mp4?redirect=true", Type: "video/mp4"},
+		},
+	}
+
+	fallbackURL, fallbackType := detachDirectVideoFallback(tag)
+	if fallbackURL != "https://media.example/movie.mp4?redirect=true" {
+		t.Fatalf("fallbackURL = %q", fallbackURL)
+	}
+	if fallbackType != "video/mp4" {
+		t.Fatalf("fallbackType = %q", fallbackType)
+	}
+	if len(tag.Sources) != 1 {
+		t.Fatalf("len(tag.Sources) = %d, want 1", len(tag.Sources))
+	}
+	if tag.Sources[0].Type != "application/vnd.apple.mpegurl" {
+		t.Fatalf("remaining source type = %q", tag.Sources[0].Type)
+	}
+}
+
+func TestDetachDirectVideoFallbackKeepsSingleDirectSource(t *testing.T) {
+	tag := &ra.ExportTag{
+		Sources: []ra.ExportSource{
+			{Src: "https://media.example/movie.mp4?redirect=true", Type: "video/mp4"},
+		},
+	}
+
+	fallbackURL, fallbackType := detachDirectVideoFallback(tag)
+	if fallbackURL != "" || fallbackType != "" {
+		t.Fatalf("fallback = (%q, %q), want empty", fallbackURL, fallbackType)
+	}
+	if len(tag.Sources) != 1 {
+		t.Fatalf("len(tag.Sources) = %d, want 1", len(tag.Sources))
+	}
+}
 
 func TestParseRateLimit(t *testing.T) {
 	cases := map[string]int64{

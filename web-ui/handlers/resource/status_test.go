@@ -31,7 +31,7 @@ func (m *mockStatusVaultAPI) GetResource(_ context.Context, _ string) (*vault.Re
 // --- Tests for resolveStatus ---
 
 func TestResolveStatus_Idle(t *testing.T) {
-	status := resolveStatus(nil, nil, nil)
+	status := resolveStatus(nil, nil, nil, 0)
 	if status.State != "idle" {
 		t.Errorf("expected idle, got %q", status.State)
 	}
@@ -39,7 +39,7 @@ func TestResolveStatus_Idle(t *testing.T) {
 
 func TestResolveStatus_IdleNotFunded(t *testing.T) {
 	db := &vaultModels.Resource{Funded: false, Vaulted: false}
-	status := resolveStatus(db, nil, nil)
+	status := resolveStatus(db, nil, nil, 0)
 	if status.State != "idle" {
 		t.Errorf("expected idle, got %q", status.State)
 	}
@@ -47,7 +47,7 @@ func TestResolveStatus_IdleNotFunded(t *testing.T) {
 
 func TestResolveStatus_Caching(t *testing.T) {
 	stats := &TorrentStatsData{Total: 100, Completed: 45, Seeders: 3}
-	status := resolveStatus(nil, nil, stats)
+	status := resolveStatus(nil, nil, stats, 0)
 	if status.State != "caching" {
 		t.Errorf("expected caching, got %q", status.State)
 	}
@@ -61,7 +61,7 @@ func TestResolveStatus_Caching(t *testing.T) {
 
 func TestResolveStatus_Cached(t *testing.T) {
 	stats := &TorrentStatsData{Total: 100, Completed: 100, Seeders: 5}
-	status := resolveStatus(nil, nil, stats)
+	status := resolveStatus(nil, nil, stats, 0)
 	if status.State != "cached" {
 		t.Errorf("expected cached, got %q", status.State)
 	}
@@ -70,7 +70,7 @@ func TestResolveStatus_Cached(t *testing.T) {
 func TestResolveStatus_VaultingQueued(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
 	apiRes := &vault.Resource{Status: vault.StatusQueued}
-	status := resolveStatus(db, apiRes, nil)
+	status := resolveStatus(db, apiRes, nil, 0)
 	if status.State != "vaulting" {
 		t.Errorf("expected vaulting, got %q", status.State)
 	}
@@ -82,7 +82,7 @@ func TestResolveStatus_VaultingQueued(t *testing.T) {
 func TestResolveStatus_VaultingProcessing(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
 	apiRes := &vault.Resource{Status: vault.StatusProcessing, StoredSize: 72, TotalSize: 100}
-	status := resolveStatus(db, apiRes, nil)
+	status := resolveStatus(db, apiRes, nil, 0)
 	if status.State != "vaulting" {
 		t.Errorf("expected vaulting, got %q", status.State)
 	}
@@ -96,7 +96,7 @@ func TestResolveStatus_VaultingProcessing(t *testing.T) {
 
 func TestResolveStatus_Vaulted_DB(t *testing.T) {
 	db := &vaultModels.Resource{Vaulted: true}
-	status := resolveStatus(db, nil, nil)
+	status := resolveStatus(db, nil, nil, 0)
 	if status.State != "vaulted" {
 		t.Errorf("expected vaulted, got %q", status.State)
 	}
@@ -105,7 +105,7 @@ func TestResolveStatus_Vaulted_DB(t *testing.T) {
 func TestResolveStatus_Vaulted_API(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
 	apiRes := &vault.Resource{Status: vault.StatusCompleted}
-	status := resolveStatus(db, apiRes, nil)
+	status := resolveStatus(db, apiRes, nil, 0)
 	if status.State != "vaulted" {
 		t.Errorf("expected vaulted, got %q", status.State)
 	}
@@ -114,7 +114,7 @@ func TestResolveStatus_Vaulted_API(t *testing.T) {
 func TestResolveStatus_VaultFailed(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
 	apiRes := &vault.Resource{Status: vault.StatusFailed}
-	status := resolveStatus(db, apiRes, nil)
+	status := resolveStatus(db, apiRes, nil, 0)
 	// Funded resource with failed vault should still show vaulting (system will retry)
 	if status.State != "vaulting" {
 		t.Errorf("expected vaulting for failed vault (still funded), got %q", status.State)
@@ -125,7 +125,7 @@ func TestResolveStatus_CachingAndVaulting(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
 	apiRes := &vault.Resource{Status: vault.StatusProcessing, StoredSize: 30, TotalSize: 100}
 	stats := &TorrentStatsData{Total: 100, Completed: 60, Seeders: 2, SpeedBytes: 10, RemainingBytes: 40}
-	status := resolveStatus(db, apiRes, stats)
+	status := resolveStatus(db, apiRes, stats, 10)
 	// Vaulting has higher priority than caching
 	if status.State != "vaulting" {
 		t.Errorf("expected vaulting (higher priority), got %q", status.State)
@@ -136,8 +136,8 @@ func TestResolveStatus_CachingAndVaulting(t *testing.T) {
 	if status.Seeders != 2 {
 		t.Errorf("expected seeders 2 from stats, got %v", status.Seeders)
 	}
-	if status.SpeedBytes != stats.SpeedBytes || status.RemainingBytes != stats.RemainingBytes {
-		t.Errorf("expected stats detail to be preserved on vaulting status")
+	if status.SpeedBytes != 10 || status.RemainingBytes != 70 {
+		t.Errorf("expected vault speed/remain detail, got speed=%d remaining=%d", status.SpeedBytes, status.RemainingBytes)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestResolveStatus_CachedAndVaulting(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
 	apiRes := &vault.Resource{Status: vault.StatusProcessing, StoredSize: 50, TotalSize: 100}
 	stats := &TorrentStatsData{Total: 100, Completed: 100, Seeders: 5}
-	status := resolveStatus(db, apiRes, stats)
+	status := resolveStatus(db, apiRes, stats, 0)
 	// Vaulting has higher priority than cached
 	if status.State != "vaulting" {
 		t.Errorf("expected vaulting (higher priority), got %q", status.State)
@@ -158,7 +158,7 @@ func TestResolveStatus_CachedAndVaulting(t *testing.T) {
 func TestResolveStatus_CachingAndVaulted(t *testing.T) {
 	db := &vaultModels.Resource{Vaulted: true}
 	stats := &TorrentStatsData{Total: 100, Completed: 50, Seeders: 3}
-	status := resolveStatus(db, nil, stats)
+	status := resolveStatus(db, nil, stats, 0)
 	// Vaulted has highest priority
 	if status.State != "vaulted" {
 		t.Errorf("expected vaulted (highest priority), got %q", status.State)
@@ -168,7 +168,7 @@ func TestResolveStatus_CachingAndVaulted(t *testing.T) {
 func TestResolveStatus_ZeroTotalSize(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
 	apiRes := &vault.Resource{Status: vault.StatusProcessing, StoredSize: 0, TotalSize: 0}
-	status := resolveStatus(db, apiRes, nil)
+	status := resolveStatus(db, apiRes, nil, 0)
 	if status.State != "vaulting" {
 		t.Errorf("expected vaulting, got %q", status.State)
 	}
@@ -179,7 +179,7 @@ func TestResolveStatus_ZeroTotalSize(t *testing.T) {
 
 func TestResolveStatus_FundedNoAPI(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
-	status := resolveStatus(db, nil, nil)
+	status := resolveStatus(db, nil, nil, 0)
 	if status.State != "vaulting" {
 		t.Errorf("expected vaulting (funded, no API data), got %q", status.State)
 	}
@@ -190,7 +190,7 @@ func TestResolveStatus_FundedNoAPI(t *testing.T) {
 
 func TestResolveStatus_StatsZeroTotal(t *testing.T) {
 	stats := &TorrentStatsData{Total: 0, Completed: 0, Seeders: 1}
-	status := resolveStatus(nil, nil, stats)
+	status := resolveStatus(nil, nil, stats, 0)
 	if status.State != "idle" {
 		t.Errorf("expected idle for zero total stats, got %q", status.State)
 	}
@@ -209,7 +209,7 @@ func TestPrepareInitialStatus_NoVault(t *testing.T) {
 func TestPrepareInitialStatus_DBError(t *testing.T) {
 	// When vault DB returns an error, prepareInitialStatus falls back to idle.
 	// We test resolveStatus with nil (the fallback path).
-	status := resolveStatus(nil, nil, nil)
+	status := resolveStatus(nil, nil, nil, 0)
 	if status.State != "idle" {
 		t.Errorf("expected idle on error fallback, got %q", status.State)
 	}
@@ -217,7 +217,7 @@ func TestPrepareInitialStatus_DBError(t *testing.T) {
 
 func TestPrepareInitialStatus_Vaulted(t *testing.T) {
 	db := &vaultModels.Resource{Vaulted: true}
-	status := resolveStatus(db, nil, nil)
+	status := resolveStatus(db, nil, nil, 0)
 	if status.State != "vaulted" {
 		t.Errorf("expected vaulted, got %q", status.State)
 	}
@@ -225,7 +225,7 @@ func TestPrepareInitialStatus_Vaulted(t *testing.T) {
 
 func TestPrepareInitialStatus_Funded(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
-	status := resolveStatus(db, nil, nil)
+	status := resolveStatus(db, nil, nil, 0)
 	if status.State != "vaulting" {
 		t.Errorf("expected vaulting, got %q", status.State)
 	}
