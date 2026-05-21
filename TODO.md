@@ -8,30 +8,20 @@
 
 ```mermaid
 graph TD
-    master[master] --> vps[linux-vps: Production-Ready Stable]
-    master --> admin[WebDav-Web-UI_Universal_Viewing-Admin: Access & Control]
-    master --> rd[expermintal-R&D: High Performance & 1TB Ingestion]
+    master[master] --> admin[WebDav-Web-UI_Universal_Viewing-Admin: Most Advanced Production-Ready]
+    admin --> rd[expermintal-R&D: High Performance & 1TB Ingestion]
 ```
 
-### 1. 🟢 `linux-vps` (Stable Production Branch)
-* **Goal:** A rock-solid, production-hardened release branch optimized for long-term VPS hosting.
+### 1. 🔵 `WebDav-Web-UI_Universal_Viewing-Admin` (Current Primary Branch)
+* **Goal:** The ultimate release branch. Combines the UI power of the Admin branch with the performance-hardened core of the linux-vps branch.
 * **What Worked:**
-  * **Video-Copy & Audio-Transcode Hybrid Mode:** Configured HLS stream templates to copy the original video stream directly (0% CPU, 100% video quality preservation) and dynamically encode complex multichannel audio (DTS, TrueHD) to stereo AAC on the fly. This resolved audio silence in standard web browsers like Safari and iOS without overloading the CPU.
-  * **Default AAC Encoder Switch:** Changed the audio encoder from `libfdk_aac` to standard `aac` in the `content-transcoder` configurations. This resolved microservice crashes caused by missing non-free packages in standard FFmpeg VPS builds.
+  * **Unified Engine & UI:** Successfully merged the high-performance `linux-vps` core (S3 Gateway, zero-disk-leak vaulting, optimized seeder) into the Admin branch's WebDAV and Admin UI ecosystem.
+  * **Video-Copy & Audio-Transcode Hybrid Mode:** Configured HLS stream templates to copy the original video stream directly (0% CPU, 100% video quality preservation) and dynamically encode complex multichannel audio (DTS, TrueHD) to stereo AAC on the fly.
   * **SuperTokens Caching:** Implemented in-memory LRU caching for SuperTokens `GetUserByID` calls, eliminating severe page load lags and redundant authorization queries.
-* **What Failed & What We Learned:**
-  * *Failed:* Trying to stream `.mkv` containers directly to Safari or iOS players natively.Audio got silenced, not supported if complex codec like dolby vision etc.
-  * *Failed:* Real-time 4K H.264/H.265 full video transcoding. The 4-core Ampere CPU immediately hits 100% utilization, frames drop, and the VPS locks up. **Video-Copy + Audio-Transcode is the absolute golden rule.**
+  * **Permanent Deletion & Clean Paths:** Optimized Rclone to bypass the trash bin (`--drive-use-trash=false`) and simplified storage paths to `vault/(hash)/(hash)`.
+* **Architecture:** Focuses on user-scoped administration controls and universal WebDAV client integrations without sacrificing the 1TB ingestion performance.
 
-### 2. 🔵 `WebDav-Web-UI_Universal_Viewing-Admin` (Access & Admin Control Branch)
-* **Goal:** Expand Octor's media access surface through standard WebDAV integration and build a highly responsive, premium administrative control dashboard.
-* **What Worked:**
-  * **WebDAV Client Host Views:** Successfully configured advanced WebDAV endpoints, allowing users to mount Octor's unified storage drive directly as a network disk in Windows Explorer, macOS Finder, or Infuse Player.
-  * **Universal Admin View:** Created deep analytical panels within the Web UI dashboard to track real-time server statistics (RAM/SSD usage), active player streams, active torrent seed counts, and database connection metrics.
-* **What Failed & What We Learned:**
-  * *Failed:* Running admin subservices on overlapping development ports. Solved by implementing our structured **5-Digit Port System** (REST on `8080`, Web UI on `8081`, Admin on `8086`, GRPC service ports in the `500xx` range).
-
-### 3. 🧪 `expermintal-R&D` (Ultra-Performance R&D Branch)
+### 2. 🧪 `expermintal-R&D` (Ultra-Performance R&D Branch)
 * **Goal:** Pushing performance to the theoretical limit. Reaching our benchmark of downloading and vaulting a **1TB single torrent** with exactly 0 bytes of SSD cache usage, strictly sequential FUSE writing, and bounded RAM memory usage.
 * **What Worked:**
   * **Ultra-Lightweight S3 Gateway:** Developed and compiled a custom Go `s3-gateway` binary running on port `9000` to completely bypass resource-heavy MinIO containers.
