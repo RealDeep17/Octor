@@ -129,6 +129,7 @@ func resolveVaultState(dbResource *vaultModels.Resource, apiResource *vault.Reso
 	case vault.StatusCompleted:
 		return &TorrentStatus{State: "vaulted"}
 	case vault.StatusQueued:
+		status.State = "waiting"
 		status.Progress = 0
 		return status
 	case vault.StatusFailed:

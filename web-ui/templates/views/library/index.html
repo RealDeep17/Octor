@@ -24,10 +24,10 @@
             {{ template "library/sort" (withContext $ .Data.Args) }}
           </div>
         </div>
-        <form method="get" action="{{ langPath $.Lang $.Path }}" data-async-target="#list" class="flex items-center">
-          <div class="relative flex-1">
-              <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="{{ t $.Lang "library.searchPlaceholder" }}" class="input input-sm bg-base-300 border-w-line focus:border-w-purple focus:outline-none w-full pl-8" />
-              <svg class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-w-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <form method="get" action="{{ langPath $.Lang $.Path }}" data-async-target="#list" class="flex items-center" id="library-search-form">
+          <div class="relative flex-1 isolate">
+              <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="{{ t $.Lang "library.searchPlaceholder" }}" class="input input-sm bg-base-300 border-w-line focus:border-w-purple focus:outline-none w-full pl-10" />
+              <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-w-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </div>
           <button type="submit" class="hidden">Submit</button>
         </form>
@@ -35,6 +35,14 @@
     </div>
 
     <!-- Content -->
+    <div id="library-search-empty" class="bg-base-300/50 border border-w-line rounded-2xl p-14 text-center mb-6 hidden">
+      <svg class="w-14 h-14 mx-auto text-w-muted/30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.637 10.637Z" />
+      </svg>
+      <p class="text-base font-semibold text-w-text mb-1">{{ t $.Lang "library.noTorrents" }}</p>
+      <p class="text-sm text-w-muted max-w-xs mx-auto">{{ t $.Lang "library.noTorrentsHint" }}</p>
+    </div>
+
     {{ if .Data.Items }}
       {{ template "library/list" . }}
     {{ else }}
@@ -52,4 +60,67 @@
 
   </div>
 </section>
+
+<script>
+(function() {
+    const searchForm = document.getElementById('library-search-form');
+    const searchInput = searchForm ? searchForm.querySelector('input[name="q"]') : null;
+    if (!searchInput) return;
+
+    // Prevent enter key from submitting form, keeping focus and live search intact
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+        }
+    });
+
+    searchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    const filterItems = () => {
+        const query = searchInput.value.trim().toLowerCase();
+        const items = document.querySelectorAll('.library-item');
+        const emptyState = document.getElementById('library-search-empty');
+        const contentContainer = document.getElementById('list');
+        let visibleCount = 0;
+
+        items.forEach((item) => {
+            const nameEl = item.querySelector('.font-medium, .w-card-title');
+            const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
+            const matches = nameText.includes(query);
+
+            if (matches) {
+                item.classList.remove('hidden');
+                visibleCount++;
+            } else {
+                item.classList.add('hidden');
+            }
+        });
+
+        if (emptyState) {
+            if (visibleCount === 0 && items.length > 0) {
+                emptyState.classList.remove('hidden');
+                if (contentContainer) contentContainer.classList.add('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                if (contentContainer) contentContainer.classList.remove('hidden');
+            }
+        }
+    };
+
+    searchInput.addEventListener('input', filterItems);
+
+    if (searchInput.value) {
+        filterItems();
+    }
+
+    const contentContainer = document.getElementById('list');
+    if (contentContainer) {
+        const observer = new MutationObserver(filterItems);
+        observer.observe(contentContainer, { childList: true, subtree: true });
+    }
+})();
+</script>
 {{ end }}

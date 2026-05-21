@@ -39,7 +39,7 @@ func (h *Handler) index(c *gin.Context) {
 		Args: &shared.IndexArgs{
 			Query: q,
 		},
-		Pledges:               filterPledges(buildPledgeDisplay(enriched, h.vault.GetExpirePeriod()), q),
+		Pledges:               buildPledgeDisplay(enriched, h.vault.GetExpirePeriod()),
 		Stats:                 stats,
 		FreezePeriod:          h.vault.GetFreezePeriod(),
 		ExpirePeriod:          h.vault.GetExpirePeriod(),

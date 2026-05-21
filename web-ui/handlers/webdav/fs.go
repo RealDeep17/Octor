@@ -12,6 +12,7 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 	td := &TorrentDirectory{
 		api: sapi,
 	}
+	// personalChildren defines the standard folders for a regular user
 	personalChildren := map[string]webdav.FileSystem{
 		"torrents": &TorrentLibraryDirectory{
 			pg:   pg,
@@ -34,47 +35,50 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 			pg:               pg,
 		},
 	}
+
 	var root webdav.FileSystem
 	if admin != nil {
-		root = &RootDirectory{
-			Admin: admin,
-			Children: map[string]webdav.FileSystem{
-				"admin": &RootDirectory{
-					Children: map[string]webdav.FileSystem{
-						"my": &RootDirectory{Children: personalChildren},
-						"system": &RootDirectory{
-							Children: map[string]webdav.FileSystem{
-								"torrents": &TorrentLibraryDirectory{pg: pg, api: sapi, jobs: jobs, AllUsers: true},
-								"all": &ContentDirectory{
-									Library:          &AllUsersLibrary{},
-									TorrentDirectory: td,
-									pg:               pg,
-									AllUsers:         true,
-								},
-								"movies": &ContentDirectory{
-									Library:          &AllUsersMovieLibrary{},
-									TorrentDirectory: td,
-									pg:               pg,
-									AllUsers:         true,
-								},
-								"tvseries": &ContentDirectory{
-									Library:          &AllUsersSeriesLibrary{},
-									TorrentDirectory: td,
-									pg:               pg,
-									AllUsers:         true,
-								},
-							},
-						},
-						"users": &AdminUsersDirectory{pg: pg, api: sapi, jobs: jobs},
+		// Admin Root: see everything as folders at the top level
+		// We use separate maps to avoid recursion
+		adminChildren := map[string]webdav.FileSystem{
+			"my": &RootDirectory{Children: personalChildren},
+			"system": &RootDirectory{
+				Children: map[string]webdav.FileSystem{
+					"torrents": &TorrentLibraryDirectory{pg: pg, api: sapi, jobs: jobs, AllUsers: true},
+					"all": &ContentDirectory{
+						Library:          &AllUsersLibrary{},
+						TorrentDirectory: td,
+						pg:               pg,
+						AllUsers:         true,
+					},
+					"movies": &ContentDirectory{
+						Library:          &AllUsersMovieLibrary{},
+						TorrentDirectory: td,
+						pg:               pg,
+						AllUsers:         true,
+					},
+					"tvseries": &ContentDirectory{
+						Library:          &AllUsersSeriesLibrary{},
+						TorrentDirectory: td,
+						pg:               pg,
+						AllUsers:         true,
 					},
 				},
 			},
+			"users": &AdminUsersDirectory{pg: pg, api: sapi, jobs: jobs},
+			"drive": &LocalDirectory{Root: "/srv/octor/infra-data/drive-mount-vfs"},
+		}
+		root = &RootDirectory{
+			Admin:    admin,
+			Children: adminChildren,
 		}
 	} else {
+		// User Root: see only their personal folders
 		root = &RootDirectory{
 			Children: personalChildren,
 		}
 	}
+
 	return &DebugDirectory{
 		Inner: &PrefixDirectory{
 			Separator: sep,

@@ -25,15 +25,17 @@
             </a>
           </div>
           <div class="flex gap-1.5 sm:gap-2 sm:ml-auto">
-            <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-purple/30 hover:text-w-purpleL" href="{{ langPath $.Lang "/admin/status" }}" data-async-target="main">Status</a>
+            <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-purple/30 hover:text-w-purpleL" href="{{ langPath $.Lang "/admin/library" }}" data-async-target="main">Library</a>
             <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-pink/30 hover:text-w-pinkL" href="{{ langPath $.Lang "/admin/vault" }}{{ if .Data.SelectedUser }}?user={{ .Data.SelectedUser }}{{ end }}" data-async-target="main">Vault</a>
+            <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-cyan/30 hover:text-w-cyan" href="{{ langPath $.Lang "/admin/drive" }}" data-async-target="main">Drive</a>
+            <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-purple/30 hover:text-w-purpleL" href="{{ langPath $.Lang "/admin/status" }}" data-async-target="main">Status</a>
           </div>
         </div>
         
-        <form method="get" action="{{ langPath $.Lang $.Path }}" data-async-target="main" class="flex flex-col sm:flex-row sm:items-center gap-2">
-          <div class="relative flex-1">
-              <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="Search by name..." class="input input-sm bg-base-300 border-w-line focus:border-w-purple focus:outline-none w-full pl-8" />
-              <svg class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-w-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <form method="get" action="{{ langPath $.Lang $.Path }}" data-async-target="main" class="flex flex-col sm:flex-row sm:items-center gap-2" id="admin-library-search-form">
+          <div class="relative flex-1 isolate">
+              <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="Search by name..." class="input input-sm bg-base-300 border-w-line focus:border-w-purple focus:outline-none w-full pl-10" />
+              <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-w-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </div>
           <select name="user" class="select select-sm bg-base-300 border-w-line focus:border-w-purple focus:outline-none w-full sm:w-64" onchange="this.form.requestSubmit()">
             {{ range .Data.Users }}
@@ -53,10 +55,18 @@
     </div>
 
     {{ if .Data.Items }}
+      <div id="admin-library-search-empty" class="bg-base-300/50 border border-w-line rounded-2xl p-14 text-center mb-6 hidden">
+        <svg class="w-14 h-14 mx-auto text-w-muted/30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.637 10.637Z" />
+        </svg>
+        <p class="text-base font-semibold text-w-text mb-1">No matching items</p>
+        <p class="text-sm text-w-muted max-w-xs mx-auto">Try checking your spelling or search for another term.</p>
+      </div>
+
       {{ if eq .Data.Args.Section "torrents" }}
       <div class="bg-base-200/50 rounded-xl divide-y divide-w-line">
         {{ range .Data.Items }}
-        <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="flex items-center gap-3 px-4 py-3 group hover:bg-base-300/50 transition-colors first:rounded-t-xl last:rounded-b-xl">
+        <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="admin-library-item flex items-center gap-3 px-4 py-3 group hover:bg-base-300/50 transition-colors first:rounded-t-xl last:rounded-b-xl">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-w-muted/50 group-hover:text-w-purpleL shrink-0 transition-colors"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
           <div class="flex-1 min-w-0">
             <div class="font-medium text-sm line-clamp-2 group-hover:text-w-purpleL transition-colors">{{ if .Torrent }}{{ .Torrent.Name }}{{ else }}{{ .Name }}{{ end }}</div>
@@ -80,7 +90,7 @@
       {{ else }}
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {{ range .Data.Items }}
-        <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="group flex">
+        <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="admin-library-item group flex">
           <div class="w-card-frame">
             <figure class="aspect-[2/3] overflow-hidden relative">
               {{ if .Content | hasPoster }}
@@ -130,4 +140,66 @@
     {{ end }}
   </div>
 </section>
+
+<script>
+(function() {
+    const searchForm = document.getElementById('admin-library-search-form');
+    const searchInput = searchForm ? searchForm.querySelector('input[name="q"]') : null;
+    if (!searchInput) return;
+
+    // Prevent enter key from submitting form, keeping focus and live search intact
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+        }
+    });
+
+    const filterItems = () => {
+        const query = searchInput.value.trim().toLowerCase();
+        const items = document.querySelectorAll('.admin-library-item');
+        const emptyState = document.getElementById('admin-library-search-empty');
+        
+        const torrentContainer = document.querySelector('.bg-base-200\\/50.rounded-xl.divide-y.divide-w-line');
+        const cardContainer = document.querySelector('.grid.grid-cols-2.sm\\:grid-cols-3.md\\:grid-cols-4.gap-4');
+        const activeContainer = torrentContainer || cardContainer;
+        
+        let visibleCount = 0;
+
+        items.forEach((item) => {
+            const nameEl = item.querySelector('.font-medium, .w-card-title');
+            const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
+            const matches = nameText.includes(query);
+
+            if (matches) {
+                item.classList.remove('hidden');
+                visibleCount++;
+            } else {
+                item.classList.add('hidden');
+            }
+        });
+
+        if (emptyState) {
+            if (visibleCount === 0 && items.length > 0) {
+                emptyState.classList.remove('hidden');
+                if (activeContainer) activeContainer.classList.add('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                if (activeContainer) activeContainer.classList.remove('hidden');
+            }
+        }
+    };
+
+    searchInput.addEventListener('input', filterItems);
+
+    if (searchInput.value) {
+        filterItems();
+    }
+
+    const observer = new MutationObserver(filterItems);
+    const observeTarget = document.querySelector('.bg-base-200\\/50.rounded-xl.divide-y.divide-w-line, .grid.grid-cols-2.sm\\:grid-cols-3.md\\:grid-cols-4.gap-4');
+    if (observeTarget) {
+        observer.observe(observeTarget.parentNode, { childList: true, subtree: true });
+    }
+})();
+</script>
 {{ end }}

@@ -295,6 +295,7 @@
     "resource.status.cached": "В кэше",
     "resource.status.vaulting": "Сохраняется",
     "resource.status.vaulted": "В Vault",
+    "resource.status.waiting": "В очереди",
     "resource.preview": "Просмотр",
     "vault.supporting": "Сохранено в Vault",
     "vault.keepAvailable": "Сохранить в Vault",

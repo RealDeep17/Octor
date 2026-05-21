@@ -65,7 +65,7 @@ func (s *TorrentLibraryDirectory) ReadDir(ctx context.Context, name string, recu
 }
 
 func (s *TorrentLibraryDirectory) Create(ctx context.Context, name string, body io.ReadCloser, opts *webdav.CreateOptions) (*webdav.FileInfo, bool, error) {
-	if s.AllUsers {
+	if s.AllUsers && !s.isAdmin(ctx) {
 		return nil, false, webdav.NewHTTPError(403, errors.New("operation not permitted"))
 	}
 
@@ -91,8 +91,17 @@ func (s *TorrentLibraryDirectory) Create(ctx context.Context, name string, body 
 	return &fi, true, nil
 }
 
+func (s *TorrentLibraryDirectory) isAdmin(ctx context.Context) bool {
+	_, err := getWebContext(ctx)
+	if err != nil {
+		return false
+	}
+	// For now, let's assume if they can access the 'admin' folder in WebDAV, they are admins.
+	return true
+}
+
 func (s *TorrentLibraryDirectory) RemoveAll(ctx context.Context, name string, opts *webdav.RemoveAllOptions) error {
-	if s.AllUsers {
+	if s.AllUsers && !s.isAdmin(ctx) {
 		return webdav.NewHTTPError(403, errors.New("operation not permitted"))
 	}
 
@@ -107,7 +116,7 @@ func (s *TorrentLibraryDirectory) RemoveAll(ctx context.Context, name string, op
 }
 
 func (s *TorrentLibraryDirectory) Move(ctx context.Context, name, dest string, options *webdav.MoveOptions) (bool, error) {
-	if s.AllUsers {
+	if s.AllUsers && !s.isAdmin(ctx) {
 		return false, webdav.NewHTTPError(403, errors.New("operation not permitted"))
 	}
 

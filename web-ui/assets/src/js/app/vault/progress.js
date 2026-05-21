@@ -6,6 +6,7 @@ const TINTS = {
     caching:  'rgba(0, 206, 201, 0.10)',
     cached:   'rgba(0, 206, 201, 0.06)',
     vaulting: 'rgba(108, 92, 231, 0.12)',
+    waiting:  'rgba(108, 92, 231, 0.06)',
     vaulted:  'rgba(34, 197, 94, 0.08)',
     idle:     'rgba(0, 206, 201, 0.06)',
 };
@@ -34,6 +35,10 @@ const BADGE_CONFIG = {
         // no leading icon: the row gradient + first-cell pulse already signal progress
         classes: 'badge badge-sm bg-w-purple/10 border-w-purple/30 text-w-purpleL',
         icon: '',
+    },
+    waiting: {
+        classes: 'badge badge-sm bg-base-200/50 border-w-line/30 text-w-muted gap-1.5',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 animate-pulse"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>',
     },
     vaulted: {
         // status column = torrent state only; frozen-ness lives on the VP cell
@@ -68,6 +73,7 @@ function applyRowFill(row, status) {
         case 'cached':
             pct = 100;
             break;
+        case 'waiting':
         case 'vaulted':
         default:
             pct = 0;
@@ -135,7 +141,10 @@ function renderBadge(status, savedLabel) {
     const config = BADGE_CONFIG[status.state] || BADGE_CONFIG.idle;
     // For the vaulted state we override the server label ('В Vault'/'Vaulted') with
     // the vault-page label ('Сохранён'/'Saved') passed via data-vault-saved-label.
-    const label = (status.state === 'vaulted' && savedLabel) ? savedLabel : (status.label || '');
+    let label = (status.state === 'vaulted' && savedLabel) ? savedLabel : (status.label || '');
+    if ((status.state === 'vaulting' || status.state === 'caching') && status.progress > 0) {
+        label = `${label} ${Math.round(status.progress)}%`;
+    }
     // status.label is a server-translated i18n string (closed set of state keys);
     // safe to interpolate as HTML.
     const inner = [config.icon, label].filter(Boolean).join(' ');
@@ -144,7 +153,7 @@ function renderBadge(status, savedLabel) {
 
 function attachRow(row) {
     const resourceId = row.dataset.resourceId;
-    const csrf = row.dataset.csrf;
+    const csrf = row.dataset.csrf || window._CSRF;
     if (!resourceId || !csrf) return null;
 
     const savedLabel = row.dataset.vaultSavedLabel || '';
@@ -249,6 +258,54 @@ function formatETA(seconds) {
 
 av(async function () {
     const root = this;
+
+    // Bind interactive client-side search filtering
+    const searchInput = root.querySelector('#vault-search-form input[name="q"]');
+    const searchForm = root.querySelector('#vault-search-form');
+    const items = root.querySelectorAll('.vault-item');
+    const emptyState = root.querySelector('#vault-search-empty');
+
+    if (searchInput) {
+        const filterItems = () => {
+            const query = searchInput.value.trim().toLowerCase();
+            let visibleCount = 0;
+
+            items.forEach((item) => {
+                const titleLink = item.querySelector('a[data-async-target="main"], .font-medium');
+                const titleText = titleLink ? titleLink.textContent.trim().toLowerCase() : '';
+                const matches = titleText.includes(query);
+
+                if (matches) {
+                    item.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    item.classList.add('hidden');
+                }
+            });
+
+            if (emptyState) {
+                if (visibleCount === 0 && items.length > 0) {
+                    emptyState.classList.remove('hidden');
+                } else {
+                    emptyState.classList.add('hidden');
+                }
+            }
+        };
+
+        searchInput.addEventListener('input', filterItems);
+
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+            }
+        });
+
+        // Trigger filter immediately on load in case search term was pre-populated by Go template
+        if (searchInput.value) {
+            filterItems();
+        }
+    }
+
     const rows = root.querySelectorAll('[data-vault-progress]');
     if (!rows.length) return;
 

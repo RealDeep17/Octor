@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -20,6 +21,7 @@ import (
 	"github.com/webtor-io/web-ui/models"
 	vaultModels "github.com/webtor-io/web-ui/models/vault"
 	adminsvc "github.com/webtor-io/web-ui/services/admin"
+	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/enrich"
 	"github.com/webtor-io/web-ui/services/i18n"
@@ -34,6 +36,7 @@ type Handler struct {
 	vault    *vault.Vault
 	enricher *enrich.Enricher
 	admin    *adminsvc.Admin
+	api      *api.Api
 }
 
 type UserOption struct {
@@ -85,6 +88,19 @@ func (i AdminVideoItem) OwnerTitle() string {
 	return strings.Join(i.OwnerEmails, ", ")
 }
 
+type AdminPledgeDisplay struct {
+	vaultModels.Pledge
+	WorkerStatus *vault.Resource
+	SeedCount    int
+}
+
+func (a AdminPledgeDisplay) ShowProgress() bool {
+	return a.Resource != nil &&
+		a.Resource.Funded &&
+		!a.Resource.Vaulted &&
+		!a.Resource.Expired
+}
+
 type LibraryData struct {
 	Args         *shared.IndexArgs
 	Users        []UserOption
@@ -99,16 +115,17 @@ type VaultData struct {
 	Args         *shared.IndexArgs
 	Users        []UserOption
 	SelectedUser string
-	Pledges      []vaultModels.Pledge
+	Pledges      []AdminPledgeDisplay
 }
 
-func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, v *vault.Vault, en *enrich.Enricher, admin *adminsvc.Admin) {
+func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, v *vault.Vault, en *enrich.Enricher, admin *adminsvc.Admin, sapi *api.Api) {
 	h := &Handler{
 		tb:       tm.MustRegisterViews("admin/*").WithLayout("main"),
 		pg:       pg,
 		vault:    v,
 		enricher: en,
 		admin:    admin,
+		api:      sapi,
 	}
 	gr := r.Group("/admin")
 	gr.Use(admin.Require())
@@ -119,6 +136,102 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 	gr.GET("/vault", h.vaultIndex)
 	gr.POST("/vault/remove", h.removePledge)
 	gr.GET("/status", h.status)
+	gr.GET("/drive", h.driveIndex)
+	gr.GET("/drive/*path", h.driveIndex)
+}
+
+type DriveItem struct {
+	Name    string
+	Path    string
+	Size    int64
+	IsDir   bool
+	ModTime time.Time
+}
+
+type DriveData struct {
+	Args        *shared.IndexArgs
+	Path        string
+	ParentPath  string
+	Items       []DriveItem
+	Breadcrumbs []struct {
+		Name string
+		Path string
+	}
+}
+
+func (h *Handler) driveIndex(c *gin.Context) {
+	root := "/srv/octor/infra-data/drive-mount-vfs"
+	path := c.Param("path")
+	fullPath := filepath.Join(root, path)
+
+	// Security check: ensure path is within root
+	if !strings.HasPrefix(fullPath, root) {
+		c.Status(http.StatusForbidden)
+		return
+	}
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.Status(http.StatusNotFound)
+		} else {
+			_ = c.AbortWithError(http.StatusInternalServerError, err)
+		}
+		return
+	}
+
+	var items []DriveItem
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		items = append(items, DriveItem{
+			Name:    entry.Name(),
+			Path:    filepath.Join(path, entry.Name()),
+			Size:    info.Size(),
+			IsDir:   entry.IsDir(),
+			ModTime: info.ModTime(),
+		})
+	}
+
+	// Breadcrumbs
+	var bc []struct {
+		Name string
+		Path string
+	}
+	bc = append(bc, struct {
+		Name string
+		Path string
+	}{Name: "Root", Path: ""})
+	
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	curr := ""
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		curr = filepath.Join(curr, p)
+		bc = append(bc, struct {
+			Name string
+			Path string
+		}{Name: p, Path: curr})
+	}
+
+	parent := ""
+	if path != "" && path != "/" {
+		parent = filepath.Dir(strings.TrimSuffix(path, "/"))
+		if parent == "." {
+			parent = ""
+		}
+	}
+
+	h.tb.Build("admin/drive").HTML(http.StatusOK, web.NewContext(c).WithData(&DriveData{
+		Path:        path,
+		ParentPath:  parent,
+		Items:       items,
+		Breadcrumbs: bc,
+	}))
 }
 
 func (h *Handler) removePledge(c *gin.Context) {
@@ -761,6 +874,22 @@ func (h *Handler) vaultIndex(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to load admin vault"))
 		return
 	}
+
+	enrichedPledges := make([]AdminPledgeDisplay, 0, len(pledges))
+	for _, p := range pledges {
+		item := AdminPledgeDisplay{Pledge: p}
+		// Fetch worker status and seeds for active/fundable resources
+		if p.Resource != nil && p.Resource.Funded && !p.Resource.Vaulted && !p.Resource.Expired {
+			status, err := h.vault.GetVaultAPIResource(ctx, p.ResourceID)
+			if err == nil && status != nil {
+				item.WorkerStatus = status
+			}
+			// Attempt one-shot seed count fetch
+			item.SeedCount = h.getLiveSeeds(ctx, c, p.ResourceID)
+		}
+		enrichedPledges = append(enrichedPledges, item)
+	}
+
 	users, err := h.loadUsers(ctx, db, selected)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
@@ -772,6 +901,37 @@ func (h *Handler) vaultIndex(c *gin.Context) {
 		},
 		Users:        users,
 		SelectedUser: selected,
-		Pledges:      pledges,
+		Pledges:      enrichedPledges,
 	}))
+}
+
+func (h *Handler) getLiveSeeds(ctx context.Context, c *gin.Context, resourceID string) int {
+	wcc := web.NewContext(c)
+	er, err := h.api.ExportResourceContent(ctx, wcc.ApiClaims, resourceID, resourceID, "")
+	if err != nil {
+		return 0
+	}
+	statsURL, ok := er.ExportItems["stats"]
+	if !ok || statsURL.URL == "" {
+		return 0
+	}
+	
+	// Create a shorter context for the SSE peek
+	shortCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	
+	ch, err := h.api.Stats(shortCtx, statsURL.URL)
+	if err != nil {
+		return 0
+	}
+	
+	select {
+	case event, ok := <-ch:
+		if ok {
+			return event.Peers
+		}
+	case <-shortCtx.Done():
+		return 0
+	}
+	return 0
 }

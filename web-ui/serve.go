@@ -340,7 +340,7 @@ func serve(c *cli.Context) error {
 	}
 
 	// Setting AdminHandler
-	ha.RegisterHandler(r, tm, pg, v, en, adminSvc)
+	ha.RegisterHandler(r, tm, pg, v, en, adminSvc, sapi)
 
 	// Setting ResourceHandler
 	wr.RegisterHandler(c, r, tm, sapi, jobs, pg, v, en)

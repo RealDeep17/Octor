@@ -16,6 +16,7 @@
         <div class="flex gap-2">
             <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-purple/30 hover:text-w-purpleL" href="{{ langPath $.Lang "/admin/library" }}" data-async-target="main">Library</a>
             <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-pink/30 hover:text-w-pinkL" href="{{ langPath $.Lang "/admin/vault" }}" data-async-target="main">Vault</a>
+            <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-cyan/30 hover:text-w-cyan" href="{{ langPath $.Lang "/admin/drive" }}" data-async-target="main">Drive</a>
             <a class="btn btn-sm bg-w-purple/15 border-w-purple/30 text-w-purpleL" href="{{ langPath $.Lang "/admin/status" }}" data-async-target="main">Status</a>
         </div>
     </div>
@@ -55,7 +56,7 @@
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-sm font-semibold uppercase tracking-wider text-w-muted">Storage (SSD)</h3>
           <svg class="w-5 h-5 text-w-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 012 v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2m16 0h-2M4 13h2m7 4h.01"/>
+            <path d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2m16 0h-2M4 13h2m7 4h.01"/>
           </svg>
         </div>
         <div class="text-3xl font-bold text-w-sub mb-2">{{ .Data.DiskUsed | bitsForHumans }}</div>

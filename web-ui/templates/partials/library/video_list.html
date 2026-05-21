@@ -4,7 +4,7 @@
      and docs/uikit.html section 7 "Video Card". */}}
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
     {{ range $.Data }}
-    <a href="{{ langPath $.Ctx.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="group flex">
+    <a href="{{ langPath $.Ctx.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="library-item group flex">
         <div class="w-card-frame {{ if .UserWatched }}is-watched{{ end }}">
             <figure class="aspect-[2/3] overflow-hidden relative">
                 {{ if . | hasPoster }}
