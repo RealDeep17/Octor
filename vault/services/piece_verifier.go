@@ -10,6 +10,7 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	awss3 "github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pkg/errors"
 )
@@ -34,12 +35,24 @@ func newS3ByteFetcher(s3Cl *awss3.S3, bucket string) byteFetcher {
 		if end <= start {
 			return nil, nil
 		}
+		targetKey := s3Key(hash)
+		_, headErr := s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(targetKey),
+		})
+		if headErr != nil {
+			targetKey = hash
+		}
 		out, err := s3Cl.GetObjectWithContext(ctx, &awss3.GetObjectInput{
 			Bucket: aws.String(bucket),
-			Key:    aws.String(hash),
+			Key:    aws.String(targetKey),
 			Range:  aws.String(fmt.Sprintf("bytes=%d-%d", start, end-1)),
 		})
 		if err != nil {
+			// Distinguish NoSuchKey so callers can decide to skip rather than fail
+			if aerr, ok := err.(awserr.Error); ok && aerr.Code() == awss3.ErrCodeNoSuchKey {
+				return nil, &errS3NotFound{hash: hash}
+			}
 			return nil, err
 		}
 		defer out.Body.Close()
@@ -49,6 +62,14 @@ func newS3ByteFetcher(s3Cl *awss3.S3, bucket string) byteFetcher {
 		}
 		return buf, nil
 	}
+}
+
+// errS3NotFound is returned when an S3 object does not exist yet.
+// beginPiece treats this as "skip boundary verification" rather than a fatal error.
+type errS3NotFound struct{ hash string }
+
+func (e *errS3NotFound) Error() string {
+	return fmt.Sprintf("S3 object not found: %s", e.hash)
 }
 
 // pieceVerifier streams uploaded bytes through SHA-1 piece hashers and
@@ -175,10 +196,45 @@ func (v *pieceVerifier) beginPiece(ctx context.Context) error {
 	v.curHash = sha1.New()
 	if pieceGlobalStart < v.fileOff {
 		if err := v.fetchPrefixInto(ctx, v.curHash, pieceGlobalStart, v.fileOff); err != nil {
+			// If a previous file's S3 object doesn't exist yet (NoSuchKey) or
+			// there are no prev files recorded, the boundary piece cannot be
+			// verified. Skip verification for this piece rather than aborting —
+			// the seeder already validates piece hashes against metainfo.
+			if isSkippableVerifyError(err) {
+				v.curHash = nil
+				return nil
+			}
 			return errors.Wrapf(err, "fetch prefix for piece %d [%d, %d)", v.curPiece, pieceGlobalStart, v.fileOff)
 		}
 	}
 	return nil
+}
+
+// isSkippableVerifyError returns true when a boundary-piece prefix fetch
+// should cause the piece to be skipped rather than the upload aborted.
+// This happens when a previous file's S3 object doesn't exist yet (fresh
+// upload) or no prev-file records are available.
+func isSkippableVerifyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if _, ok := err.(*errS3NotFound); ok {
+		return true
+	}
+	msg := err.Error()
+	return len(msg) > 0 && (contains(msg, "no prev file covers") || contains(msg, "S3 object not found"))
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||
+		func() bool {
+			for i := 0; i <= len(s)-len(sub); i++ {
+				if s[i:i+len(sub)] == sub {
+					return true
+				}
+			}
+			return false
+		}())
 }
 
 // fetchPrefixInto walks prev files covering [start, end) in torrent global

@@ -2,7 +2,12 @@ package vault
 
 import (
 	"context"
+	"math"
 	"net/http"
+	"os/exec"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-pg/pg/v10"
@@ -23,6 +28,9 @@ const (
 	VaultResourceAbandonedExpirePeriodFlag = "vault-resource-abandoned-expire-period"
 	VaultResourceTransferTimeoutPeriodFlag = "vault-resource-transfer-timeout-period"
 	VaultStoragePathFlag                   = "vault-storage-path"
+	VaultVirtualFreeSpaceGBFlag            = "vault-virtual-free-space-gb"
+	VaultRcloneRemoteFlag                  = "vault-rclone-remote"
+	VaultRcloneConfigFlag                  = "vault-rclone-config"
 )
 
 func RegisterFlags(f []cli.Flag) []cli.Flag {
@@ -57,6 +65,24 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 			Value:  ".",
 			EnvVar: "VAULT_STORAGE_PATH",
 		},
+		cli.Float64Flag{
+			Name:   VaultVirtualFreeSpaceGBFlag,
+			Usage:  "override free space display with a fixed GB value (e.g. for S3/GDrive backends)",
+			Value:  0,
+			EnvVar: "VAULT_VIRTUAL_FREE_SPACE_GB",
+		},
+		cli.StringFlag{
+			Name:   VaultRcloneRemoteFlag,
+			Usage:  "rclone remote to query for free space (e.g. ALPHA_UNION:); enables live space detection",
+			Value:  "",
+			EnvVar: "VAULT_RCLONE_REMOTE",
+		},
+		cli.StringFlag{
+			Name:   VaultRcloneConfigFlag,
+			Usage:  "path to rclone config file",
+			Value:  "",
+			EnvVar: "VAULT_RCLONE_CONFIG",
+		},
 	)
 }
 
@@ -70,6 +96,10 @@ type Vault struct {
 	expirePeriod          time.Duration
 	transferTimeoutPeriod time.Duration
 	storagePath           string
+	virtualFreeSpaceGB    float64
+	rcloneRemote          string
+	rcloneConfig          string
+	cachedFreeSpaceGB     atomic.Uint64 // stores math.Float64bits(GB); 0 = not yet fetched
 }
 
 func New(c *cli.Context, vaultApi *Api, cl *claims.Claims, client *http.Client, pg *cs.PG, restApi *api.Api) *Vault {
@@ -82,7 +112,7 @@ func New(c *cli.Context, vaultApi *Api, cl *claims.Claims, client *http.Client, 
 	expirePeriod := c.Duration(VaultResourceExpirePeriodFlag)
 	transferTimeoutPeriod := c.Duration(VaultResourceTransferTimeoutPeriodFlag)
 
-	return &Vault{
+	v := &Vault{
 		vaultApi:              vaultApi,
 		claims:                cl,
 		client:                client,
@@ -92,7 +122,14 @@ func New(c *cli.Context, vaultApi *Api, cl *claims.Claims, client *http.Client, 
 		expirePeriod:          expirePeriod,
 		transferTimeoutPeriod: transferTimeoutPeriod,
 		storagePath:           c.String(VaultStoragePathFlag),
+		virtualFreeSpaceGB:    c.Float64(VaultVirtualFreeSpaceGBFlag),
+		rcloneRemote:          c.String(VaultRcloneRemoteFlag),
+		rcloneConfig:          c.String(VaultRcloneConfigFlag),
 	}
+	if v.rcloneRemote != "" {
+		go v.runRcloneSpaceRefresher()
+	}
+	return v
 }
 
 // GetFreezePeriod returns the pledge freeze period
@@ -389,7 +426,66 @@ func (s *Vault) GetUserStats(ctx context.Context, user *auth.User) (*UserStats, 
 }
 
 func (s *Vault) getFreeSpaceGB() float64 {
+	// 1. Live rclone value (best)
+	if bits := s.cachedFreeSpaceGB.Load(); bits != 0 {
+		return math.Float64frombits(bits)
+	}
+	// 2. Hardcoded override (good fallback for known S3/GDrive backends)
+	if s.virtualFreeSpaceGB > 0 {
+		return s.virtualFreeSpaceGB
+	}
+	// 3. Local statfs (only useful for local-disk backends)
 	return getFreeSpaceGB(s.storagePath)
+}
+
+// runRcloneSpaceRefresher runs in a goroutine, refreshing cachedFreeSpaceGB
+// every 15 minutes by shelling out to `rclone about`.
+func (s *Vault) runRcloneSpaceRefresher() {
+	refresh := func() {
+		gb, err := fetchRcloneFreeSpaceGB(s.rcloneRemote, s.rcloneConfig)
+		if err != nil {
+			log.WithError(err).Warn("vault: rclone free-space fetch failed, keeping previous value")
+			return
+		}
+		s.cachedFreeSpaceGB.Store(math.Float64bits(gb))
+		log.WithField("remote", s.rcloneRemote).WithField("free_gb", gb).Info("vault: rclone free space updated")
+	}
+	refresh() // immediate first fetch
+	ticker := time.NewTicker(15 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		refresh()
+	}
+}
+
+// fetchRcloneFreeSpaceGB shells out to `rclone about` and parses the Free line.
+// Example output line: "Free:   54.969 TiB"
+func fetchRcloneFreeSpaceGB(remote, configPath string) (float64, error) {
+	args := []string{"about", remote, "--json"}
+	if configPath != "" {
+		args = append([]string{"--config", configPath}, args...)
+	}
+	out, err := exec.Command("rclone", args...).Output()
+	if err != nil {
+		return 0, errors.Wrap(err, "rclone about")
+	}
+	// Parse JSON: {"free": <bytes>}
+	s := string(out)
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "\"free\"") {
+			// "free": 60478764261376
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				valStr := strings.Trim(strings.TrimSpace(parts[1]), ",")
+				bytes, err := strconv.ParseInt(valStr, 10, 64)
+				if err == nil && bytes > 0 {
+					return float64(bytes) / (1024 * 1024 * 1024), nil // bytes → base2 GiB
+				}
+			}
+		}
+	}
+	return 0, errors.New("rclone about: could not parse free bytes from JSON output")
 }
 
 // CreatePledge creates a new pledge for a resource
@@ -764,8 +860,8 @@ func (s *Vault) putResourceToVaultAPI(ctx context.Context, tx *pg.Tx, resource *
 		return true, nil
 	}
 
-	// If resource doesn't exist in Vault, add it via PUT
-	if vaultResource == nil {
+	// If resource doesn't exist in Vault, or is in a failed/deleting/inactive status, re-add/re-queue it via PUT
+	if vaultResource == nil || (vaultResource.Status != StatusQueued && vaultResource.Status != StatusProcessing) {
 		_, err = s.vaultApi.PutResource(ctx, resource.ResourceID)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to put resource to vault api")

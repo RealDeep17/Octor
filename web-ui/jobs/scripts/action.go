@@ -226,6 +226,35 @@ func directPlayURL(downloadURL string) string {
 	return u.String()
 }
 
+func detachDirectVideoFallback(tag *ra.ExportTag) (fallbackURL, fallbackType string) {
+	if tag == nil || len(tag.Sources) < 2 {
+		return "", ""
+	}
+
+	kept := tag.Sources[:0]
+	for _, src := range tag.Sources {
+		if isDirectVideoSource(src) {
+			if fallbackURL == "" {
+				fallbackURL = src.Src
+				fallbackType = src.Type
+			}
+			continue
+		}
+		kept = append(kept, src)
+	}
+	tag.Sources = kept
+	return fallbackURL, fallbackType
+}
+
+func isDirectVideoSource(src ra.ExportSource) bool {
+	t := strings.ToLower(src.Type)
+	u := strings.ToLower(src.Src)
+	if strings.Contains(t, "mpegurl") || strings.Contains(u, ".m3u8") {
+		return false
+	}
+	return strings.HasPrefix(t, "video/")
+}
+
 func sessionBaseURL(streamURL string) (string, error) {
 	u, err := url.Parse(streamURL)
 	if err != nil {
@@ -341,6 +370,13 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 	sc.ExportTag = exportResponse.ExportItems["stream"].Tag
 	sc.Item = &exportResponse.Source
 	se := exportResponse.ExportItems["stream"]
+	if exportResponse.Source.MediaFormat == ra.Video {
+		fallbackURL, fallbackType := detachDirectVideoFallback(sc.ExportTag)
+		if fallbackURL != "" {
+			sc.DirectFallbackURL = fallbackURL
+			sc.DirectFallbackType = fallbackType
+		}
+	}
 
 	var downloadSpeed float64
 	fileSize := int(exportResponse.Source.Size)

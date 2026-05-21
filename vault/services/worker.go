@@ -36,6 +36,10 @@ const (
 	visibleReadChunk  = 64 * 1024
 )
 
+func s3Key(hash string) string {
+	return "vault/" + hash + "/" + hash
+}
+
 // Worker processes background store and delete jobs for vault resources.
 // Each worker goroutine runs an independent claim loop that acquires a
 // lease on exactly one resource at a time via an atomic UPDATE ...
@@ -45,20 +49,21 @@ const (
 // another worker can take over from wherever the previous one left off
 // (multipart upload resumes via ListPartsPages).
 type Worker struct {
-	ctx             context.Context
-	cancel          context.CancelFunc
-	pg              *cs.PG
-	s3              *cs.S3Client
-	nwrks           int
-	api             *Api
-	bucket          string
-	concur          int
-	part            int64
-	nats            *cs.NATS
-	resourceID      string
-	workerBase      string // hostname-derived prefix, suffixed with goroutine index
-	verifyIntegrity bool
-	wg              sync.WaitGroup
+	ctx                context.Context
+	cancel             context.CancelFunc
+	pg                 *cs.PG
+	s3                 *cs.S3Client
+	nwrks              int
+	api                *Api
+	bucket             string
+	concur             int
+	part               int64
+	nats               *cs.NATS
+	resourceID         string
+	workerBase         string // hostname-derived prefix, suffixed with goroutine index
+	verifyIntegrity    bool
+	maxConcurrentJobs  int
+	wg                 sync.WaitGroup
 }
 
 const (
@@ -68,6 +73,7 @@ const (
 	awsUploadPartSizeFlag    = "aws-upload-part-size"
 	resourceIDFlag           = "resource-id"
 	verifyIntegrityFlag      = "verify-integrity"
+	maxConcurrentJobsFlag    = "max-concurrent-jobs"
 )
 
 // RegisterWorkerFlags registers CLI flags for the worker service.
@@ -106,6 +112,12 @@ func RegisterWorkerFlags(f []cli.Flag) []cli.Flag {
 			Usage:  "verify each stored file against torrent piece SHA-1 hashes (default true)",
 			EnvVar: "VAULT_VERIFY_INTEGRITY",
 		},
+		cli.IntFlag{
+			Name:   maxConcurrentJobsFlag,
+			Usage:  "max number of torrents actively storing (vaulting) at once; 0 = unlimited",
+			Value:  3,
+			EnvVar: "VAULT_MAX_CONCURRENT_JOBS",
+		},
 	)
 }
 
@@ -121,20 +133,22 @@ func NewWorker(c *cli.Context, pgc *cs.PG, s3 *cs.S3Client, api *Api, nt *cs.NAT
 		host = "vault-unknown"
 	}
 	w := &Worker{
-		ctx:             ctx,
-		cancel:          cancel,
-		pg:              pgc,
-		s3:              s3,
-		nwrks:           c.Int(workerCountFlag),
-		api:             api,
-		bucket:          c.String(awsBucketFlag),
-		concur:          c.Int(awsUploadConcurrencyFlag),
-		part:            c.Int64(awsUploadPartSizeFlag),
-		nats:            nt,
-		resourceID:      c.String(resourceIDFlag),
-		workerBase:      host,
-		verifyIntegrity: c.BoolT(verifyIntegrityFlag),
+		ctx:               ctx,
+		cancel:            cancel,
+		pg:                pgc,
+		s3:                s3,
+		nwrks:             c.Int(workerCountFlag),
+		api:               api,
+		bucket:            c.String(awsBucketFlag),
+		concur:            c.Int(awsUploadConcurrencyFlag),
+		part:              c.Int64(awsUploadPartSizeFlag),
+		nats:              nt,
+		resourceID:        c.String(resourceIDFlag),
+		workerBase:        host,
+		verifyIntegrity:   c.BoolT(verifyIntegrityFlag),
+		maxConcurrentJobs: c.Int(maxConcurrentJobsFlag),
 	}
+	log.WithField("max_concurrent_jobs", w.maxConcurrentJobs).Info("Worker configured")
 	return w
 }
 
@@ -237,6 +251,32 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 	var res Resource
 	// The subquery picks one eligible row, and the outer UPDATE takes the
 	// lease and flips status. RETURNING gives us the full updated row.
+	//
+	// When maxConcurrentJobs > 0, a COUNT sub-select guards the query: if
+	// the number of resources currently in StatusStoring with a live lease
+	// is already at the limit, the subquery returns no row and tryClaim
+	// returns nil (same as an empty queue). This is evaluated inside the
+	// UPDATE statement so the check-and-claim is atomic — two workers
+	// cannot both race past the same count.
+	concurrencyGuard := ""
+	if s.maxConcurrentJobs > 0 {
+		concurrencyGuard = fmt.Sprintf(`
+		  AND (
+		    -- Only apply the cap to new store jobs, not deletions.
+		    status NOT IN (%d, %d, %d)
+		    OR (
+		      SELECT COUNT(*) FROM resource
+		      WHERE status = %d
+		        AND claim_expires_at IS NOT NULL
+		        AND claim_expires_at > now()
+		    ) < %d
+		  )`,
+			StatusQueuedForStoring, StatusStoring, StatusStoreError,
+			StatusStoring,
+			s.maxConcurrentJobs,
+		)
+	}
+
 	subquery := fmt.Sprintf(`
 		SELECT resource_id FROM resource
 		WHERE (claim_expires_at IS NULL OR claim_expires_at < now())
@@ -245,6 +285,7 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 		    OR (status IN (%d, %d))
 		    OR (status IN (%d, %d) AND now() - updated_at > interval '%d seconds')
 		  )
+		  %s
 		  %s
 		ORDER BY
 		  CASE WHEN status IN (%d, %d) THEN 0 ELSE 1 END,
@@ -255,6 +296,7 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 		StatusQueuedForStoring, StatusQueuedForDeletion,
 		StatusStoring, StatusDeleting,
 		StatusStoreError, StatusDeleteError, int(storeErrorBackoff.Seconds()),
+		concurrencyGuard,
 		s.debugResourceIDClause(),
 		StatusQueuedForStoring, StatusQueuedForDeletion,
 	)
@@ -709,6 +751,11 @@ func (s *Worker) gcFileIfUnreferenced(ctx context.Context, db *pg.DB, hash strin
 	// accruing quota. Best-effort: the 7-day S3 lifecycle rule is the
 	// ultimate backstop.
 	if f.UploadID != "" {
+		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+			Bucket:   aws.String(s.bucket),
+			Key:      aws.String(s3Key(hash)),
+			UploadId: aws.String(f.UploadID),
+		})
 		if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 			Bucket:   aws.String(s.bucket),
 			Key:      aws.String(hash),
@@ -722,6 +769,10 @@ func (s *Worker) gcFileIfUnreferenced(ctx context.Context, db *pg.DB, hash strin
 	}
 	// Delete the completed object if any. Harmless when the key does
 	// not exist (e.g. we only had an in-flight multipart).
+	_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(s3Key(hash)),
+	})
 	if _, err := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(hash),
@@ -777,6 +828,11 @@ func (s *Worker) sweepOrphanFiles(ctx context.Context, db *pg.DB) (int, error) {
 			continue
 		}
 		if f.UploadID != "" {
+			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+				Bucket:   aws.String(s.bucket),
+				Key:      aws.String(s3Key(f.Hash)),
+				UploadId: aws.String(f.UploadID),
+			})
 			if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
 				Key:      aws.String(f.Hash),
@@ -785,6 +841,10 @@ func (s *Worker) sweepOrphanFiles(ctx context.Context, db *pg.DB) (int, error) {
 				log.WithError(err).WithField("hash", f.Hash).Warn("sweep: abort multipart failed; continuing")
 			}
 		}
+		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(s3Key(f.Hash)),
+		})
 		if _, err := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(f.Hash),
@@ -863,6 +923,11 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 		// ultimate backstop, but aborting here keeps cleanup prompt.
 		s3Cl := s.s3.Get()
 		if f.UploadID != "" {
+			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+				Bucket:   aws.String(s.bucket),
+				Key:      aws.String(s3Key(rf.FileHash)),
+				UploadId: aws.String(f.UploadID),
+			})
 			if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
 				Key:      aws.String(rf.FileHash),
@@ -876,6 +941,10 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 			}
 		}
 		// No more references — delete S3 object (if configured) and file row
+		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(s3Key(rf.FileHash)),
+		})
 		_, delErr := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(rf.FileHash),
@@ -1006,8 +1075,14 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		s3Cl := s.s3.Get()
 		_, headErr := s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(existing.Hash),
+			Key:    aws.String(s3Key(existing.Hash)),
 		})
+		if headErr != nil {
+			_, headErr = s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
+				Bucket: aws.String(s.bucket),
+				Key:    aws.String(existing.Hash),
+			})
+		}
 		if headErr == nil {
 			return &existing, nil
 		}
@@ -1117,8 +1192,14 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	if err == nil && f.Status == StatusStored {
 		_, headErr := s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(hash),
+			Key:    aws.String(s3Key(hash)),
 		})
+		if headErr != nil {
+			_, headErr = s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
+				Bucket: aws.String(s.bucket),
+				Key:    aws.String(hash),
+			})
+		}
 		if headErr == nil {
 			return f, nil
 		}
@@ -1148,6 +1229,11 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		if f.UploadID != "" {
 			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
+				Key:      aws.String(s3Key(hash)),
+				UploadId: aws.String(f.UploadID),
+			})
+			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+				Bucket:   aws.String(s.bucket),
 				Key:      aws.String(hash),
 				UploadId: aws.String(f.UploadID),
 			})
@@ -1160,7 +1246,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		}
 		_, err := s3Cl.PutObjectWithContext(ctx, &awss3.PutObjectInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(hash),
+			Key:    aws.String(s3Key(hash)),
 			Body:   bytes.NewReader(nil),
 		})
 		if err != nil {
@@ -1178,6 +1264,11 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		}).Info("part size changed, restarting upload")
 		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 			Bucket:   aws.String(s.bucket),
+			Key:      aws.String(s3Key(hash)),
+			UploadId: aws.String(f.UploadID),
+		})
+		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+			Bucket:   aws.String(s.bucket),
 			Key:      aws.String(hash),
 			UploadId: aws.String(f.UploadID),
 		})
@@ -1192,7 +1283,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	if f.UploadID == "" {
 		out, err := s3Cl.CreateMultipartUploadWithContext(ctx, &awss3.CreateMultipartUploadInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(hash),
+			Key:    aws.String(s3Key(hash)),
 		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create S3 multipart upload, bucket=%s, key=%s", s.bucket, hash)
@@ -1209,7 +1300,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 
 	err = s3Cl.ListPartsPagesWithContext(ctx, &awss3.ListPartsInput{
 		Bucket:   aws.String(s.bucket),
-		Key:      aws.String(hash),
+		Key:      aws.String(s3Key(hash)),
 		UploadId: aws.String(f.UploadID),
 	}, func(out *awss3.ListPartsOutput, lastPage bool) bool {
 		mu.Lock()
@@ -1230,7 +1321,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 			// Upload expired or deleted, restart
 			out, err := s3Cl.CreateMultipartUploadWithContext(ctx, &awss3.CreateMultipartUploadInput{
 				Bucket: aws.String(s.bucket),
-				Key:    aws.String(hash),
+				Key:    aws.String(s3Key(hash)),
 			})
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to recreate S3 multipart upload after NoSuchUpload, bucket=%s, key=%s", s.bucket, hash)
@@ -1284,6 +1375,11 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 			log.WithError(err).WithField("hash", hash).Warn("verifier bootstrap failed, aborting and resetting upload state")
 			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
+				Key:      aws.String(s3Key(hash)),
+				UploadId: aws.String(f.UploadID),
+			})
+			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+				Bucket:   aws.String(s.bucket),
 				Key:      aws.String(hash),
 				UploadId: aws.String(f.UploadID),
 			})
@@ -1324,7 +1420,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 				for i := 0; i < 3; i++ {
 					upOut, err = s3Cl.UploadPartWithContext(ctx, &awss3.UploadPartInput{
 						Bucket:     aws.String(s.bucket),
-						Key:        aws.String(hash),
+						Key:        aws.String(s3Key(hash)),
 						UploadId:   aws.String(f.UploadID),
 						PartNumber: aws.Int64(pj.partNumber),
 						Body:       bytes.NewReader(pj.data),
@@ -1514,6 +1610,11 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	if uploadErr != nil {
 		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 			Bucket:   aws.String(s.bucket),
+			Key:      aws.String(s3Key(hash)),
+			UploadId: aws.String(f.UploadID),
+		})
+		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+			Bucket:   aws.String(s.bucket),
 			Key:      aws.String(hash),
 			UploadId: aws.String(f.UploadID),
 		})
@@ -1532,7 +1633,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 
 	_, err = s3Cl.CompleteMultipartUploadWithContext(ctx, &awss3.CompleteMultipartUploadInput{
 		Bucket:   aws.String(s.bucket),
-		Key:      aws.String(hash),
+		Key:      aws.String(s3Key(hash)),
 		UploadId: aws.String(f.UploadID),
 		MultipartUpload: &awss3.CompletedMultipartUpload{
 			Parts: completedParts,

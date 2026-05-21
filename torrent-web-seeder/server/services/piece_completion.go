@@ -52,9 +52,12 @@ func (s *completions) Uncomplete(index int) []string {
 	} else {
 		offset := 0
 		for _, f := range s.info.Files {
+			if f.Length == 0 {
+				continue
+			}
 			path := s.info.Name + "/" + strings.Join(f.Path, "/")
 			startPiece := offset / int(s.info.PieceLength)
-			endPiece := (offset + int(f.Length)) / int(s.info.PieceLength)
+			endPiece := (offset + int(f.Length) - 1) / int(s.info.PieceLength)
 			offset += int(f.Length)
 			if index >= startPiece && index <= endPiece {
 				if s.completedFiles[path] {
@@ -81,9 +84,12 @@ func (s *completions) IsPieceInCompletedFile(index int) bool {
 	}
 	offset := 0
 	for _, f := range s.info.Files {
+		if f.Length == 0 {
+			continue
+		}
 		path := s.info.Name + "/" + strings.Join(f.Path, "/")
 		startPiece := offset / int(s.info.PieceLength)
-		endPiece := (offset + int(f.Length)) / int(s.info.PieceLength)
+		endPiece := (offset + int(f.Length) - 1) / int(s.info.PieceLength)
 		offset += int(f.Length)
 		if index >= startPiece && index <= endPiece {
 			if s.completedFiles[path] {
@@ -115,10 +121,13 @@ func (s *completions) GetCompletedFiles() []string {
 	}
 	offset := 0
 	for _, f := range s.info.Files {
+		if f.Length == 0 {
+			continue
+		}
 		path := s.info.Name + "/" + strings.Join(f.Path, "/")
 		completed := true
 		startPiece := offset / int(s.info.PieceLength)
-		endPiece := (offset + int(f.Length)) / int(s.info.PieceLength)
+		endPiece := (offset + int(f.Length) - 1) / int(s.info.PieceLength)
 		offset += int(f.Length)
 		if !s.completed && !s.completedFiles[path] {
 			for i := startPiece; i <= endPiece; i++ {

@@ -1,9 +1,8 @@
 # Local-only top-level workspace state.
 /infra-data/
-/REFERENCE-ONLY/
 /server/
-.old
 /bin/
+/.antigravitycli/
 # OS/editor noise.
 .DS_Store
 **/.DS_Store
@@ -37,8 +36,7 @@ __pycache__/
 *.log
 *.db
 *.sqlite
-badger_data/
-badger-data/
+badger_data/ badger-data/
 
 # Ignore all root-level markdown files except core repository docs
 /*.md
@@ -46,3 +44,6 @@ badger-data/
 !/CHANGELOG.md
 !/DEVELOPMENT.md
 !/TODO.md
+
+# Scratch and disposable files
+/scratch/

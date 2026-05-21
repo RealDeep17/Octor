@@ -155,6 +155,11 @@ func RunGC(ctx context.Context, pgCl *cs.PG, s3c *cs.S3Client, bucket string, op
 		}
 
 		if f.UploadID != "" {
+			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+				Bucket:   aws.String(bucket),
+				Key:      aws.String(s3Key(f.Hash)),
+				UploadId: aws.String(f.UploadID),
+			})
 			if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(bucket),
 				Key:      aws.String(f.Hash),
@@ -166,6 +171,10 @@ func RunGC(ctx context.Context, pgCl *cs.PG, s3c *cs.S3Client, bucket string, op
 				}).Warn("gc: failed to abort multipart upload; continuing with DeleteObject")
 			}
 		}
+		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(s3Key(f.Hash)),
+		})
 		if _, err := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(f.Hash),

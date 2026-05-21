@@ -79,6 +79,11 @@ func (s *mmapClientImpl) OpenTorrent(_ context.Context, info *metainfo.Info, inf
 		cl:       s.cl,
 	}
 
+	impl := storage.TorrentImpl{
+		Piece: t.Piece,
+		Close: t.Close,
+	}
+
 	if evictionEnabled {
 		lru := NewPieceLRU(s.budget)
 		// Protect pieces belonging to completed files from eviction (first pass).
@@ -98,24 +103,16 @@ func (s *mmapClientImpl) OpenTorrent(_ context.Context, info *metainfo.Info, inf
 		t.startEvictionSweep()
 		log.Infof("eviction enabled for torrent %s (size=%d > budget=%d)",
 			infoHash.HexString(), info.TotalLength(), s.budget)
-	}
 
-	// Hint the kernel that mmap'd regions will be read sequentially (streaming).
-	// This enables aggressive readahead and proactive page reclamation after reads.
-	for _, m := range mmaps {
-		if m != nil {
-			_ = madviseSequential(m)
+		// Set Capacity to strictly enforce the budget in anacrolix.
+		// By reporting our budget as the torrent capacity, anacrolix will
+		// throttle its own in-flight data (MaxUnverifiedBytes) to stay
+		// within this limit.
+		capFn := func() (int64, bool) {
+			return s.budget, true
 		}
+		impl.Capacity = &capFn
 	}
-
-	impl := storage.TorrentImpl{
-		Piece: t.Piece,
-		Close: t.Close,
-	}
-	// Note: we intentionally do NOT set impl.Capacity here.
-	// TorrentCapacity with RemainingBudget=0 causes anacrolix to stop requesting
-	// pieces entirely, which hangs downloads. Eviction is enforced synchronously
-	// in MarkComplete and via background sweep — Capacity is not needed.
 	return impl, nil
 }
 
@@ -146,17 +143,17 @@ func (s *mmapClientImpl) Close() error {
 }
 
 type mmapTorrentStorage struct {
-	infoHash metainfo.Hash
-	span     *mmapSpan.MMapSpan
-	pc       storage.PieceCompletion
-	lru      *PieceLRU
-	info     *metainfo.Info
-	files    []*os.File  // file handles for hole-punching
-	fileLens []int64     // file lengths for piece→file mapping
-	mmaps    []mmap.MMap // raw mmap regions per file, for madvise after eviction
-	closeCh  chan struct{}
-	cl       *torrent.Client // for VerifyData on eviction
-	verifyCh chan int        // evicted piece indices queued for VerifyData
+	infoHash  metainfo.Hash
+	span      *mmapSpan.MMapSpan
+	pc        storage.PieceCompletion
+	lru       *PieceLRU
+	info      *metainfo.Info
+	files     []*os.File  // file handles for hole-punching
+	fileLens  []int64     // file lengths for piece→file mapping
+	mmaps     []mmap.MMap // raw mmap regions per file, for madvise after eviction
+	closeCh   chan struct{}
+	cl        *torrent.Client // for VerifyData on eviction
+	verifyCh  chan int        // evicted piece indices queued for VerifyData
 	// evictMu serializes piece reads against eviction. Sharded by piece
 	// index so eviction of one piece does not block reads of unrelated
 	// pieces. ReadAt takes RLock; evictPiece takes Lock — guaranteeing
@@ -264,12 +261,13 @@ func (me mmapStoragePiece) ReadAt(b []byte, off int64) (int, error) {
 	// and the piece could never be re-acquired. Result: any piece that
 	// had been evicted at least once became permanently un-redownloadable.
 	// Trust the caller to only ReadAt after seeing Completion=true.
-	mu := me.t.pieceLock(me.p.Index())
+	idx := me.p.Index()
+	mu := me.t.pieceLock(idx)
 	mu.RLock()
 	defer mu.RUnlock()
 
 	if me.t.lru != nil {
-		me.t.lru.Touch(me.p.Index())
+		me.t.lru.Touch(idx)
 	}
 	n, err := me.sectionReader.ReadAt(b, off)
 	if n > 0 && me.t.lru != nil {
@@ -400,12 +398,13 @@ func (ts *mmapTorrentStorage) evictPiece(idx int) {
 
 	mu := ts.pieceLock(idx)
 	mu.Lock()
-
 	if err := ts.pc.Set(pk, false); err != nil {
 		mu.Unlock()
 		log.WithError(err).Errorf("failed to mark piece %d incomplete during eviction", idx)
 		return
 	}
+	mu.Unlock()
+
 	ts.uncompleteAffectedFiles(idx)
 
 	for _, region := range ts.pieceFileRegions(piece) {
@@ -435,8 +434,6 @@ func (ts *mmapTorrentStorage) evictPiece(idx int) {
 	promCachePieceCount.Dec()
 	promCacheEvictions.Inc()
 
-	mu.Unlock()
-
 	log.Infof("evicted piece %d, freed %d bytes, used=%d budget=%d",
 		idx, freedBytes, ts.lru.Used(), ts.lru.budget)
 
@@ -461,9 +458,12 @@ func (ts *mmapTorrentStorage) uncompleteAffectedFiles(pieceIndex int) {
 	} else {
 		offset := 0
 		for _, f := range ts.info.Files {
+			if f.Length == 0 {
+				continue
+			}
 			path := ts.info.Name + "/" + strings.Join(f.Path, "/")
 			startPiece := offset / int(ts.info.PieceLength)
-			endPiece := (offset + int(f.Length)) / int(ts.info.PieceLength)
+			endPiece := (offset + int(f.Length) - 1) / int(ts.info.PieceLength)
 			offset += int(f.Length)
 			if pieceIndex >= startPiece && pieceIndex <= endPiece {
 				affectedFiles = append(affectedFiles, path)
