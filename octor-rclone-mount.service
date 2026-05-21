@@ -20,6 +20,7 @@ ExecStart=/usr/bin/rclone --config ${VAULT_RCLONE_CONFIG} mount ${VAULT_RCLONE_R
     --buffer-size ${RCLONE_BUFFER_SIZE} \
     --drive-chunk-size ${RCLONE_DRIVE_CHUNK_SIZE} \
     --transfers ${RCLONE_TRANSFERS} \
+    --drive-use-trash=false \
     --direct-io \
     --allow-other \
     --umask 000 --allow-non-empty

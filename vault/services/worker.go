@@ -37,7 +37,7 @@ const (
 )
 
 func s3Key(hash string) string {
-	return "vault/" + hash + "/" + hash
+	return hash + "/" + hash
 }
 
 // Worker processes background store and delete jobs for vault resources.
