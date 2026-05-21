@@ -349,7 +349,7 @@ ensure_infra_containers
 # Base layer first (backends rest-api depends on), then rest-api, then vault, then UI.
 echo "Starting Application Layer..."
 if [ "${BENCHMARK_MODE:-}" = "true" ]; then
-    echo "⚡ BENCHMARK MODE ACTIVE: Restricting startup to core services only."
+    echo "⚡ BENCHMARK MODE ACTIVE: Starting core benchmark services only."
     CORE_SERVICES=(
         "octor-torrent-store"
         "octor-magnet2torrent"
@@ -385,12 +385,15 @@ else
         "octor-claims-provider"
         "octor-ai-proxy"
         "octor-sidecar"
-        "octor-web-ui"
     )
 fi
 for svc in "${CORE_SERVICES[@]}"; do
     start_service_with_retry "$svc" 3 15
 done
+
+# Always restart web-ui last so the domain is never left with a blank page,
+# even during benchmark mode where it is excluded from CORE_SERVICES above.
+start_service_with_retry "octor-web-ui" 3 15
 
 echo "=== 7. VERIFYING SYSTEM HEALTH ==="
 # Vault's probe internally checks connectivity to rest-api.
@@ -405,10 +408,12 @@ sleep 3
 #   rest-api:  web=8080,  probe=52080
 #   vault:     web=8086,  probe=52086
 #   web-seeder:web=50054, probe=52054
+#   web-ui:    web=8082,  probe=52081
 PROBE_ORDER=(
     "http://localhost:52080/liveness" "octor-rest-api"
     "http://localhost:52086/liveness" "octor-vault"
     "http://localhost:52054/liveness" "octor-torrent-web-seeder"
+    "http://localhost:52081/liveness" "octor-web-ui"
 )
 
 ALL_HEALTHY=true

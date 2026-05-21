@@ -15,10 +15,10 @@ TELEMETRY_INTERVAL=10   # poll telemetry every 10 seconds (renamed from POLL_INT
                         # shadowing the rclone mode config var used by switch_mode.sh)
 
 MODES=(
-    "pp-perf-ram"
-    "pp-norm-ram"
     "pp-perf-ssd"
     "pp-norm-ssd"
+    "pp-perf-ram"
+    "pp-norm-ram"
     "sp-perf-ssd"
     "sp-norm-ssd"
     "sp-eco-ssd"
@@ -71,14 +71,8 @@ for MODE in "${MODES[@]}"; do
     echo "🚀 STARTING BENCHMARK FOR MODE: $MODE"
     echo "=========================================================================="
 
-    # 1. Stop ONLY Octor app-layer services (NOT docker infra containers)
-    echo "Stopping all Octor app services..."
-    sudo systemctl stop octor-torrent-web-seeder octor-vault octor-s3-gateway \
-        octor-rest-api octor-torrent-store octor-sidecar octor-torrent-http-proxy \
-        octor-rclone-mount octor-rclone-chunker octor-seeder-cache 2>/dev/null || true
-    sleep 3
-
-    # Ensure infra containers (postgres, redis, nats) are running for DB cleanup
+    # 1. Ensure infra containers are up for DB/storage cleanup
+    echo "Ensuring infra containers are running for cleanup..."
     for ctr in octor-postgres octor-redis octor-nats; do
         state=$(docker inspect -f '{{.State.Status}}' "$ctr" 2>/dev/null || echo "missing")
         if [ "$state" != "running" ]; then
@@ -96,33 +90,28 @@ for MODE in "${MODES[@]}"; do
     echo "Clearing database records for resource $RESOURCE_ID..."
     docker exec -i octor-postgres psql -U webtor -d vault -c "DELETE FROM file WHERE hash IN (SELECT file_hash FROM resource_file WHERE resource_id = '$RESOURCE_ID');" || true
     docker exec -i octor-postgres psql -U webtor -d vault -c "DELETE FROM resource WHERE resource_id = '$RESOURCE_ID';" || true
-    
-    # 3. Remote storage cleanup (direct rclone bypasses VFS overhead)
+
+    # 3. Remote storage cleanup (direct rclone bypasses VFS overhead; no app services needed)
     echo "Wiping remote vault storage (ALPHA_UNION:vault)..."
     rclone --config /home/ubuntu/.config/rclone/rclone.conf purge ALPHA_UNION:vault || true
     rclone --config /home/ubuntu/.config/rclone/rclone.conf mkdir ALPHA_UNION:vault || true
 
-    # 4. Local Metadata Cache Cleanup (BadgerDB)
-    echo "Wiping local metadata cache (badger-data)..."
-    sudo rm -rf /srv/octor/torrent-store/badger-data/* || true
-
-    # 5. Apply performance mode (this handles config, unmount, cache setup, and service start)
-    echo "Applying mode $MODE..."
+    # 4. Apply performance mode
+    # switch_mode.sh handles: stopping all services, unmounting FUSE, wiping badger cache,
+    # re-configuring env, re-mounting storage, and starting all app services (incl. web-ui).
+    echo "Applying mode $MODE via switch_mode.sh..."
     /srv/octor/switch_mode.sh "$MODE" || {
         echo "❌ Error: Failed to switch to mode $MODE"
         continue
     }
 
-    # switch_mode.sh already performed up to 5 retry rounds with service restarts
-    # for each probe URL — no need for an additional wait here.
-
-    # 6. Register magnet link to REST API
+    # 5. Register magnet link to REST API
     echo "Registering test torrent..."
     curl -s -X POST -H "Content-Type: text/plain" -d "$MAGNET" http://localhost:8080/resource/ || {
         echo "⚠️ Warning: Failed to register torrent."
     }
 
-    # 7. Wait for DHT metadata to load
+    # 6. Wait for DHT metadata to load
     echo "Waiting for torrent metadata to resolve..."
     METADATA_TIMEOUT=180
     METADATA_ELAPSED=0
@@ -146,7 +135,7 @@ for MODE in "${MODES[@]}"; do
         continue
     fi
 
-    # 8. Trigger Ingestion via Vault API
+    # 7. Trigger Ingestion via Vault API
     echo "Triggering ingestion in Vault..."
     curl -sf -X PUT "http://localhost:8086/resource/$RESOURCE_ID" || {
         echo "❌ Error: Failed to trigger Vault ingestion."
@@ -350,7 +339,7 @@ for MODE in "${MODES[@]}"; do
     echo "  SSD I/O Avg      : $ssd_io_avg MB/s (Peak: $ssd_io_peak MB/s)"
     echo "=========================================================================="
     
-    # 9. Collect diagnostics logs
+    # 8. Collect diagnostics logs
     LOG_DIR="/srv/octor/scratch/test/$MODE"
     echo "Saving diagnostic logs to $LOG_DIR..."
     mkdir -p "$LOG_DIR"
@@ -373,12 +362,7 @@ for MODE in "${MODES[@]}"; do
     # Append to markdown log
     echo "| $MODE | $speed_avg | $speed_peak | $cpu_avg | $cpu_peak | $ram_avg | $ram_peak | $ssd_io_avg | $ssd_io_peak | $total_transferred |" >> "$LOG_FILE"
 
-    # 10. Final teardown for this mode
-    echo "Teardown mode $MODE..."
-    sudo systemctl stop octor-torrent-web-seeder octor-vault octor-s3-gateway \
-        octor-rest-api octor-torrent-store octor-sidecar octor-torrent-http-proxy \
-        octor-rclone-mount octor-rclone-chunker octor-seeder-cache 2>/dev/null || true
-    sleep 10
+    echo "✅ Mode $MODE complete. switch_mode.sh will handle teardown on next iteration."
 done
 
 echo "🎉 All benchmarks completed! Results saved to $LOG_FILE"

@@ -10,7 +10,7 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/srv/octor/vault
 EnvironmentFile=/srv/octor/custom.env
-ExecStart=/srv/octor/bin/vault serve --port 8086 --pprof-port 51086 --probe-port 52086 --prom-port 53086 --webtor-rest-api-host localhost --webtor-rest-api-port 8080 --aws-endpoint ${AWS_ENDPOINT} --aws-region ${AWS_REGION} --aws-access-key-id ${AWS_ACCESS_KEY_ID} --aws-secret-access-key ${AWS_SECRET_ACCESS_KEY} --aws-bucket ${VAULT_AWS_BUCKET} --aws-no-ssl --postgres-database vault
+ExecStart=/srv/octor/bin/vault serve --port 8086 --pprof-port 51086 --probe-port 52086 --prom-port 53086 --webtor-rest-api-host localhost --webtor-rest-api-port 8080 --aws-endpoint ${AWS_ENDPOINT} --aws-region ${AWS_REGION} --aws-access-key-id ${AWS_ACCESS_KEY_ID} --aws-secret-access-key ${AWS_SECRET_ACCESS_KEY} --aws-bucket ${VAULT_AWS_BUCKET} --aws-no-ssl --max-concurrent-jobs ${VAULT_MAX_CONCURRENT_JOBS} --postgres-database vault
 Restart=always
 RestartSec=3
 
