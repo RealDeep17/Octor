@@ -194,13 +194,18 @@ func GetLibraryCounts(ctx context.Context, db *pg.DB, uID uuid.UUID) (torrents, 
 	return
 }
 
-func GetLibraryTorrentsList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType) ([]*Library, error) {
+func GetLibraryTorrentsList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType, q string) ([]*Library, error) {
 	var list []*Library
 
 	query := db.Model(&list).
 		Context(ctx).
 		Where("library.user_id = ?", uID).
 		Relation("Torrent")
+
+	if q != "" {
+		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
+			Where("t.name ILIKE ?", "%"+q+"%")
+	}
 
 	switch sort {
 	case SortTypeName:
@@ -259,7 +264,7 @@ func GetMoviesByVideoID(ctx context.Context, db *pg.DB, uID uuid.UUID, videoID s
 	return list, nil
 }
 
-func GetLibraryMovieTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType) ([]*Library, error) {
+func GetLibraryMovieTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType, q string) ([]*Library, error) {
 	var list []*Library
 
 	query := db.Model(&list).
@@ -268,6 +273,11 @@ func GetLibraryMovieTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, s
 		JoinOn("m.resource_id = library.resource_id").
 		Where("library.user_id = ?", uID).
 		Relation("Torrent")
+
+	if q != "" {
+		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
+			Where("t.name ILIKE ?", "%"+q+"%")
+	}
 
 	switch sort {
 	case SortTypeName:
@@ -286,7 +296,7 @@ func GetLibraryMovieTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, s
 	return list, nil
 }
 
-func GetLibrarySeriesTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType) ([]*Library, error) {
+func GetLibrarySeriesTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType, q string) ([]*Library, error) {
 	var list []*Library
 
 	query := db.Model(&list).
@@ -295,6 +305,11 @@ func GetLibrarySeriesTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, 
 		JoinOn("s.resource_id = library.resource_id").
 		Where("library.user_id = ?", uID).
 		Relation("Torrent")
+
+	if q != "" {
+		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
+			Where("t.name ILIKE ?", "%"+q+"%")
+	}
 
 	switch sort {
 	case SortTypeName:
@@ -316,7 +331,7 @@ func GetLibrarySeriesTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, 
 // GetLibraryMovieList loads movies in the user's library, optionally filtered
 // by watched state. watchedFilter is one of "", "unwatched", or "watched" and
 // matches against movie_status.watched column.
-func GetLibraryMovieList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType, watchedFilter string) ([]*Movie, error) {
+func GetLibraryMovieList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType, watchedFilter string, q string) ([]*Movie, error) {
 	var list []*Movie
 
 	query := db.Model(&list).
@@ -329,6 +344,10 @@ func GetLibraryMovieList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort Sor
 		JoinOn("ums.user_id = l.user_id AND ums.video_id = mmd.video_id AND ums.watched = true").
 		Where("l.user_id = ?", uID).
 		Relation("MovieMetadata")
+
+	if q != "" {
+		query.Where("mmd.title ILIKE ? OR movie.title ILIKE ?", "%"+q+"%", "%"+q+"%")
+	}
 
 	switch watchedFilter {
 	case "unwatched":
@@ -359,7 +378,7 @@ func GetLibraryMovieList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort Sor
 // GetLibrarySeriesList is the series counterpart to GetLibraryMovieList.
 // Filtering considers only series-level series_status (manual declaration
 // or auto_all_episodes); per-episode rows are not included in the filter.
-func GetLibrarySeriesList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType, watchedFilter string) ([]*Series, error) {
+func GetLibrarySeriesList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType, watchedFilter string, q string) ([]*Series, error) {
 	var list []*Series
 
 	query := db.Model(&list).
@@ -372,6 +391,10 @@ func GetLibrarySeriesList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort So
 		JoinOn("uss.user_id = l.user_id AND uss.video_id = smd.video_id AND uss.watched = true").
 		Where("l.user_id = ?", uID).
 		Relation("SeriesMetadata")
+
+	if q != "" {
+		query.Where("smd.title ILIKE ? OR series.title ILIKE ?", "%"+q+"%", "%"+q+"%")
+	}
 
 	switch watchedFilter {
 	case "unwatched":
@@ -434,12 +457,18 @@ func GetLibraryByTorrentNameAny(ctx context.Context, db *pg.DB, name string) (*L
 	return &lib, nil
 }
 
-func GetLibraryTorrentsListAll(ctx context.Context, db *pg.DB, sort SortType) ([]*Library, error) {
+func GetLibraryTorrentsListAll(ctx context.Context, db *pg.DB, sort SortType, q string) ([]*Library, error) {
 	var list []*Library
 	query := db.Model(&list).
 		Context(ctx).
 		ColumnExpr("DISTINCT ON (library.resource_id) library.*").
 		Relation("Torrent")
+
+	if q != "" {
+		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
+			Where("t.name ILIKE ?", "%"+q+"%")
+	}
+
 	applyAllUsersLibrarySort(query, sort)
 	if err := query.Select(); err != nil {
 		return nil, errors.Wrap(err, "failed to fetch all-user library list")
@@ -447,7 +476,7 @@ func GetLibraryTorrentsListAll(ctx context.Context, db *pg.DB, sort SortType) ([
 	return list, nil
 }
 
-func GetLibraryMovieTorrentListAll(ctx context.Context, db *pg.DB, sort SortType) ([]*Library, error) {
+func GetLibraryMovieTorrentListAll(ctx context.Context, db *pg.DB, sort SortType, q string) ([]*Library, error) {
 	var list []*Library
 	query := db.Model(&list).
 		Context(ctx).
@@ -455,6 +484,12 @@ func GetLibraryMovieTorrentListAll(ctx context.Context, db *pg.DB, sort SortType
 		Join("join movie as m").
 		JoinOn("m.resource_id = library.resource_id").
 		Relation("Torrent")
+
+	if q != "" {
+		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
+			Where("t.name ILIKE ?", "%"+q+"%")
+	}
+
 	applyAllUsersLibrarySort(query, sort)
 	if err := query.Select(); err != nil {
 		return nil, errors.Wrap(err, "failed to fetch all-user movie torrent list")
@@ -462,7 +497,7 @@ func GetLibraryMovieTorrentListAll(ctx context.Context, db *pg.DB, sort SortType
 	return list, nil
 }
 
-func GetLibrarySeriesTorrentListAll(ctx context.Context, db *pg.DB, sort SortType) ([]*Library, error) {
+func GetLibrarySeriesTorrentListAll(ctx context.Context, db *pg.DB, sort SortType, q string) ([]*Library, error) {
 	var list []*Library
 	query := db.Model(&list).
 		Context(ctx).
@@ -470,6 +505,12 @@ func GetLibrarySeriesTorrentListAll(ctx context.Context, db *pg.DB, sort SortTyp
 		Join("join series as s").
 		JoinOn("s.resource_id = library.resource_id").
 		Relation("Torrent")
+
+	if q != "" {
+		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
+			Where("t.name ILIKE ?", "%"+q+"%")
+	}
+
 	applyAllUsersLibrarySort(query, sort)
 	if err := query.Select(); err != nil {
 		return nil, errors.Wrap(err, "failed to fetch all-user series torrent list")

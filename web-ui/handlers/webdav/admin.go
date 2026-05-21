@@ -20,19 +20,19 @@ import (
 type AllUsersLibrary struct{}
 
 func (s *AllUsersLibrary) GetContent(ctx context.Context, db *pg.DB, _ uuid.UUID) ([]*models.Library, error) {
-	return models.GetLibraryTorrentsListAll(ctx, db, models.SortTypeName)
+	return models.GetLibraryTorrentsListAll(ctx, db, models.SortTypeName, "")
 }
 
 type AllUsersMovieLibrary struct{}
 
 func (s *AllUsersMovieLibrary) GetContent(ctx context.Context, db *pg.DB, _ uuid.UUID) ([]*models.Library, error) {
-	return models.GetLibraryMovieTorrentListAll(ctx, db, models.SortTypeName)
+	return models.GetLibraryMovieTorrentListAll(ctx, db, models.SortTypeName, "")
 }
 
 type AllUsersSeriesLibrary struct{}
 
 func (s *AllUsersSeriesLibrary) GetContent(ctx context.Context, db *pg.DB, _ uuid.UUID) ([]*models.Library, error) {
-	return models.GetLibrarySeriesTorrentListAll(ctx, db, models.SortTypeName)
+	return models.GetLibrarySeriesTorrentListAll(ctx, db, models.SortTypeName, "")
 }
 
 func NewAdminDirectory(pg *services.PG, sapi *api.Api, jobs *j.Jobs, admin *adminsvc.Admin) webdav.FileSystem {

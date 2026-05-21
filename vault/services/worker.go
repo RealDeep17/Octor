@@ -32,7 +32,7 @@ const (
 	leaseDuration     = 2 * time.Minute
 	leaseHeartbeat    = 5 * time.Second
 	claimIdleSleep    = 5 * time.Second
-	storeErrorBackoff = 30 * time.Minute
+	storeErrorBackoff = 10 * time.Minute
 	visibleReadChunk  = 64 * 1024
 )
 

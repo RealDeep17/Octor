@@ -12,7 +12,7 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 	td := &TorrentDirectory{
 		api: sapi,
 	}
-	children := map[string]webdav.FileSystem{
+	personalChildren := map[string]webdav.FileSystem{
 		"torrents": &TorrentLibraryDirectory{
 			pg:   pg,
 			api:  sapi,
@@ -33,15 +33,52 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 			TorrentDirectory: td,
 			pg:               pg,
 		},
-		"admin": NewAdminDirectory(pg, sapi, jobs, admin),
+	}
+	var root webdav.FileSystem
+	if admin != nil {
+		root = &RootDirectory{
+			Admin: admin,
+			Children: map[string]webdav.FileSystem{
+				"admin": &RootDirectory{
+					Children: map[string]webdav.FileSystem{
+						"my": &RootDirectory{Children: personalChildren},
+						"system": &RootDirectory{
+							Children: map[string]webdav.FileSystem{
+								"torrents": &TorrentLibraryDirectory{pg: pg, api: sapi, jobs: jobs, AllUsers: true},
+								"all": &ContentDirectory{
+									Library:          &AllUsersLibrary{},
+									TorrentDirectory: td,
+									pg:               pg,
+									AllUsers:         true,
+								},
+								"movies": &ContentDirectory{
+									Library:          &AllUsersMovieLibrary{},
+									TorrentDirectory: td,
+									pg:               pg,
+									AllUsers:         true,
+								},
+								"tvseries": &ContentDirectory{
+									Library:          &AllUsersSeriesLibrary{},
+									TorrentDirectory: td,
+									pg:               pg,
+									AllUsers:         true,
+								},
+							},
+						},
+						"users": &AdminUsersDirectory{pg: pg, api: sapi, jobs: jobs},
+					},
+				},
+			},
+		}
+	} else {
+		root = &RootDirectory{
+			Children: personalChildren,
+		}
 	}
 	return &DebugDirectory{
 		Inner: &PrefixDirectory{
 			Separator: sep,
-			Inner: &RootDirectory{
-				Admin:    admin,
-				Children: children,
-			},
+			Inner:     root,
 		},
 	}
 }

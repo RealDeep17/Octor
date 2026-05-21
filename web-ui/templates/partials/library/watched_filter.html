@@ -10,6 +10,9 @@
 {{ if or (eq (printf "%s" .Section) "movies") (eq (printf "%s" .Section) "series") }}
 <form action="{{ langPath $.Ctx.Lang $.Ctx.Path }}" data-async-target="#list" class="shrink-0">
     <input type="hidden" name="sort" value="{{ .Sort }}" />
+    {{ if .Query }}
+    <input type="hidden" name="q" value="{{ .Query }}" />
+    {{ end }}
     <select class="select select-sm bg-base-300 border-w-line focus:border-w-purple focus:outline-none" name="watched" onchange="this.form.requestSubmit()">
         <option value="" {{ if eq (printf "%s" .Watched) "" }}selected{{ end }}>{{ t $.Ctx.Lang "library.filterAll" }}</option>
         <option value="unwatched" {{ if eq (printf "%s" .Watched) "unwatched" }}selected{{ end }}>{{ t $.Ctx.Lang "library.filterUnwatched" }}</option>

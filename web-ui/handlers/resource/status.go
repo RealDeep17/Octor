@@ -61,17 +61,27 @@ func resolveStatus(dbResource *vaultModels.Resource, apiResource *vault.Resource
 		if stats != nil {
 			vaultState.Seeders = stats.Seeders
 		}
-		vaultState.SpeedBytes = vaultSpeedBytes
-		if vaultSpeedBytes > 0 && vaultState.RemainingBytes > 0 {
-			vaultState.ETASeconds = int64(math.Ceil(float64(vaultState.RemainingBytes) / float64(vaultSpeedBytes)))
-		} else {
+		if apiResource != nil && apiResource.Status == vault.StatusFailed {
+			vaultState.SpeedBytes = 0
 			vaultState.ETASeconds = 0
+			if apiResource.Error != "" {
+				vaultState.Detail = fmt.Sprintf("Error: %s (retrying...)", apiResource.Error)
+			} else {
+				vaultState.Detail = "Error: storage failed (retrying...)"
+			}
+		} else {
+			vaultState.SpeedBytes = vaultSpeedBytes
+			if vaultSpeedBytes > 0 && vaultState.RemainingBytes > 0 {
+				vaultState.ETASeconds = int64(math.Ceil(float64(vaultState.RemainingBytes) / float64(vaultSpeedBytes)))
+			} else {
+				vaultState.ETASeconds = 0
+			}
+			vaultState.Detail = buildStatusDetail(&TorrentStatsData{
+				SpeedBytes:     vaultState.SpeedBytes,
+				RemainingBytes: vaultState.RemainingBytes,
+				ETASeconds:     vaultState.ETASeconds,
+			})
 		}
-		vaultState.Detail = buildStatusDetail(&TorrentStatsData{
-			SpeedBytes:     vaultState.SpeedBytes,
-			RemainingBytes: vaultState.RemainingBytes,
-			ETASeconds:     vaultState.ETASeconds,
-		})
 		return vaultState
 	}
 	if cachingState.State == "cached" {
@@ -120,6 +130,13 @@ func resolveVaultState(dbResource *vaultModels.Resource, apiResource *vault.Reso
 		return &TorrentStatus{State: "vaulted"}
 	case vault.StatusQueued:
 		status.Progress = 0
+		return status
+	case vault.StatusFailed:
+		if apiResource.Error != "" {
+			status.Detail = fmt.Sprintf("Error: %s (retrying...)", apiResource.Error)
+		} else {
+			status.Detail = "Error: storage failed (retrying...)"
+		}
 		return status
 	default:
 		// Failed or unknown — still funded, system will retry

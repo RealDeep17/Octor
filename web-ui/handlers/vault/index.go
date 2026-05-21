@@ -3,9 +3,11 @@ package vault
 import (
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/webtor-io/web-ui/handlers/library/shared"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/i18n"
 	"github.com/webtor-io/web-ui/services/vault"
@@ -13,12 +15,6 @@ import (
 )
 
 // index handles HTTP request for displaying the My Vault dashboard (Level 1: HTTP interaction).
-// Anonymous visitors are redirected to /login with from=vault — the login page
-// renders a contextual info card (intro + 4 features from vault.landing.* keys)
-// driven by the from param so the click never dead-ends. Stats and pledges come
-// back from the same vault.GetUserStats call so the underlying
-// GetUserPledgesWithResources query and per-pledge IsPledgeFrozen checks run only
-// once per request.
 func (h *Handler) index(c *gin.Context) {
 	user := auth.GetUserFromContext(c)
 	if !user.HasAuth() {
@@ -38,8 +34,12 @@ func (h *Handler) index(c *gin.Context) {
 	}
 
 	ctx := web.NewContext(c)
+	q := strings.TrimSpace(c.Query("q"))
 	data := &PledgeListData{
-		Pledges:               buildPledgeDisplay(enriched, h.vault.GetExpirePeriod()),
+		Args: &shared.IndexArgs{
+			Query: q,
+		},
+		Pledges:               filterPledges(buildPledgeDisplay(enriched, h.vault.GetExpirePeriod()), q),
 		Stats:                 stats,
 		FreezePeriod:          h.vault.GetFreezePeriod(),
 		ExpirePeriod:          h.vault.GetExpirePeriod(),
@@ -50,16 +50,27 @@ func (h *Handler) index(c *gin.Context) {
 	h.tb.Build("vault/index").HTML(http.StatusOK, ctx.WithData(data))
 }
 
-// isFreeTier returns true when the user has no paid subscription. Free is the
-// default — any unknown/missing claims state is treated as free so the upsell
-// shows instead of a misleading empty Vault for users we can't classify.
-// Tier id 0 mirrors what services/claims.IsPaid uses to gate paid-only routes.
+func filterPledges(list []PledgeDisplay, q string) []PledgeDisplay {
+	if q == "" {
+		return list
+	}
+	out := make([]PledgeDisplay, 0)
+	for _, p := range list {
+		if p.Resource != nil && strings.Contains(strings.ToLower(p.Resource.Name), strings.ToLower(q)) {
+			out = append(out, p)
+		} else if strings.Contains(strings.ToLower(p.ResourceID), strings.ToLower(q)) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// isFreeTier returns true when the user has no paid subscription.
 func isFreeTier(ctx *web.Context) bool {
 	return false
 }
 
-// buildPledgeDisplay converts enriched pledges into display rows for the table
-// (Level 2: presentation logic).
+// buildPledgeDisplay converts enriched pledges into display rows for the table.
 func buildPledgeDisplay(enriched []vault.EnrichedPledge, expirePeriod time.Duration) []PledgeDisplay {
 	display := make([]PledgeDisplay, 0, len(enriched))
 	for _, e := range enriched {
@@ -71,8 +82,6 @@ func buildPledgeDisplay(enriched []vault.EnrichedPledge, expirePeriod time.Durat
 			}
 		}
 
-		// Mirror the LoadingCount predicate in services/vault.GetUserStats so the per-row
-		// live-progress UI and the dashboard "Loading" stat agree on what's loading.
 		showProgress := e.Pledge.Resource != nil &&
 			e.Pledge.Resource.Funded &&
 			!e.Pledge.Resource.Vaulted &&

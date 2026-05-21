@@ -6,7 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	cs "github.com/webtor-io/common-services"
-	"github.com/webtor-io/web-ui/jobs"
+	j "github.com/webtor-io/web-ui/jobs"
+	"github.com/webtor-io/web-ui/handlers/library/shared"
 	vaultModels "github.com/webtor-io/web-ui/models/vault"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
@@ -37,6 +38,7 @@ type PledgeDisplay struct {
 }
 
 type PledgeListData struct {
+	Args                  *shared.IndexArgs
 	Pledges               []PledgeDisplay
 	Stats                 *vault.UserStats
 	FreezePeriod          time.Duration
@@ -60,6 +62,7 @@ func RegisterHandler(r *gin.Engine, v *vault.Vault, tm *template.Manager[*web.Co
 	gr.GET("", h.index)
 	gr.POST("/add", auth.HasAuth, h.addPledge)
 	gr.POST("/remove", auth.HasAuth, h.removePledge)
+	gr.POST("/retry", auth.HasAuth, h.retryResource)
 
 	// Backwards-compat redirect: old /vault/pledge URL was renamed to /vault.
 	// 302 (not 301) so the redirect can be removed later without poisoning

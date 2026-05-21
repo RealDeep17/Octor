@@ -113,11 +113,15 @@ func TestResolveStatus_Vaulted_API(t *testing.T) {
 
 func TestResolveStatus_VaultFailed(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
-	apiRes := &vault.Resource{Status: vault.StatusFailed}
+	apiRes := &vault.Resource{Status: vault.StatusFailed, Error: "unexpected status 502"}
 	status := resolveStatus(db, apiRes, nil, 0)
 	// Funded resource with failed vault should still show vaulting (system will retry)
 	if status.State != "vaulting" {
 		t.Errorf("expected vaulting for failed vault (still funded), got %q", status.State)
+	}
+	expectedDetail := "Error: unexpected status 502 (retrying...)"
+	if status.Detail != expectedDetail {
+		t.Errorf("expected detail %q, got %q", expectedDetail, status.Detail)
 	}
 }
 

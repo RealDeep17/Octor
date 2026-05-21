@@ -981,6 +981,14 @@ func (s *Vault) RemoveResource(ctx context.Context, resourceID string) error {
 	return nil
 }
 
+// PutResource queues or retries a resource in the vault API
+func (s *Vault) PutResource(ctx context.Context, resourceID string) (*Resource, error) {
+	if s.vaultApi == nil {
+		return nil, errors.New("vault API is not configured")
+	}
+	return s.vaultApi.PutResource(ctx, resourceID)
+}
+
 // pointsEqual compares two *float64 values, treating nil as distinct from any number
 func pointsEqual(a, b *float64) bool {
 	if a == nil && b == nil {

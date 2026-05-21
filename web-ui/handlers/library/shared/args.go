@@ -16,4 +16,5 @@ type IndexArgs struct {
 	Sort    models.SortType
 	Section SectionType
 	Watched WatchedFilter
+	Query   string
 }

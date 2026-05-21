@@ -19,6 +19,7 @@ import (
 	hc "github.com/webtor-io/web-ui/handlers/common"
 	"github.com/webtor-io/web-ui/handlers/static"
 	"github.com/webtor-io/web-ui/services/abuse_store"
+	admins "github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/common"
 	"github.com/webtor-io/web-ui/services/i18n"
 
@@ -177,6 +178,7 @@ type Helper struct {
 	ah             *AssetHashes
 	useAbuseStore  bool
 	useSuperTokens bool
+	adminSvc       *admins.Admin
 }
 
 func NewHelper(c *cli.Context) *Helper {
@@ -189,7 +191,12 @@ func NewHelper(c *cli.Context) *Helper {
 		domain:         c.String(common.DomainFlag),
 		ah:             NewAssetHashes(c.String(static.AssetsPathFlag)),
 		useSuperTokens: c.String(auth.SupertokensHostFlag) != "",
+		adminSvc:       admins.New(c),
 	}
+}
+
+func (s *Helper) IsAdmin(u *auth.User) bool {
+	return s.adminSvc.IsAdminUser(u)
 }
 
 func (s *Helper) TimeBetween(from string, to string) bool {

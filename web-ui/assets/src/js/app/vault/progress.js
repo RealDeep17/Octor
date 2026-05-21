@@ -95,7 +95,43 @@ function settleVaultedIcon(row) {
     if (icon) icon.classList.remove('vault-pulse');
 }
 
+function getShortErrorName(errorStr) {
+    if (!errorStr) return 'Error';
+    let s = errorStr.replace(/^Error:\s*/i, '').replace(/\(retrying\.\.\.\)/i, '').trim();
+    if (s.includes('502')) return 'Error 502';
+    if (s.includes('503')) return 'Error 503';
+    if (s.includes('500')) return 'Error 500';
+    if (s.includes('403')) return 'Error 403';
+    if (s.includes('404')) return 'Error 404';
+    let parts = s.split(':').map(p => p.trim()).filter(Boolean);
+    if (parts.length > 0) {
+        let candidate = parts[0];
+        if (candidate.toLowerCase().includes('fetch torrent')) return 'Fetch Failed';
+        if (candidate.toLowerCase().includes('store file')) return 'Store Failed';
+        if (candidate.toLowerCase().includes('generate file hash')) return 'Hash Failed';
+        if (candidate.length > 20) return candidate.substring(0, 18) + '...';
+        return candidate.charAt(0).toUpperCase() + candidate.slice(1);
+    }
+    return 'Error';
+}
+
+function cleanErrorMessage(errorStr) {
+    if (!errorStr) return '';
+    let s = errorStr;
+    s = s.replace(/,?\s*url=https?:\/\/[^\s,]+/gi, '');
+    s = s.replace(/https?:\/\/[^\s]+/gi, '[link]');
+    s = s.replace(/\s+/g, ' ').trim();
+    return s;
+}
+
 function renderBadge(status, savedLabel) {
+    const hasError = status.detail && status.detail.startsWith('Error:');
+    if (hasError) {
+        const shortName = getShortErrorName(status.detail);
+        const classes = 'badge badge-sm bg-error/10 border-error/30 text-error gap-1.5 font-semibold';
+        const icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" /></svg>';
+        return `<span class="${classes}">${icon} ${shortName}</span>`;
+    }
     const config = BADGE_CONFIG[status.state] || BADGE_CONFIG.idle;
     // For the vaulted state we override the server label ('В Vault'/'Vaulted') with
     // the vault-page label ('Сохранён'/'Saved') passed via data-vault-saved-label.
@@ -127,6 +163,8 @@ function attachRow(row) {
         applyRowFill(row, status);
         if (badge) badge.innerHTML = renderBadge(status, savedLabel);
 
+        const retryForm = row.querySelector('[data-vault-retry-form]');
+
         // Update stats line
         const statsLine = row.querySelector('[data-vault-stats-line]');
         if (statsLine) {
@@ -134,9 +172,18 @@ function attachRow(row) {
             const sizeEl = statsLine.querySelector('[data-vault-stat-size]');
             const etaEl = statsLine.querySelector('[data-vault-stat-eta]');
             const peersEl = statsLine.querySelector('[data-vault-stat-peers]');
-
             if (status.state === 'caching' || status.state === 'vaulting') {
-                if (status.speed_bytes > 0 && speedEl) {
+                const hasError = status.detail && status.detail.startsWith('Error:');
+
+                if (retryForm) {
+                    if (hasError) {
+                        retryForm.classList.remove('hidden');
+                    } else {
+                        retryForm.classList.add('hidden');
+                    }
+                }
+
+                if (!hasError && status.speed_bytes > 0 && speedEl) {
                     speedEl.textContent = `${formatBytes(status.speed_bytes)}/s`;
                     speedEl.classList.remove('hidden');
                 } else if (speedEl) speedEl.classList.add('hidden');
@@ -146,18 +193,19 @@ function attachRow(row) {
                     sizeEl.classList.remove('hidden');
                 } else if (sizeEl) sizeEl.classList.add('hidden');
 
-                if (status.eta_seconds > 0 && etaEl) {
+                if (!hasError && status.eta_seconds > 0 && etaEl) {
                     etaEl.textContent = `ETA ${formatETA(status.eta_seconds)}`;
                     etaEl.classList.remove('hidden');
                 } else if (etaEl) etaEl.classList.add('hidden');
 
-                if (status.seeders > 0 && peersEl) {
+                if (!hasError && status.seeders > 0 && peersEl) {
                     peersEl.textContent = `${status.seeders} seed${status.seeders === 1 ? '' : 's'}`;
                     peersEl.classList.remove('hidden');
                 } else if (peersEl) peersEl.classList.add('hidden');
                 statsLine.classList.remove('hidden');
             } else {
                 statsLine.classList.add('hidden');
+                if (retryForm) retryForm.classList.add('hidden');
             }
         }
 
@@ -172,6 +220,7 @@ function attachRow(row) {
             if (statsLine) statsLine.classList.add('hidden');
             const progressBarWrap = row.querySelector('[data-vault-progress-bar-wrap]');
             if (progressBarWrap) progressBarWrap.classList.add('hidden');
+            if (retryForm) retryForm.classList.add('hidden');
             source.close();
         }
     };

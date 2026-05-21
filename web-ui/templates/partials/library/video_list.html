@@ -40,6 +40,18 @@
                     </button>
                 </form>
                 {{ end }}
+                {{/* Remove button (bottom-right) */}}
+                <form method="post" enctype="multipart/form-data"
+                      action="{{ langPath $.Ctx.Lang "/lib/remove" }}"
+                      data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
+                      onclick="event.stopPropagation()">
+                    <input type="hidden" name="resource_id" value="{{ .ResourceID }}" />
+                    <button type="submit" class="w-card-badge-ghost bottom-2 right-2 hover:text-w-pink" title="{{ t $.Ctx.Lang "library.remove" }}">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                        </svg>
+                    </button>
+                </form>
                 {{/* Rating badge (top-left) */}}
                 {{ if .UserRating }}
                 <form method="get" action="{{ langPath $.Ctx.Lang $.Ctx.Path }}"
