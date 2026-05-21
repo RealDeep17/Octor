@@ -6,15 +6,15 @@ set -euo pipefail
 ENV_FILE="/srv/octor/custom.env"
 
 # Parse configuration variables from the env file
-RAM_CACHE_ENABLED=$(grep -E '^RAM_CACHE_ENABLED=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]')
-RAM_CACHE_SIZE=$(grep -E '^RAM_CACHE_SIZE=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]')
-RAM_DATA_DIR=$(grep -E '^RAM_DATA_DIR=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]')
-SSD_DATA_DIR=$(grep -E '^SSD_DATA_DIR=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]')
-DATA_DIR=$(grep -E '^DATA_DIR=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]')
+RAM_CACHE_ENABLED=$(grep -E '^RAM_CACHE_ENABLED=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' || true)
+RAM_CACHE_SIZE=$(grep -E '^RAM_CACHE_SIZE=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' || true)
+RAM_DATA_DIR=$(grep -E '^RAM_DATA_DIR=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' || true)
+SSD_DATA_DIR=$(grep -E '^SSD_DATA_DIR=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' || true)
+DATA_DIR=$(grep -E '^DATA_DIR=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' || true)
 
 # Sensible fallbacks
 RAM_CACHE_ENABLED="${RAM_CACHE_ENABLED:-true}"
-RAM_CACHE_SIZE="${RAM_CACHE_SIZE:-15G}"
+RAM_CACHE_SIZE="${RAM_CACHE_SIZE:-10G}"
 RAM_DATA_DIR="${RAM_DATA_DIR:-/mnt/seeder-cache}"
 SSD_DATA_DIR="${SSD_DATA_DIR:-/srv/octor/infra-data/seeder-cache}"
 DATA_DIR="${DATA_DIR:-/mnt/seeder-cache}"
@@ -24,6 +24,13 @@ echo "setup-seeder-cache: RAM_CACHE_ENABLED=$RAM_CACHE_ENABLED DATA_DIR=$DATA_DI
 # SSD Mode
 if [ "$RAM_CACHE_ENABLED" != "true" ]; then
     echo "setup-seeder-cache: Preparing SSD storage..."
+    
+    # Ensure a clean state for SSD mode by wiping existing cache
+    if [ -d "$SSD_DATA_DIR" ]; then
+        echo "setup-seeder-cache: Wiping existing SSD cache at $SSD_DATA_DIR..."
+        rm -rf "${SSD_DATA_DIR:?}"/*
+    fi
+    
     mkdir -p "$SSD_DATA_DIR"
     chown -R ubuntu:ubuntu "$SSD_DATA_DIR"
 

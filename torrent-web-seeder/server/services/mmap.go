@@ -79,6 +79,11 @@ func (s *mmapClientImpl) OpenTorrent(_ context.Context, info *metainfo.Info, inf
 		cl:       s.cl,
 	}
 
+	impl := storage.TorrentImpl{
+		Piece: t.Piece,
+		Close: t.Close,
+	}
+
 	if evictionEnabled {
 		lru := NewPieceLRU(s.budget)
 		// Protect pieces belonging to completed files from eviction (first pass).
@@ -98,24 +103,16 @@ func (s *mmapClientImpl) OpenTorrent(_ context.Context, info *metainfo.Info, inf
 		t.startEvictionSweep()
 		log.Infof("eviction enabled for torrent %s (size=%d > budget=%d)",
 			infoHash.HexString(), info.TotalLength(), s.budget)
-	}
 
-	// Hint the kernel that mmap'd regions will be read sequentially (streaming).
-	// This enables aggressive readahead and proactive page reclamation after reads.
-	for _, m := range mmaps {
-		if m != nil {
-			_ = madviseSequential(m)
+		// Set Capacity to strictly enforce the budget in anacrolix.
+		// By reporting our budget as the torrent capacity, anacrolix will
+		// throttle its own in-flight data (MaxUnverifiedBytes) to stay
+		// within this limit.
+		capFn := func() (int64, bool) {
+			return s.budget, true
 		}
+		impl.Capacity = &capFn
 	}
-
-	impl := storage.TorrentImpl{
-		Piece: t.Piece,
-		Close: t.Close,
-	}
-	// Note: we intentionally do NOT set impl.Capacity here.
-	// TorrentCapacity with RemainingBudget=0 causes anacrolix to stop requesting
-	// pieces entirely, which hangs downloads. Eviction is enforced synchronously
-	// in MarkComplete and via background sweep — Capacity is not needed.
 	return impl, nil
 }
 
