@@ -15,16 +15,17 @@ TELEMETRY_INTERVAL=10   # poll telemetry every 10 seconds (renamed from POLL_INT
                         # shadowing the rclone mode config var used by switch_mode.sh)
 
 MODES=(
-    "sp-perf-ram"
-    "sp-norm-ram"
-    "sp-eco-ram"
     "pp-perf-ram"
     "pp-norm-ram"
+    "pp-perf-ssd"
+    "pp-norm-ssd"
     "sp-perf-ssd"
     "sp-norm-ssd"
     "sp-eco-ssd"
-    "pp-perf-ssd"
-    "pp-norm-ssd"
+    "sp-perf-ram"
+    "sp-norm-ram"
+    "sp-eco-ram"
+    
 )
 
 # Initialize log file
