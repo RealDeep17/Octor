@@ -245,7 +245,15 @@ func (u *activeUpload) flushPart(partNum int, partPath string) error {
 }
 
 func checkParallelMode() bool {
-	return os.Getenv("RCLONE_VFS_CACHE_MODE") == "writes"
+	if os.Getenv("RCLONE_VFS_CACHE_MODE") != "writes" {
+		return false
+	}
+	// Chunker overlay does not support random-access WriteAt out-of-order writes (throws illegal seek).
+	storageDir := os.Getenv("S3_GATEWAY_STORAGE_DIR")
+	if strings.Contains(storageDir, "drive-mount") && !strings.Contains(storageDir, "drive-mount-vfs") {
+		return false
+	}
+	return true
 }
 
 func writeAt(f *os.File, r io.Reader, off int64) (int64, error) {
