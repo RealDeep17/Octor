@@ -359,6 +359,7 @@ if [ "${BENCHMARK_MODE:-}" = "true" ]; then
         "octor-s3-gateway"
         "octor-vault"
         "octor-torrent-web-seeder"
+        "octor-torrent-web-seeder-cleaner"
         "octor-sidecar"
     )
 else
@@ -376,6 +377,7 @@ else
         "octor-s3-gateway"
         # Tier 4: media services
         "octor-torrent-web-seeder"
+        "octor-torrent-web-seeder-cleaner"
         "octor-torrent-http-proxy"
         "octor-content-prober"
         "octor-content-transcoder"
