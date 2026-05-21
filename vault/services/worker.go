@@ -49,20 +49,21 @@ func s3Key(hash string) string {
 // another worker can take over from wherever the previous one left off
 // (multipart upload resumes via ListPartsPages).
 type Worker struct {
-	ctx             context.Context
-	cancel          context.CancelFunc
-	pg              *cs.PG
-	s3              *cs.S3Client
-	nwrks           int
-	api             *Api
-	bucket          string
-	concur          int
-	part            int64
-	nats            *cs.NATS
-	resourceID      string
-	workerBase      string // hostname-derived prefix, suffixed with goroutine index
-	verifyIntegrity bool
-	wg              sync.WaitGroup
+	ctx                context.Context
+	cancel             context.CancelFunc
+	pg                 *cs.PG
+	s3                 *cs.S3Client
+	nwrks              int
+	api                *Api
+	bucket             string
+	concur             int
+	part               int64
+	nats               *cs.NATS
+	resourceID         string
+	workerBase         string // hostname-derived prefix, suffixed with goroutine index
+	verifyIntegrity    bool
+	maxConcurrentJobs  int
+	wg                 sync.WaitGroup
 }
 
 const (
@@ -72,6 +73,7 @@ const (
 	awsUploadPartSizeFlag    = "aws-upload-part-size"
 	resourceIDFlag           = "resource-id"
 	verifyIntegrityFlag      = "verify-integrity"
+	maxConcurrentJobsFlag    = "max-concurrent-jobs"
 )
 
 // RegisterWorkerFlags registers CLI flags for the worker service.
@@ -110,6 +112,12 @@ func RegisterWorkerFlags(f []cli.Flag) []cli.Flag {
 			Usage:  "verify each stored file against torrent piece SHA-1 hashes (default true)",
 			EnvVar: "VAULT_VERIFY_INTEGRITY",
 		},
+		cli.IntFlag{
+			Name:   maxConcurrentJobsFlag,
+			Usage:  "max number of torrents actively storing (vaulting) at once; 0 = unlimited",
+			Value:  3,
+			EnvVar: "VAULT_MAX_CONCURRENT_JOBS",
+		},
 	)
 }
 
@@ -125,20 +133,22 @@ func NewWorker(c *cli.Context, pgc *cs.PG, s3 *cs.S3Client, api *Api, nt *cs.NAT
 		host = "vault-unknown"
 	}
 	w := &Worker{
-		ctx:             ctx,
-		cancel:          cancel,
-		pg:              pgc,
-		s3:              s3,
-		nwrks:           c.Int(workerCountFlag),
-		api:             api,
-		bucket:          c.String(awsBucketFlag),
-		concur:          c.Int(awsUploadConcurrencyFlag),
-		part:            c.Int64(awsUploadPartSizeFlag),
-		nats:            nt,
-		resourceID:      c.String(resourceIDFlag),
-		workerBase:      host,
-		verifyIntegrity: c.BoolT(verifyIntegrityFlag),
+		ctx:               ctx,
+		cancel:            cancel,
+		pg:                pgc,
+		s3:                s3,
+		nwrks:             c.Int(workerCountFlag),
+		api:               api,
+		bucket:            c.String(awsBucketFlag),
+		concur:            c.Int(awsUploadConcurrencyFlag),
+		part:              c.Int64(awsUploadPartSizeFlag),
+		nats:              nt,
+		resourceID:        c.String(resourceIDFlag),
+		workerBase:        host,
+		verifyIntegrity:   c.BoolT(verifyIntegrityFlag),
+		maxConcurrentJobs: c.Int(maxConcurrentJobsFlag),
 	}
+	log.WithField("max_concurrent_jobs", w.maxConcurrentJobs).Info("Worker configured")
 	return w
 }
 
@@ -241,6 +251,32 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 	var res Resource
 	// The subquery picks one eligible row, and the outer UPDATE takes the
 	// lease and flips status. RETURNING gives us the full updated row.
+	//
+	// When maxConcurrentJobs > 0, a COUNT sub-select guards the query: if
+	// the number of resources currently in StatusStoring with a live lease
+	// is already at the limit, the subquery returns no row and tryClaim
+	// returns nil (same as an empty queue). This is evaluated inside the
+	// UPDATE statement so the check-and-claim is atomic — two workers
+	// cannot both race past the same count.
+	concurrencyGuard := ""
+	if s.maxConcurrentJobs > 0 {
+		concurrencyGuard = fmt.Sprintf(`
+		  AND (
+		    -- Only apply the cap to new store jobs, not deletions.
+		    status NOT IN (%d, %d, %d)
+		    OR (
+		      SELECT COUNT(*) FROM resource
+		      WHERE status = %d
+		        AND claim_expires_at IS NOT NULL
+		        AND claim_expires_at > now()
+		    ) < %d
+		  )`,
+			StatusQueuedForStoring, StatusStoring, StatusStoreError,
+			StatusStoring,
+			s.maxConcurrentJobs,
+		)
+	}
+
 	subquery := fmt.Sprintf(`
 		SELECT resource_id FROM resource
 		WHERE (claim_expires_at IS NULL OR claim_expires_at < now())
@@ -249,6 +285,7 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 		    OR (status IN (%d, %d))
 		    OR (status IN (%d, %d) AND now() - updated_at > interval '%d seconds')
 		  )
+		  %s
 		  %s
 		ORDER BY
 		  CASE WHEN status IN (%d, %d) THEN 0 ELSE 1 END,
@@ -259,6 +296,7 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 		StatusQueuedForStoring, StatusQueuedForDeletion,
 		StatusStoring, StatusDeleting,
 		StatusStoreError, StatusDeleteError, int(storeErrorBackoff.Seconds()),
+		concurrencyGuard,
 		s.debugResourceIDClause(),
 		StatusQueuedForStoring, StatusQueuedForDeletion,
 	)

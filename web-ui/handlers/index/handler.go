@@ -31,8 +31,10 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 		pg: pg,
 	}
 	r.GET("/", h.index)
+	r.HEAD("/", h.index)
 	for _, tool := range common.Tools {
 		r.GET("/"+tool.Url, h.index)
+		r.HEAD("/"+tool.Url, h.index)
 	}
 }
 

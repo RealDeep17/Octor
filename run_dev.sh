@@ -133,6 +133,7 @@ GIN_MODE=release go run . serve \
     --aws-secret-access-key ${AWS_SECRET_ACCESS_KEY} \
     --aws-bucket ${VAULT_AWS_BUCKET} \
     --aws-no-ssl \
+    --max-concurrent-jobs ${VAULT_MAX_CONCURRENT_JOBS:-3} \
     --postgres-database vault > ../logs/vault.log 2>&1 &
 cd ..
 
