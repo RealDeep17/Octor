@@ -283,6 +283,36 @@ func (s *Handler) status(c *gin.Context) {
 	})
 }
 
+type SpeedWindow struct {
+	samples []int64
+	maxSize int
+}
+
+func NewSpeedWindow(maxSize int) *SpeedWindow {
+	return &SpeedWindow{
+		samples: make([]int64, 0, maxSize),
+		maxSize: maxSize,
+	}
+}
+
+func (w *SpeedWindow) Add(sample int64) {
+	if len(w.samples) >= w.maxSize {
+		w.samples = w.samples[1:]
+	}
+	w.samples = append(w.samples, sample)
+}
+
+func (w *SpeedWindow) Average() int64 {
+	if len(w.samples) == 0 {
+		return 0
+	}
+	var sum int64
+	for _, s := range w.samples {
+		sum += s
+	}
+	return sum / int64(len(w.samples))
+}
+
 // statusLoop runs in a background goroutine, computing status updates and sending them to the channel.
 func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID string, itemID string, active bool, out chan<- *TorrentStatus) {
 	defer close(out)
@@ -298,9 +328,12 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 	var lastVaultStored int64
 	var lastVaultAt time.Time
 	var lastVaultSpeedBytes int64
-	var lastVaultSpeedAt time.Time
-	var emaSpeed float64 // exponential moving average for download speed (α=0.3)
-	const emaAlpha = 0.3  // weight for newest sample, (1-α) for history
+
+	downloadSpeedWindow := NewSpeedWindow(15)
+	uploadSpeedWindow := NewSpeedWindow(15)
+	completedPieces := make(map[int]bool)
+	var maxCompletedSeen int64
+	var lastMonotonicCompleted int64
 
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
@@ -343,24 +376,20 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 					lastVaultStored = lastAPIResource.StoredSize
 					lastVaultAt = now
 					lastVaultSpeedBytes = 0
-					lastVaultSpeedAt = time.Time{}
-				} else if lastAPIResource.StoredSize > lastVaultStored {
-					deltaBytes := lastAPIResource.StoredSize - lastVaultStored
+					uploadSpeedWindow = NewSpeedWindow(15)
+				} else {
 					deltaSeconds := now.Sub(lastVaultAt).Seconds()
-					if deltaBytes > 0 && deltaSeconds > 0 {
-						speed := int64(math.Round(float64(deltaBytes) / deltaSeconds))
-						if lastVaultSpeedBytes > 0 {
-							speed = int64(math.Round(float64(lastVaultSpeedBytes)*0.7 + float64(speed)*0.3))
+					if deltaSeconds > 0 {
+						deltaBytes := lastAPIResource.StoredSize - lastVaultStored
+						if deltaBytes < 0 {
+							deltaBytes = 0
 						}
-						lastVaultSpeedBytes = speed
-						lastVaultSpeedAt = now
-					} else if !lastVaultSpeedAt.IsZero() && now.Sub(lastVaultSpeedAt) > 5*time.Second {
-						lastVaultSpeedBytes = 0
+						instant := int64(math.Round(float64(deltaBytes) / deltaSeconds))
+						uploadSpeedWindow.Add(instant)
+						lastVaultSpeedBytes = uploadSpeedWindow.Average()
+						lastVaultStored = lastAPIResource.StoredSize
+						lastVaultAt = now
 					}
-					lastVaultStored = lastAPIResource.StoredSize
-					lastVaultAt = now
-				} else if !lastVaultSpeedAt.IsZero() && now.Sub(lastVaultSpeedAt) > 30*time.Second {
-					lastVaultSpeedBytes = 0
 				}
 			}
 		}
@@ -415,6 +444,8 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 			log.WithField("resourceID", resourceID).WithField("connected", res.ch != nil).WithField("msg", res.msg).Info("status: stats connection result")
 			if res.stats != nil {
 				lastStats = res.stats
+				maxCompletedSeen = lastStats.Completed
+				lastMonotonicCompleted = lastStats.Completed
 			}
 			if !sendStatus() {
 				return
@@ -423,25 +454,42 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 		case ev, ok := <-statsCh:
 			if ok {
 				completed := int64(ev.Completed)
+				if len(ev.Pieces) > 0 {
+					for _, p := range ev.Pieces {
+						if p.Complete {
+							completedPieces[int(p.Position)] = true
+						}
+					}
+					ratio := float64(len(completedPieces)) / float64(len(ev.Pieces))
+					completed = int64(math.Round(ratio * float64(ev.Total)))
+				}
+				if completed < maxCompletedSeen {
+					completed = maxCompletedSeen
+				} else {
+					maxCompletedSeen = completed
+				}
+
 				now := time.Now()
 				speedBytes := int64(0)
-				if lastStats != nil && !lastEventAt.IsZero() && completed >= lastStats.Completed {
-					deltaBytes := completed - lastStats.Completed
+				if lastStats != nil && !lastEventAt.IsZero() {
 					deltaSeconds := now.Sub(lastEventAt).Seconds()
-					if deltaBytes > 0 && deltaSeconds > 0 {
-						instant := float64(deltaBytes) / deltaSeconds
-						if emaSpeed == 0 {
-							emaSpeed = instant // seed on first sample
-						} else {
-							emaSpeed = (1-emaAlpha)*emaSpeed + emaAlpha*instant
+					if deltaSeconds > 0 {
+						deltaBytes := completed - lastMonotonicCompleted
+						if deltaBytes < 0 {
+							deltaBytes = 0
 						}
-						speedBytes = int64(math.Round(emaSpeed))
-					} else if deltaSeconds >= 2.0 {
-						// No progress for 2s — decay toward zero
-						emaSpeed *= (1 - emaAlpha)
-						speedBytes = int64(math.Round(emaSpeed))
+						instant := int64(math.Round(float64(deltaBytes) / deltaSeconds))
+						downloadSpeedWindow.Add(instant)
+						speedBytes = downloadSpeedWindow.Average()
+						lastEventAt = now
+					} else {
+						speedBytes = downloadSpeedWindow.Average()
 					}
+				} else {
+					lastEventAt = now
 				}
+				lastMonotonicCompleted = completed
+
 				remainingBytes := ev.Total - completed
 				if remainingBytes < 0 {
 					remainingBytes = 0
@@ -462,8 +510,7 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 					RemainingBytes: remainingBytes,
 					ETASeconds:     etaSeconds,
 				}
-				lastEventAt = now
-				log.WithField("resourceID", resourceID).WithField("completed", ev.Completed).WithField("total", ev.Total).WithField("peers", ev.Peers).Info("status: got stats event")
+				log.WithField("resourceID", resourceID).WithField("completed", completed).WithField("total", ev.Total).WithField("peers", ev.Peers).Info("status: got stats event")
 			} else {
 				log.WithField("resourceID", resourceID).Warn("status: stats channel closed")
 				lastStats = nil
@@ -482,6 +529,7 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 		}
 	}
 }
+
 
 func cachedStatsFromExport(exportResp *ra.ExportResponse) *TorrentStatsData {
 	if exportResp == nil {

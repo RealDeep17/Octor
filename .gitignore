@@ -2,6 +2,7 @@
 /infra-data/
 /server/
 /bin/
+/.antigravitycli/
 # OS/editor noise.
 .DS_Store
 **/.DS_Store
@@ -44,3 +45,6 @@ badger-data/
 !/CHANGELOG.md
 !/DEVELOPMENT.md
 !/TODO.md
+
+# Scratch and disposable files
+/scratch/

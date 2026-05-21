@@ -35,9 +35,17 @@ func newS3ByteFetcher(s3Cl *awss3.S3, bucket string) byteFetcher {
 		if end <= start {
 			return nil, nil
 		}
+		targetKey := s3Key(hash)
+		_, headErr := s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(targetKey),
+		})
+		if headErr != nil {
+			targetKey = hash
+		}
 		out, err := s3Cl.GetObjectWithContext(ctx, &awss3.GetObjectInput{
 			Bucket: aws.String(bucket),
-			Key:    aws.String(hash),
+			Key:    aws.String(targetKey),
 			Range:  aws.String(fmt.Sprintf("bytes=%d-%d", start, end-1)),
 		})
 		if err != nil {
