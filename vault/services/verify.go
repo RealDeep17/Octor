@@ -93,13 +93,21 @@ func verifyFileAgainstMetainfo(ctx context.Context, s3Cl *awss3.S3, bucket, key 
 	startInFile := firstFullGlobal - fileOffset
 	endInFile := lastFullGlobal - fileOffset
 
+	targetKey := s3Key(key)
+	_, headErr := s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(targetKey),
+	})
+	if headErr != nil {
+		targetKey = key
+	}
 	out, err := s3Cl.GetObjectWithContext(ctx, &awss3.GetObjectInput{
 		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(targetKey),
 		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", startInFile, endInFile-1)),
 	})
 	if err != nil {
-		return errors.Wrapf(err, "verify: GET key=%s range=%d-%d", key, startInFile, endInFile-1)
+		return errors.Wrapf(err, "verify: GET key=%s range=%d-%d", targetKey, startInFile, endInFile-1)
 	}
 	defer out.Body.Close()
 

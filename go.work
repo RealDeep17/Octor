@@ -1,4 +1,4 @@
-go 1.26
+go 1.26.3
 
 use (
 	./abuse-store
@@ -11,6 +11,7 @@ use (
 	./lazymap
 	./magnet2torrent
 	./rest-api
+	./s3-gateway
 	./srt2vtt
 	./torrent-archiver
 	./torrent-http-proxy

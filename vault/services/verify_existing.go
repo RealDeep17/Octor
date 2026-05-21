@@ -293,6 +293,10 @@ func invalidateCorruptFile(ctx context.Context, db *pg.DB, s3Cl *awss3.S3, bucke
 		return 0, err
 	}
 
+	_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(s3Key(hash)),
+	})
 	if _, err := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(hash),

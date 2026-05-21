@@ -73,7 +73,7 @@ func (s *Web) webSeed(c *gin.Context) {
 	if c.Request.Method == http.MethodHead {
 		s.handleHeadRequest(c, hash)
 	} else {
-		presignedURL, err := s.presignGetObject(hash)
+		presignedURL, err := s.presignGetObject(c.Request.Context(), hash)
 		if err != nil {
 			_ = c.Error(err)
 			return
@@ -86,8 +86,14 @@ func (s *Web) handleHeadRequest(c *gin.Context, hash string) {
 	s3cl := s.s3.Get()
 	out, err := s3cl.HeadObjectWithContext(c.Request.Context(), &awss3.HeadObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(hash),
+		Key:    aws.String(s3Key(hash)),
 	})
+	if err != nil {
+		out, err = s3cl.HeadObjectWithContext(c.Request.Context(), &awss3.HeadObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(hash),
+		})
+	}
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -138,11 +144,19 @@ func (s *Web) lookupStoredFileHash(ctx context.Context, db *pg.DB, id, path stri
 	return rf.FileHash, true, nil
 }
 
-func (s *Web) presignGetObject(hash string) (string, error) {
+func (s *Web) presignGetObject(ctx context.Context, hash string) (string, error) {
 	s3cl := s.s3.Get()
+	key := s3Key(hash)
+	_, err := s3cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		key = hash
+	}
 	req, _ := s3cl.GetObjectRequest(&awss3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(hash),
+		Key:    aws.String(key),
 	})
 	return req.Presign(presignTTL)
 }

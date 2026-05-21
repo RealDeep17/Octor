@@ -122,8 +122,11 @@ func configureServe(c *cli.Command) {
 }
 
 func serve(c *cli.Context) error {
-	// Setting HTTP Client
-	cl := http.DefaultClient
+	// Setting HTTP Client with tuned connection pool to prevent starvation
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConns = 1000
+	t.MaxIdleConnsPerHost = 100
+	cl := &http.Client{Transport: t}
 
 	// Setting DB
 	pg := cs.NewPG(c)

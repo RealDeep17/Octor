@@ -1,0 +1,24 @@
+[Unit]
+Description=Octor Rclone Google Drive Chunker Mount
+After=network.target octor-rclone-mount.service
+Requires=octor-rclone-mount.service
+Before=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+EnvironmentFile=/srv/octor/custom.env
+Environment=RCLONE_VFS_CACHE_MODE=off
+ExecStartPre=/usr/bin/mkdir -p ${VAULT_STORAGE_PATH}
+ExecStart=/usr/bin/env RCLONE_VFS_CACHE_MODE=off /usr/bin/rclone --config ${VAULT_RCLONE_CONFIG} mount ALPHA_CHUNKER: ${VAULT_STORAGE_PATH} \
+    --vfs-cache-mode off \
+    --transfers ${RCLONE_TRANSFERS} \
+    --allow-other \
+    --umask 000 --allow-non-empty
+ExecStop=/usr/bin/fusermount -uz ${VAULT_STORAGE_PATH}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
