@@ -130,6 +130,7 @@ func New(c *cli.Context, cl *http.Client) *Api {
 		q := r.URL.Query()
 		q.Set("api_key", key)
 		r.URL.RawQuery = q.Encode()
+		r.Header.Set("User-Agent", "OctorMediaCenter/1.0")
 		return r, nil
 	}
 

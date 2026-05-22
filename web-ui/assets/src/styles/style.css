@@ -429,6 +429,18 @@
     span.task-status {
       display: none;
     }
+
+    &.statusupdate span.task-status {
+      display: inline-block;
+      color: var(--o-cyan);
+      margin-left: 0.25rem;
+      &::before {
+        content: '(';
+      }
+      &::after {
+        content: ')';
+      }
+    }
   }
 
   .close {

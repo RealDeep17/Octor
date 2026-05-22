@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -88,6 +89,8 @@ var (
 )
 
 func main() {
+	_ = mime.AddExtensionType(".mkv", "video/x-matroska")
+
 	if envStorageDir := os.Getenv("S3_GATEWAY_STORAGE_DIR"); envStorageDir != "" {
 		storageDir = envStorageDir
 		log.Printf("Using S3_GATEWAY_STORAGE_DIR from environment: %s", storageDir)
@@ -670,6 +673,15 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 		w.Header().Set("ETag", "\"completed-etag\"")
+
+		// Force Content-Type based on extension for HEAD requests
+		ext := filepath.Ext(key)
+		contentType := mime.TypeByExtension(ext)
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		w.Header().Set("Content-Type", contentType)
+
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -694,6 +706,15 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		defer file.Close()
 		info, _ := file.Stat()
 		w.Header().Set("ETag", "\"completed-etag\"")
+
+		// Force explicit content headers if requested (prevents MKV->WebM sniffing)
+		if ct := r.URL.Query().Get("response-content-type"); ct != "" {
+			w.Header().Set("Content-Type", ct)
+		}
+		if cd := r.URL.Query().Get("response-content-disposition"); cd != "" {
+			w.Header().Set("Content-Disposition", cd)
+		}
+
 		http.ServeContent(w, r, key, info.ModTime(), file)
 		return
 	}

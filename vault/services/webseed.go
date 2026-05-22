@@ -3,7 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -12,6 +14,10 @@ import (
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
 )
+
+func init() {
+	_ = mime.AddExtensionType(".mkv", "video/x-matroska")
+}
 
 const presignTTL = 1 * time.Hour
 
@@ -73,7 +79,19 @@ func (s *Web) webSeed(c *gin.Context) {
 	if c.Request.Method == http.MethodHead {
 		s.handleHeadRequest(c, hash)
 	} else {
-		presignedURL, err := s.presignGetObject(c.Request.Context(), hash)
+		// Calculate overrides to prevent browser sniffing issues (e.g. MKV as WebM)
+		ext := filepath.Ext(p)
+		contentType := mime.TypeByExtension(ext)
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		fileName := filepath.Base(p)
+		contentDisposition := fmt.Sprintf("inline; filename=\"%s\"", fileName)
+		if c.Query("download") == "true" {
+			contentDisposition = fmt.Sprintf("attachment; filename=\"%s\"", fileName)
+		}
+
+		presignedURL, err := s.presignGetObject(c.Request.Context(), hash, contentType, contentDisposition)
 		if err != nil {
 			_ = c.Error(err)
 			return
@@ -144,7 +162,7 @@ func (s *Web) lookupStoredFileHash(ctx context.Context, db *pg.DB, id, path stri
 	return rf.FileHash, true, nil
 }
 
-func (s *Web) presignGetObject(ctx context.Context, hash string) (string, error) {
+func (s *Web) presignGetObject(ctx context.Context, hash string, contentType string, contentDisposition string) (string, error) {
 	s3cl := s.s3.Get()
 	key := s3Key(hash)
 	_, err := s3cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
@@ -157,6 +175,8 @@ func (s *Web) presignGetObject(ctx context.Context, hash string) (string, error)
 	req, _ := s3cl.GetObjectRequest(&awss3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
+		ResponseContentType:        aws.String(contentType),
+		ResponseContentDisposition: aws.String(contentDisposition),
 	})
 	return req.Presign(presignTTL)
 }

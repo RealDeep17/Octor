@@ -43,6 +43,7 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
 		return sourceEl ? sourceEl.getAttribute('src') : videoEl.src;
 	});
 	const [usingDirectFallback, setUsingDirectFallback] = useState(false);
+	const [showFallbackToast, setShowFallbackToast] = useState(false);
 	const isSession = !!sessionId && !usingDirectFallback;
 	const readyRef = useRef(false);
 	const fallbackStartedRef = useRef(false);
@@ -97,10 +98,12 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
 		videoEl.removeAttribute('data-session-id');
 		videoEl.removeAttribute('data-session-seek-url');
 		videoEl.removeAttribute('data-session-delete-path');
+		videoEl.removeAttribute('controls');
 		videoEl.src = directFallbackUrl;
 		videoEl.load();
 		videoEl.play().catch(() => {});
 		setSourceUrl(directFallbackUrl);
+		setShowFallbackToast(true);
 		window.dispatchEvent(new CustomEvent('player_fallback', {
 			detail: {reason},
 		}));
@@ -385,6 +388,13 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
         return () => { if (castBtn) castBtn.remove(); };
     }, [features.chromecast, isVideo]);
 
+    // Auto-dismiss fallback toast after 2 seconds
+    useEffect(() => {
+        if (!showFallbackToast) return;
+        const timer = setTimeout(() => setShowFallbackToast(false), 2000);
+        return () => clearTimeout(timer);
+    }, [showFallbackToast]);
+
     useEffect(() => {
         if (!isSession || !sessionDeletePath) return;
         let closed = false;
@@ -497,6 +507,16 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
                 </div>
             )}
 
+            {/* Fallback to DirectPlay toast — shown for 2s when HLS falls back to byte-range play */}
+            {showFallbackToast && isVideo && (
+                <div class="wt-fallback-toast" key="fallback-toast">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                    </svg>
+                    Fallback to Direct Play
+                </div>
+            )}
+
             {/* Big play button — shown when paused, regardless of loading state */}
             {showControls && isVideo && !state.playing && !sessionSeeking && !showResumePrompt && (
                 <div class="wt-player-overlay wt-player-overlay--play" onDblClick={(e) => e.stopPropagation()}>
@@ -572,6 +592,11 @@ export async function initPlayer(target) {
     const videoEl = target.querySelector('.player');
     if (!videoEl) return;
 
+    // Guard: if a player already exists, destroy it first to prevent doubles
+    if (_currentPlayer) {
+        destroyPlayer();
+    }
+
     // Load player translations before rendering (sync t() reads from cached instance)
     await initI18n();
 
@@ -604,6 +629,11 @@ export async function initPlayer(target) {
     mountEl.appendChild(playerContainer);
     playerContainer.appendChild(videoEl);
 
+    // Create a dedicated wrapper for Preact to isolate virtual DOM diffing from the native <video> element
+    const controlsMountEl = document.createElement('div');
+    controlsMountEl.className = 'wt-player-controls-mount';
+    playerContainer.appendChild(controlsMountEl);
+
     // Wire track handlers on original modals (stay outside player, no overflow issues)
     wireTrackHandlers(target);
 
@@ -617,13 +647,13 @@ export async function initPlayer(target) {
     }
     if (showLogo) wireLogo(target, mountEl);
 
-    // Render Preact controls into the player container (after video)
+    // Render Preact controls into the dedicated wrapper
     render(
         <PlayerComponent videoEl={videoEl} settings={settings} containerEl={playerContainer} showControls={showControls} fixedSize={!!(fixedWidth || fixedHeight)} />,
-        playerContainer
+        controlsMountEl
     );
 
-    _currentPlayer = { mountEl, playerContainer, videoEl };
+    _currentPlayer = { mountEl, playerContainer, videoEl, controlsMountEl };
 }
 
 // Ensure a <track> with id=<trackID> exists inside <video>. The server
@@ -829,7 +859,7 @@ function wireLogo(container, playerContainer) {
  */
 export function destroyPlayer() {
     if (!_currentPlayer) return;
-    const { mountEl, playerContainer, videoEl } = _currentPlayer;
+    const { mountEl, playerContainer, videoEl, controlsMountEl } = _currentPlayer;
 
     closeTranscoderSession(videoEl.dataset.sessionDeletePath);
 
@@ -841,7 +871,11 @@ export function destroyPlayer() {
     }
 
     // Unmount Preact
-    render(null, playerContainer);
+    if (controlsMountEl) {
+        render(null, controlsMountEl);
+    } else {
+        render(null, playerContainer);
+    }
 
     // Remove video
     videoEl.remove();

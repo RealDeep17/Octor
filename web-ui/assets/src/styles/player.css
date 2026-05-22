@@ -459,6 +459,12 @@ body[data-iframe-height][data-fixed-height] .wt-player-mount {
     right: 0.5rem;
     z-index: 30;
     cursor: pointer;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
 }
 
 .wt-player-cast-button google-cast-launcher {
@@ -542,4 +548,51 @@ video::cue {
 
 .wt-player-mount:has(.wt-player--controls-visible) .wt-player-logo {
     opacity: 1;
+}
+
+google-cast-launcher {
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+    max-width: 1.5rem !important;
+    max-height: 1.5rem !important;
+    display: inline-block !important;
+}
+
+/* Fallback to DirectPlay toast */
+@keyframes wt-fallback-fadein {
+    0%   { opacity: 0; transform: translateY(8px); }
+    15%  { opacity: 1; transform: translateY(0); }
+    80%  { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-4px); }
+}
+
+.wt-fallback-toast {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    pointer-events: none;
+    animation: wt-fallback-fadein 2s ease forwards;
+}
+
+.wt-fallback-toast svg {
+    width: 1rem;
+    height: 1rem;
+    color: #00cec9;
+    flex-shrink: 0;
 }
