@@ -14,8 +14,9 @@ const HLS_CONFIG = {
     levelLoadingMaxRetryTimeout: 1000 * 10,
     fragLoadingMaxRetry: 100,
     fragLoadingMaxRetryTimeout: 1000 * 10,
+    maxBufferLength: 60,
     maxBufferSize: 256 * 1000 * 1000,
-    maxMaxBufferLength: 600,
+    maxMaxBufferLength: 300,
 };
 
 /**

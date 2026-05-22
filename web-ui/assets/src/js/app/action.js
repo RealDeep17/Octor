@@ -22,6 +22,7 @@ av(async function() {
         };
 
         window.addEventListener('player_ready', showPlayer, {once: true});
+        window.addEventListener('player_fallback', showPlayer, {once: true});
         window.addEventListener('player_error', showPlayerError, {once: true});
     });
 });

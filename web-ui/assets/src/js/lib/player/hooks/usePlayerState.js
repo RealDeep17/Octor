@@ -29,7 +29,21 @@ export function usePlayerState(videoRef, containerRef, { duration: serverDuratio
                 const rawTime = video.currentTime || 0;
                 setCurrentTime(seekOffset + rawTime);
                 if (video.buffered && video.buffered.length > 0) {
-                    setBuffered(seekOffset + video.buffered.end(video.buffered.length - 1));
+                    // Find the buffered range that contains the current position.
+                    // Using the last range end blindly can overstate the buffer
+                    // if there are gaps (the bar would show more than seekable).
+                    let bufEnd = 0;
+                    for (let i = 0; i < video.buffered.length; i++) {
+                        if (rawTime >= video.buffered.start(i) - 0.5 && rawTime <= video.buffered.end(i)) {
+                            bufEnd = video.buffered.end(i);
+                            break;
+                        }
+                    }
+                    // Fallback: if no range contains current time, use last range end
+                    if (bufEnd === 0 && video.buffered.length > 0) {
+                        bufEnd = video.buffered.end(video.buffered.length - 1);
+                    }
+                    setBuffered(seekOffset + bufEnd);
                 }
             }
             rafRef.current = requestAnimationFrame(tick);

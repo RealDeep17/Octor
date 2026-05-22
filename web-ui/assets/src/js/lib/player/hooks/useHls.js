@@ -34,30 +34,12 @@ export function useHls(videoRef, sourceUrl, { onReady } = {}) {
                 };
                 video.addEventListener('canplay', onCanPlay);
 
-                // Lower quality during seek
-                const onSeeking = () => {
-                    if (hls.loadLevel > 1) hls.loadLevel = 1;
-                };
-                const onSeeked = () => {
-                    hls.loadLevel = -1;
-                };
-                video.addEventListener('seeking', onSeeking);
-                video.addEventListener('seeked', onSeeked);
-
-                const onPause = () => hls.stopLoad();
                 const onEnded = () => hls.stopLoad();
-                const onPlay = () => hls.startLoad();
-                video.addEventListener('pause', onPause);
                 video.addEventListener('ended', onEnded);
-                video.addEventListener('play', onPlay);
 
                 return () => {
                     video.removeEventListener('canplay', onCanPlay);
-                    video.removeEventListener('seeking', onSeeking);
-                    video.removeEventListener('seeked', onSeeked);
-                    video.removeEventListener('pause', onPause);
                     video.removeEventListener('ended', onEnded);
-                    video.removeEventListener('play', onPlay);
                     hls.stopLoad();
                     hls.destroy();
                     hlsRef.current = null;

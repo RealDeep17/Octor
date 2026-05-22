@@ -452,26 +452,22 @@ body[data-iframe-height][data-fixed-height] .wt-player-mount {
     z-index: 1 !important;
 }
 
-/* Cast button */
-.wt-player-cast-button {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    z-index: 30;
-    cursor: pointer;
-    width: 2rem;
-    height: 2rem;
+/* Cast button — inline in controls bar */
+.wt-player-cast-inline {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    cursor: pointer;
     overflow: hidden;
 }
 
-.wt-player-cast-button google-cast-launcher {
+.wt-player-cast-inline google-cast-launcher {
     --connected-color: #e84393;
     --disconnected-color: rgba(255, 255, 255, 0.7);
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 1.25rem;
+    height: 1.25rem;
 }
 
 /* Subtitle text tracks */

@@ -12,7 +12,7 @@ export function Controls({
     playing, currentTime, duration, volume, muted, fullscreen, buffered, seeking,
     onTogglePlay, onSeek, onVolumeChange, onToggleMute, onToggleFullscreen,
     onCaptionsClick, onEmbedClick,
-    isVideo, features,
+    isVideo, features, castMountRef,
 }) {
     return (
         <div class="wt-player-controls" onClick={(e) => e.stopPropagation()} onDblClick={(e) => e.stopPropagation()}>
@@ -42,7 +42,7 @@ export function Controls({
                     )}
                 </div>
 
-                {/* Right group: volume, captions, embed, fullscreen */}
+                {/* Right group: volume, captions, embed, cast, fullscreen */}
                 <div class="wt-player-controls-right">
                     {features.volume && (
                         <VolumeControl
@@ -63,6 +63,10 @@ export function Controls({
                         <button type="button" class="wt-player-btn" onClick={onEmbedClick} aria-label={t('player.embed')}>
                             <EmbedIcon />
                         </button>
+                    )}
+
+                    {features.chromecast && (
+                        <div class="wt-player-btn wt-player-cast-inline" ref={castMountRef} />
                     )}
 
                     {features.fullscreen && isVideo && (
