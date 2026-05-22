@@ -35,7 +35,8 @@ type addonView struct {
 }
 
 type indexData struct {
-	Addons []addonView
+	Addons          []addonView
+	StremioSettings *models.StremioSettingsData
 }
 
 type Handler struct {
@@ -82,6 +83,11 @@ func (h *Handler) index(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get addon urls"))
 		return
 	}
+	stremioSettings, err := models.GetUserStremioSettingsData(c.Request.Context(), db, u.ID)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get stremio settings"))
+		return
+	}
 
 	views := make([]addonView, len(addons))
 	for i, a := range addons {
@@ -99,7 +105,8 @@ func (h *Handler) index(c *gin.Context) {
 	}
 
 	h.tb.Build("discover/index").HTML(http.StatusOK, web.NewContext(c).WithData(&indexData{
-		Addons: views,
+		Addons:          views,
+		StremioSettings: stremioSettings,
 	}))
 }
 

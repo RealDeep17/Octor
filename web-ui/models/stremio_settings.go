@@ -52,7 +52,7 @@ func GetUserStremioSettings(ctx context.Context, db *pg.DB, userID uuid.UUID) (*
 	return settings, nil
 }
 
-// GetUserStremioSettings returns Stremio settings for a specific user
+// GetUserStremioSettingsData returns Stremio settings for a specific user
 func GetUserStremioSettingsData(ctx context.Context, db *pg.DB, userID uuid.UUID) (*StremioSettingsData, error) {
 	s, err := GetUserStremioSettings(ctx, db, userID)
 	if err != nil {
@@ -61,7 +61,47 @@ func GetUserStremioSettingsData(ctx context.Context, db *pg.DB, userID uuid.UUID
 	if s == nil {
 		return GetDefaultStremioSettings(), nil
 	}
-	return s.Settings, nil
+	return NormalizeStremioSettings(s.Settings), nil
+}
+
+// NormalizeStremioSettings ensures that all default resolutions are present in the settings.
+// If any are missing, it merges them, placing "8k" at the beginning of the list.
+func NormalizeStremioSettings(settings *StremioSettingsData) *StremioSettingsData {
+	if settings == nil {
+		return GetDefaultStremioSettings()
+	}
+	defaults := GetDefaultStremioSettings().PreferredResolutions
+	existing := make(map[string]ResolutionSetting)
+	for _, r := range settings.PreferredResolutions {
+		existing[r.Resolution] = r
+	}
+
+	var merged []ResolutionSetting
+	// Add "8k" first if it is in default but missing in existing
+	has8k := false
+	for _, r := range settings.PreferredResolutions {
+		if r.Resolution == "8k" {
+			has8k = true
+		}
+	}
+	if !has8k {
+		merged = append(merged, ResolutionSetting{Resolution: "8k", Enabled: false})
+	}
+
+	// Add all existing ones
+	for _, r := range settings.PreferredResolutions {
+		merged = append(merged, r)
+	}
+
+	// Add any other missing defaults (e.g. other, 720p, etc.)
+	for _, d := range defaults {
+		if _, ok := existing[d.Resolution]; !ok && d.Resolution != "8k" {
+			merged = append(merged, d)
+		}
+	}
+
+	settings.PreferredResolutions = merged
+	return settings
 }
 
 // CreateStremioSettings creates new Stremio settings for a user
@@ -105,7 +145,8 @@ func CreateOrUpdateStremioSettings(ctx context.Context, db *pg.DB, userID uuid.U
 func GetDefaultStremioSettings() *StremioSettingsData {
 	return &StremioSettingsData{
 		PreferredResolutions: []ResolutionSetting{
-			{Resolution: "4k", Enabled: false},
+			{Resolution: "8k", Enabled: false},
+			{Resolution: "4k", Enabled: true},
 			{Resolution: "1080p", Enabled: true},
 			{Resolution: "720p", Enabled: true},
 			{Resolution: "other", Enabled: true},

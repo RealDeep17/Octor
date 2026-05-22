@@ -37,6 +37,7 @@ func (s *Handler) updateSettings(c *gin.Context) {
 	settingsData := &models.StremioSettingsData{}
 
 	// Get preferred resolutions from form
+	resolution8k := c.PostForm("resolution_8k") == "on"
 	resolution4k := c.PostForm("resolution_4k") == "on"
 	resolution1080p := c.PostForm("resolution_1080p") == "on"
 	resolution720p := c.PostForm("resolution_720p") == "on"
@@ -47,6 +48,7 @@ func (s *Handler) updateSettings(c *gin.Context) {
 
 	// Create map of resolution settings for easy lookup
 	resolutionSettings := map[string]bool{
+		"8k":    resolution8k,
 		"4k":    resolution4k,
 		"1080p": resolution1080p,
 		"720p":  resolution720p,
@@ -57,7 +59,7 @@ func (s *Handler) updateSettings(c *gin.Context) {
 	var orderedQualities []models.ResolutionSetting
 	orderSlice := strings.Split(resolutionOrder, ",")
 	if len(orderSlice) == 0 {
-		orderSlice = []string{"4k", "1080p", "720p", "other"}
+		orderSlice = []string{"8k", "4k", "1080p", "720p", "other"}
 	}
 	// Split the order string (assuming comma-separated values)
 	for _, resolution := range orderSlice {

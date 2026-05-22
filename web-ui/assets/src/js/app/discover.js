@@ -10,6 +10,7 @@ av(async function () {
     await initI18n();
     const container = this;
     const serverAddons = window._addons || [];
+    const stremioSettings = window._stremioSettings || {};
 
     // Build the list of base URLs (Cinemeta first when not user-managed)
     // and the matching seed entries for the StremioClient. Cinemeta has
@@ -35,7 +36,7 @@ av(async function () {
     const cleanPath = stripLangPrefix(window.location.pathname);
     const modalOnly = !cleanPath.startsWith('/discover');
     const pathPrefix = modalOnly ? '/' : '/discover';
-    render(<DiscoverApp addonUrls={addonUrls} addonSeeds={seeds} hasCustomAddons={hasCustomAddons} pathPrefix={pathPrefix} modalOnly={modalOnly} />, mountEl);
+    render(<DiscoverApp addonUrls={addonUrls} addonSeeds={seeds} hasCustomAddons={hasCustomAddons} pathPrefix={pathPrefix} modalOnly={modalOnly} stremioSettings={stremioSettings} />, mountEl);
 }, function () {
     // Destroy callback: unmount Preact on async navigation away
     const container = this;

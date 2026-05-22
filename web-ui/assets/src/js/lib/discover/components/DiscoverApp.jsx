@@ -20,7 +20,7 @@ import { AddonHealthChip } from './AddonHealthChip';
 import { AISection } from './ai/AISection';
 import { t, langPath } from '../i18n';
 
-export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix = '/discover', modalOnly = false }) {
+export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix = '/discover', modalOnly = false, stremioSettings = {} }) {
     const [state, dispatch] = useReducer(discoverReducer, initialState);
     const [showWizard, setShowWizard] = useState(false);
     const [addonsInstalled, setAddonsInstalled] = useState(false);
@@ -1291,6 +1291,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                         onToggleWatched={handleToggleWatched}
                         onRate={handleOpenRating}
                         onToggleWatchlist={handleToggleWatchlist}
+                        stremioSettings={stremioSettings}
                     />
                 )}
 
@@ -1457,6 +1458,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                     onToggleWatched={handleToggleWatched}
                     onRate={handleOpenRating}
                     onToggleWatchlist={handleToggleWatchlist}
+                    stremioSettings={stremioSettings}
                 />
             )}
 

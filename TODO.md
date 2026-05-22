@@ -4,40 +4,71 @@
 
 ---
 
-## 🗺️ The Octor Branch Matrix
+### idea 1 to implement (when asked or suggest it to human)
+ Top Menu Bar & Profile Refactoring Prompt:
 
-```mermaid
-graph TD
-    master[master] --> admin[WebDav-Web-UI_Universal_Viewing-Admin: Most Advanced Production-Ready]
-    admin --> rd[expermintal-R&D: High Performance & 1TB Ingestion]
-```
+   1. Language Selector: Relocate the language selection component from the global navigation bar to the
+      top section of the Profile Page as a clean, compact dropdown.
+   2. Unified Navbar Component (Non-Homepage): On all pages except the homepage, replace the standard
+      center navigation with a single, minimalist bar that combines Magnet/Hash input and Torrent
+      uploading.
+       * Layout: A single-line, dynamically scaling component styled like existing global buttons. It
+         should be in middle and expand/shrink based on available space without overlapping other
+         menu items.
+       * Magnet/Hash Zone: Redesign this as an interactive "button-like" area. Clicking it must
+         instantly grab valid links from the clipboard and initiate processing. It must also support
+         direct drag-and-drop of text links.
+       * Torrent Zone: A compact upload area supporting click-to-browse and drag-and-drop of .torrent
+         files.
+   3. In-Place Processing: Implement a progress overlay within the bar's footprint. Magnetizing and
+      Enrichment should happen there, followed by a direct redirect to the final media page (bypassing
+      redundant homepage jumps).
+   4. Technical Integrity: Ensure the navigation bar is compatible with all page data structures to
+      prevent reflection-based internal errors. The UI must be responsive, collapsing gracefully to
+      icons on small screens while maintaining all other global navigation links.
 
-### 1. 🔵 `WebDav-Web-UI_Universal_Viewing-Admin` (Current Primary Branch)
-* **Goal:** The ultimate release branch. Combines the UI power of the Admin branch with the performance-hardened core of the linux-vps branch.
-* **What Worked:**
-  * **Unified Engine & UI:** Successfully merged the high-performance `linux-vps` core (S3 Gateway, zero-disk-leak vaulting, optimized seeder) into the Admin branch's WebDAV and Admin UI ecosystem.
-  * **Video-Copy & Audio-Transcode Hybrid Mode:** Configured HLS stream templates to copy the original video stream directly (0% CPU, 100% video quality preservation) and dynamically encode complex multichannel audio (DTS, TrueHD) to stereo AAC on the fly.
-  * **SuperTokens Caching:** Implemented in-memory LRU caching for SuperTokens `GetUserByID` calls, eliminating severe page load lags and redundant authorization queries.
-  * **Permanent Deletion & Clean Paths:** Optimized Rclone to bypass the trash bin (`--drive-use-trash=false`) and simplified storage paths to `vault/(hash)/(hash)`.
-* **Architecture:** Focuses on user-scoped administration controls and universal WebDAV client integrations without sacrificing the 1TB ingestion performance.
+### idea 2
+Feature Request: Dynamic Media Cards (Horizontal & Vertical Poster Support)
+Context & Problem
+Our media enrichment process currently only supports vertical posters. If a media asset only provides a horizontal poster, the system forces it into a vertical aspect ratio. This results in stretched, cropped, or distorted images, making the UI look messy, unorganized, and low-quality.
 
-### 2. 🧪 `expermintal-R&D` (Ultra-Performance R&D Branch)
-* **Goal:** Pushing performance to the theoretical limit. Reaching our benchmark of downloading and vaulting a **1TB single torrent** with exactly 0 bytes of SSD cache usage, strictly sequential FUSE writing, and bounded RAM memory usage.
-* **What Worked:**
-  * **Ultra-Lightweight S3 Gateway:** Developed and compiled a custom Go `s3-gateway` binary running on port `9000` to completely bypass resource-heavy MinIO containers.
-  * **RAM Sequential Write Buffer:** Resolved the critical FUSE block-write queue latency bottleneck (where writes crawled at 30 KB/s due to FUSE synchronization boundary overhead under `--vfs-cache-mode off`). By wrapping output streams in a dynamically configurable RAM buffer (`S3_GATEWAY_WRITE_BUFFER_SIZE=16777216` / 16MB), we reduced FUSE write system calls by **99.8%**, skyrocketing sequential upload speed to **23+ MB/s** directly to Google Drive.
-  * **Stale Cache Clearing:** Handled the stale SQLite `.torrent.db` state corruption in SSD cache by wiping the cache directory and restarting the web seeder cleanly, resolving the SHA-1 mismatch loop.
-* **What Failed & What We Learned:**
-  * *Failed:* Using `rclone --vfs-cache-mode write` or MinIO disk caches. Both required caching the entire 1TB file on local SSD storage before uploading, which instantly overflows local VPS storage (92GB limit) and crashes.
-  * *Failed:* Go's default unbuffered `io.Copy` (using 32KB chunks) over a FUSE union mount without disk cache. This induced a massive synchronous roundtrip write bottleneck, freezing the download pipeline.
+We need to update our metadata collection logic and UI layout to gracefully handle both poster orientations across all primary user and administrative views.
 
----
+1. Enrichment & Metadata Collection Logic
+When fetching media assets from the enrichment source, apply the following rules:
 
-## 📋 Actionable Verification Roadmap
+If both orientations are available: Collect both the top vertical poster and the top horizontal poster.
 
-### Phase 1: High-Speed Ingestion & LRU Eviction Verification (5-10GB)
-- [x] Configure `custom.env` with optimized RAM write buffer size (`S3_GATEWAY_WRITE_BUFFER_SIZE=16777216`).
-- [x] Clear local `.torrent.db` state and restart `octor-torrent-web-seeder` to prevent stale SHA-1 mismatch loops.
-- [x] Verify S3 Gateway successfully boots and prints `Wrapping upload with sequential RAM write buffer: size=16777216 bytes`.
-- [x] **Live Ingestion Speed Check**: Confirm average upload speeds of 15-50 MB/s directly to Google Drive with 0% local SSD cache leakage.
-- [x] **Verify LRU Eviction Under Pressure**: Initiate a large torrent with seeder limits configured to `1.5GB`. Confirm older blocks are successfully evicted via `FALLOC_FL_PUNCH_HOLE` while the vault stream advances past 1.5GB to 100% completion
+If multiple options exist: Collect the single highest-rated/top-performing vertical poster and horizontal poster.
+
+If only one orientation is available: Collect whichever one is provided (vertical or horizontal).
+
+2. UI & Layout Integration (Target Pages)
+The layout across the following pages must be designed to seamlessly support a mixed-aspect-ratio grid without alignment breaking, overlapping, or text bleeding:
+
+Media Page / Torrent Page
+
+Library & Admin's Library
+
+Homepage (Specifically within the watch history and discovers's movers and tv series)
+
+Discover Page 
+
+Layout Design Rules:
+Proportional Grid: Design a responsive grid system where horizontal cards neatly align with vertical ones (e.g., the width/height of a horizontal card should perfectly match a specific grid equivalent, like fitting neatly alongside 3 vertical cards).
+
+Visual Polish: Ensure there is no overlapping, text bleeding, or broken alignment when horizontal and vertical cards appear in the same row, carousel, or grid layout.
+
+3. Card Component Logic & Behavior
+The UI card components on all the listed pages should adapt dynamically based on the collected media assets:
+
+Scenario A (Horizontal Only): Display a horizontal card by default.
+
+Scenario B (Vertical Only): Display a vertical card by default.
+
+Scenario C (Both Available): * Display the vertical card as the default view.
+Add a toggle icon on the card.
+
+Clicking this icon must smoothly switch the individual card (and its poster) from the vertical layout to the horizontal layout, and vice versa.
+
+### idea 3

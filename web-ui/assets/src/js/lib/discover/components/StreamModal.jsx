@@ -2,12 +2,12 @@ import { useRef, useEffect, useState, useMemo, useCallback } from 'preact/hooks'
 import { rebindAsync } from '../../async';
 import { initProgressLog } from '../../progressLog';
 import { parseStreamName, extractInfoHash, extractFileIdx } from '../stream';
-import { extractLanguages } from '../lang';
+import { extractLanguages, LANG_MAP } from '../lang';
 import { loadPrefs, savePrefs } from '../prefs';
 import { chipClass } from './discoverUtils';
 import { t, tf } from '../i18n';
 
-export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, onBackToEpisodes, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist }) {
+export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, onBackToEpisodes, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings = {} }) {
     const dialogRef = useRef(null);
 
     useEffect(() => {
@@ -55,7 +55,7 @@ export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, on
                     </button>
                 </div>
                 <div class="overflow-y-auto px-3 sm:px-6 pb-4 sm:pb-6">
-                    <ModalBody modal={modal} onClose={handleClose} onEpisodeSelect={onEpisodeSelect} onStreamClick={onStreamClick} onSeasonChange={onSeasonChange} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} userStatuses={userStatuses} watchlistIds={watchlistIds} onToggleWatched={onToggleWatched} onRate={onRate} onToggleWatchlist={onToggleWatchlist} />
+                    <ModalBody modal={modal} onClose={handleClose} onEpisodeSelect={onEpisodeSelect} onStreamClick={onStreamClick} onSeasonChange={onSeasonChange} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} userStatuses={userStatuses} watchlistIds={watchlistIds} onToggleWatched={onToggleWatched} onRate={onRate} onToggleWatchlist={onToggleWatchlist} stremioSettings={stremioSettings} />
                 </div>
             </div>
             <form method="dialog" class="modal-backdrop">
@@ -65,7 +65,7 @@ export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, on
     );
 }
 
-function ModalBody({ modal, onClose, onEpisodeSelect, onStreamClick, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist }) {
+function ModalBody({ modal, onClose, onEpisodeSelect, onStreamClick, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings }) {
     const videoId = modal.metaId || modal.itemId;
     const videoType = modal.itemType;
     const isImdb = videoId && videoId.startsWith('tt') && !videoId.includes(':');
@@ -107,7 +107,7 @@ function ModalBody({ modal, onClose, onEpisodeSelect, onStreamClick, onSeasonCha
     }
 
     if (modal.view === 'streams') {
-        return <StreamContent modal={modal} onStreamClick={onStreamClick} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} statusButtons={statusButtons} headerMeta={headerMeta} />;
+        return <StreamContent modal={modal} onStreamClick={onStreamClick} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} statusButtons={statusButtons} headerMeta={headerMeta} stremioSettings={stremioSettings} />;
     }
 
     return null;
@@ -318,10 +318,266 @@ function is4kStream(parsedInfo) {
     return parsedInfo.labels.some(l => l === '4K');
 }
 
-function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, onRetryStreams, statusButtons, headerMeta }) {
+const EXTRA_LABEL_PATTERNS = [
+    { label: '8K', re: /\b(?:4320p|8k)\b/i },
+    { label: '4K', re: /\b(?:2160p|4k|uhd)\b/i },
+    { label: '1080p', re: /\b1080p\b/i },
+    { label: '720p', re: /\b720p\b/i },
+    { label: '480p', re: /\b(?:480p|sd|576p)\b/i },
+    { label: 'Pack', re: /\b(?:season|series|complete|collection|pack|temporada)\b.*\b(?:complete|completa|pack|s\d{1,2}|season|\d+\s*(?:-|&|and|y)\s*\d+)\b/i },
+    { label: 'DV', re: /\b(?:dolby[ .-]?vision|dovi|dv)\b/i },
+    { label: 'HDR10+', re: /\b(?:hdr10\+|hdr10plus)\b/i },
+    { label: 'HDR10', re: /\bhdr10\b/i },
+    { label: 'HDR', re: /\bhdr\b/i },
+    { label: 'REMUX', re: /\bremux\b/i },
+    { label: 'BluRay', re: /\bblu[ ._-]?ray\b|\bbluray\b/i },
+    { label: 'BRRip', re: /\bbrrip\b/i },
+    { label: 'BDRip', re: /\bbdrip\b/i },
+    { label: 'WEB-DL', re: /\bweb[ ._-]?dl\b/i },
+    { label: 'WEBRip', re: /\bwebrip\b/i },
+    { label: 'HDTV', re: /\bhdtv\b/i },
+    { label: 'DVDRip', re: /\bdvdrip\b/i },
+    { label: 'CAM', re: /\b(?:cam|camrip)\b/i },
+    { label: 'TS', re: /\b(?:ts|telesync|tc|telecine)\b/i },
+    { label: 'Multi-Audio', re: /\b(?:multi[ ._-]?(?:audio|lang|language)|multiaudio|multi-audio|multi)\b/i },
+    { label: 'Dual-Audio', re: /\b(?:dual[ ._-]?(?:audio|lang|language)|dualaudio|dual-audio|dual)\b/i },
+    { label: 'Dubbed', re: /\b(?:dubbed|dub)\b/i },
+    { label: 'Subbed', re: /\b(?:subbed|sub)\b/i },
+    { label: 'Multi-Sub', re: /\b(?:multi[ ._-]?(?:sub|subs|subtitle|subtitles)|multisub|multi-sub)\b/i },
+    { label: 'HEVC', re: /\b(?:hevc|h[ ._-]?265|x265)\b/i },
+    { label: 'AVC', re: /\b(?:avc|h[ ._-]?264|x264)\b/i },
+    { label: 'AV1', re: /\bav1\b/i },
+    { label: 'VP9', re: /\bvp9\b/i },
+    { label: '10bit', re: /\b10[ ._-]?bit\b/i },
+    { label: '8bit', re: /\b8[ ._-]?bit\b/i },
+    { label: 'Atmos', re: /\batmos\b/i },
+    { label: 'TrueHD', re: /\btruehd\b/i },
+    { label: 'DTS-HD', re: /\bdts[ ._-]?hd\b/i },
+    { label: 'DTS-X', re: /\bdts[ ._-]?x\b/i },
+    { label: 'DTS', re: /\bdts\b/i },
+    { label: 'DD+', re: /\b(?:ddp|dd\+|eac3|e-ac-3)\b/i },
+    { label: 'AC3', re: /\bac3\b/i },
+    { label: 'AAC', re: /\baac\b/i },
+    { label: 'FLAC', re: /\bflac\b/i },
+    { label: 'OPUS', re: /\bopus\b/i },
+    { label: 'MP3', re: /\bmp3\b/i },
+    { label: 'Stereo', re: /\b(?:stereo|2\.0|2ch)\b/i },
+    { label: '5.1', re: /\b(?:5\.1|6ch)\b/i },
+    { label: '7.1', re: /\b(?:7\.1|8ch)\b/i },
+    { label: '.mkv', re: /\.mkv\b/i },
+    { label: '.mp4', re: /\.mp4\b/i },
+    { label: '.avi', re: /\.avi\b/i },
+];
+
+const LABEL_ORDER = [
+    '8K', '4K', '1080p', '720p', '480p',
+    'Pack',
+    'DV', 'HDR10+', 'HDR10', 'HDR',
+    'REMUX', 'BluRay', 'BRRip', 'BDRip', 'WEB-DL', 'WEBRip', 'HDTV', 'DVDRip', 'CAM', 'TS',
+    'Multi-Audio', 'Dual-Audio', 'Dubbed', 'Subbed', 'Multi-Sub',
+    'HEVC', 'AV1', 'AVC', 'VP9', '10bit', '8bit',
+    'Atmos', 'TrueHD', 'DTS-HD', 'DTS-X', 'DTS', 'DD+', 'AC3', 'AAC', 'FLAC', 'OPUS', 'MP3', 'Stereo', '5.1', '7.1',
+    '.mkv', '.mp4', '.avi',
+];
+
+function canonicalLabel(label) {
+    const raw = String(label || '').trim();
+    const compact = raw.toLowerCase().replace(/[\s._-]+/g, '');
+    if (compact === '4320p' || compact === '8k') return '8K';
+    if (compact === '2160p' || compact === '4k' || compact === 'uhd') return '4K';
+    if (compact === '1080p') return '1080p';
+    if (compact === '720p') return '720p';
+    if (compact === '480p' || compact === 'sd' || compact === '576p') return '480p';
+    if (compact === 'dolbyvision' || compact === 'dovi' || compact === 'dv') return 'DV';
+    if (compact === 'hdr10+' || compact === 'hdr10plus') return 'HDR10+';
+    if (compact === 'hdr10') return 'HDR10';
+    if (compact === 'hdr') return 'HDR';
+    if (compact === 'webdl') return 'WEB-DL';
+    if (compact === 'webrip') return 'WEBRip';
+    if (compact === 'bluray' || compact === 'blurayrip') return 'BluRay';
+    if (compact === 'brrip') return 'BRRip';
+    if (compact === 'bdrip') return 'BDRip';
+    if (compact === 'hdtv') return 'HDTV';
+    if (compact === 'dvdrip') return 'DVDRip';
+    if (compact === 'cam' || compact === 'camrip') return 'CAM';
+    if (compact === 'ts' || compact === 'telesync' || compact === 'tc' || compact === 'telecine') return 'TS';
+    if (compact === 'multiaudio' || compact === 'multi' || compact === 'multi-audio') return 'Multi-Audio';
+    if (compact === 'dualaudio' || compact === 'dual' || compact === 'dual-audio') return 'Dual-Audio';
+    if (compact === 'dubbed' || compact === 'dub') return 'Dubbed';
+    if (compact === 'subbed' || compact === 'sub') return 'Subbed';
+    if (compact === 'multisub') return 'Multi-Sub';
+    if (compact === 'h265' || compact === 'x265' || compact === 'hevc') return 'HEVC';
+    if (compact === 'av1') return 'AV1';
+    if (compact === 'h264' || compact === 'x264' || compact === 'avc') return 'AVC';
+    if (compact === 'vp9') return 'VP9';
+    if (compact === '10bit') return '10bit';
+    if (compact === '8bit') return '8bit';
+    if (compact === 'atmos') return 'Atmos';
+    if (compact === 'truehd') return 'TrueHD';
+    if (compact === 'dtshd') return 'DTS-HD';
+    if (compact === 'dtsx') return 'DTS-X';
+    if (compact === 'dts') return 'DTS';
+    if (compact === 'ddp' || compact === 'dd+' || compact === 'eac3' || compact === 'eac') return 'DD+';
+    if (compact === 'ac3') return 'AC3';
+    if (compact === 'aac') return 'AAC';
+    if (compact === 'flac') return 'FLAC';
+    if (compact === 'opus') return 'OPUS';
+    if (compact === 'mp3') return 'MP3';
+    if (compact === 'stereo' || compact === '2.0' || compact === '2ch') return 'Stereo';
+    if (compact === '5.1' || compact === '6ch') return '5.1';
+    if (compact === '7.1' || compact === '8ch') return '7.1';
+    if (compact === 'mkv') return '.mkv';
+    if (compact === 'mp4') return '.mp4';
+    if (compact === 'avi') return '.avi';
+    return raw;
+}
+
+function sortLabels(labels) {
+    return [...labels].sort((a, b) => {
+        const ai = LABEL_ORDER.indexOf(a);
+        const bi = LABEL_ORDER.indexOf(b);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        return a.localeCompare(b);
+    });
+}
+
+function parseStreamSize(stream) {
+    const text = `${stream.title || ''}\n${stream.name || ''}\n${stream.description || ''}`;
+    const match = text.match(/\b(\d+(?:\.\d+)?)\s*(GB|MB|KB|GiB|MiB|KiB)\b/i);
+    if (!match) return 0;
+    const num = parseFloat(match[1]);
+    const unit = match[2].toLowerCase();
+    if (unit.startsWith('g')) return num * 1024 * 1024 * 1024;
+    if (unit.startsWith('m')) return num * 1024 * 1024;
+    if (unit.startsWith('k')) return num * 1024;
+    return 0;
+}
+
+function parseStreamSeeds(stream) {
+    const text = `${stream.title || ''}\n${stream.name || ''}\n${stream.description || ''}`;
+    const emojiMatch = text.match(/[👤👥]\s*(\d+)/u);
+    if (emojiMatch) return parseInt(emojiMatch[1], 10);
+
+    const labelMatch = text.match(/\b(?:seeds|seeders|seed)\s*:\s*(\d+)\b/i);
+    if (labelMatch) return parseInt(labelMatch[1], 10);
+
+    const suffixMatch = text.match(/\b(\d+)\s*(?:seeds|seeders|seed)\b/i);
+    if (suffixMatch) return parseInt(suffixMatch[1], 10);
+
+    const sMatch = text.match(/\bs\s*:\s*(\d+)\b/i);
+    if (sMatch) {
+        if (/([pl]\s*:\s*\d+|peers|leechers)/i.test(text)) {
+            return parseInt(sMatch[1], 10);
+        }
+    }
+    return 0;
+}
+
+function enrichStreamInfo(stream) {
+    const info = parseStreamName(stream.name);
+    const text = `${stream.name || ''}\n${stream.title || ''}`;
+    const labels = [];
+    const seen = new Set();
+    for (const raw of info.labels) {
+        const label = canonicalLabel(raw);
+        const key = label.toLowerCase();
+        if (!seen.has(key)) {
+            seen.add(key);
+            labels.push(label);
+        }
+    }
+    for (const { label, re } of EXTRA_LABEL_PATTERNS) {
+        const key = label.toLowerCase();
+        if (!seen.has(key) && re.test(text)) {
+            seen.add(key);
+            labels.push(label);
+        }
+    }
+    info.labels = sortLabels(labels);
+    info.size = parseStreamSize(stream);
+    info.seeds = parseStreamSeeds(stream);
+    return info;
+}
+
+function streamResolutionKey(parsedInfo) {
+    const labels = parsedInfo.labels.map(l => l.toLowerCase());
+    if (labels.includes('8k') || labels.includes('4320p')) return '8k';
+    if (is4kStream(parsedInfo) || labels.includes('2160p') || labels.includes('4k')) return '4k';
+    if (labels.includes('1080p')) return '1080p';
+    if (labels.includes('720p')) return '720p';
+    return 'other';
+}
+
+function getEnabledResolutionSet(settings) {
+    const raw = settings?.preferred_resolutions || settings?.preferredResolutions || [];
+    if (!Array.isArray(raw) || raw.length === 0) return new Set(['1080p', '720p', 'other']);
+    const enabled = raw
+        .filter(r => r && r.enabled !== false && r.Enabled !== false)
+        .map(r => String(r.resolution || r.Resolution || '').toLowerCase())
+        .filter(Boolean);
+    return new Set(enabled);
+}
+
+function getPreferredLanguage(settings) {
+    const code = String(settings?.preferred_language || settings?.preferredLanguage || '').trim().toLowerCase();
+    if (!code) return null;
+    return LANG_MAP[code] || null;
+}
+
+function streamLanguageNames(stream) {
+    const text = `${stream.title || ''}\n${stream.name || ''}`;
+    return extractLanguages(text).map(l => l.name);
+}
+
+function streamSearchText(stream, parsedInfo, langs) {
+    return [
+        parsedInfo.source,
+        ...parsedInfo.labels,
+        ...langs,
+        stream.name,
+        stream.title,
+        stream.description,
+        stream.infoHash,
+        stream.fileIdx,
+        stream.url,
+        stream.externalUrl,
+        stream.behaviorHints && JSON.stringify(stream.behaviorHints),
+    ].filter(v => v != null && v !== '').join(' ').toLowerCase();
+}
+
+const FILTER_GROUPS = {
+    resolution: ['8K', '4K', '1080p', '720p', '480p'],
+    pack: ['Pack'],
+    videoRange: ['DV', 'HDR10+', 'HDR10', 'HDR'],
+    sourceRelease: ['REMUX', 'BluRay', 'BRRip', 'BDRip', 'WEB-DL', 'WEBRip', 'HDTV', 'DVDRip', 'CAM', 'TS'],
+    audioSubtitle: ['Multi-Audio', 'Dual-Audio', 'Dubbed', 'Subbed', 'Multi-Sub'],
+    videoCodecs: ['HEVC', 'AV1', 'AVC', 'VP9', '10bit', '8bit'],
+    audioCodecs: ['Atmos', 'TrueHD', 'DTS-HD', 'DTS-X', 'DTS', 'DD+', 'AC3', 'AAC', 'FLAC', 'OPUS', 'MP3', 'Stereo', '5.1', '7.1'],
+    containers: ['.mkv', '.mp4', '.avi'],
+};
+
+const HIGH_VALUE_LABELS = ['8K', '4K', '1080p', '720p', '480p', 'Pack'];
+
+function getLabelGroup(label) {
+    const lower = String(label || '').toLowerCase();
+    for (const [group, labels] of Object.entries(FILTER_GROUPS)) {
+        if (labels.some(l => l.toLowerCase() === lower)) {
+            return group;
+        }
+    }
+    return null;
+}
+
+function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, onRetryStreams, statusButtons, headerMeta, stremioSettings = {} }) {
     const { title, poster, streams, error, failedAddons } = modal;
     const failed = failedAddons || [];
     const [retrying, setRetrying] = useState(false);
+    const [streamQuery, setStreamQuery] = useState('');
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [sortBy, setSortBy] = useState('default');
+
     const handleRetry = useCallback(async (e) => {
         e?.stopPropagation?.();
         if (retrying || !onRetryStreams) return;
@@ -329,37 +585,20 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
         try { await onRetryStreams(); } finally { setRetrying(false); }
     }, [onRetryStreams, retrying]);
 
-    const [show4k, setShow4k] = useState(() => {
-        const prefs = loadPrefs();
-        return prefs.show4k === true;
-    });
-    const [show4kWarning, setShow4kWarning] = useState(false);
-
-    const parsed = useMemo(() => streams.map(s => parseStreamName(s.name)), [streams]);
+    const parsed = useMemo(() => streams.map(s => enrichStreamInfo(s)), [streams]);
 
     const streamLangs = useMemo(() =>
-        streams.map(s => extractLanguages(s.title || '').map(l => l.name)),
+        streams.map(s => streamLanguageNames(s)),
         [streams]
     );
 
-    // Count how many 4K streams exist (before any filtering)
-    const total4kCount = useMemo(() => parsed.filter(p => is4kStream(p)).length, [parsed]);
-
-    // Base streams: exclude 4K when toggle is off
     const { baseStreams, baseParsed, baseLangs } = useMemo(() => {
-        if (show4k) {
-            return { baseStreams: streams, baseParsed: parsed, baseLangs: streamLangs };
-        }
-        const indices = [];
-        for (let i = 0; i < parsed.length; i++) {
-            if (!is4kStream(parsed[i])) indices.push(i);
-        }
         return {
-            baseStreams: indices.map(i => streams[i]),
-            baseParsed: indices.map(i => parsed[i]),
-            baseLangs: indices.map(i => streamLangs[i]),
+            baseStreams: streams,
+            baseParsed: parsed,
+            baseLangs: streamLangs,
         };
-    }, [streams, parsed, streamLangs, show4k]);
+    }, [streams, parsed, streamLangs]);
 
     const { allSources, allLabels, allLangs } = useMemo(() => {
         const sources = [];
@@ -375,18 +614,20 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
                 }
             }
         }
+        const preferredLang = getPreferredLanguage(stremioSettings);
         const langs = [];
-        const seenLangs = {};
-        for (const s of baseStreams) {
-            for (const lang of extractLanguages(s.title || '')) {
-                if (!seenLangs[lang.name]) {
-                    seenLangs[lang.name] = true;
-                    langs.push(lang);
-                }
-            }
+        const seenLangs = new Set();
+        if (preferredLang && baseLangs.some(langsForStream => langsForStream.includes(preferredLang.name))) {
+            langs.push(preferredLang);
+            seenLangs.add(preferredLang.name);
         }
-        return { allSources: sources, allLabels: labels, allLangs: langs };
-    }, [baseParsed, baseStreams]);
+        const hindiLang = LANG_MAP['hi'];
+        if (hindiLang && !seenLangs.has(hindiLang.name) && baseLangs.some(langsForStream => langsForStream.includes(hindiLang.name))) {
+            langs.push(hindiLang);
+            seenLangs.add(hindiLang.name);
+        }
+        return { allSources: sources, allLabels: sortLabels(labels), allLangs: langs };
+    }, [baseParsed, baseLangs, stremioSettings]);
 
     const [activeSources, setActiveSources] = useState(() => {
         const prefs = loadPrefs();
@@ -403,62 +644,128 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
         if (!prefs.labels) return {};
         const result = {};
         for (const lbl of prefs.labels) {
-            if (allLabels.some(l => l.toLowerCase() === lbl.toLowerCase())) result[lbl] = true;
+            if (getLabelGroup(lbl) && allLabels.some(l => l.toLowerCase() === lbl.toLowerCase())) {
+                result[lbl] = true;
+            }
         }
         return result;
     });
 
-    const [activeLang, setActiveLang] = useState(() => {
-        const prefs = loadPrefs();
-        if (!prefs.lang) return null;
-        return allLangs.some(l => l.name === prefs.lang) ? prefs.lang : null;
-    });
-
-    const hasFilters = allSources.length > 1 || allLabels.length > 0 || allLangs.length > 1;
+    const [activeLang, setActiveLang] = useState(null);
 
     const filteredStreams = useMemo(() => {
-        const activeSrcKeys = Object.keys(activeSources);
-        const activeLblKeys = Object.keys(activeLabels);
-        if (!activeSrcKeys.length && !activeLblKeys.length && !activeLang) {
-            return baseStreams.map((s, i) => ({ stream: s, parsed: baseParsed[i], langs: baseLangs[i], visible: true }));
+        const searchTerms = streamQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        const activeSrcKeys = Object.keys(activeSources).filter(k => activeSources[k]);
+        const activeLblKeys = Object.keys(activeLabels).filter(k => activeLabels[k]);
+
+        const activeGroups = {};
+        if (activeSrcKeys.length > 0) {
+            activeGroups['sources'] = activeSrcKeys;
         }
+        if (activeLang) {
+            activeGroups['languages'] = [activeLang];
+        }
+        for (const lbl of activeLblKeys) {
+            const group = getLabelGroup(lbl);
+            if (group) {
+                if (!activeGroups[group]) {
+                    activeGroups[group] = [];
+                }
+                activeGroups[group].push(lbl.toLowerCase());
+            }
+        }
+
+        const enabledResolutions = getEnabledResolutionSet(stremioSettings);
+        const hasActiveResolution = !!activeGroups['resolution'];
+
         return baseStreams.map((s, i) => {
             let show = true;
-            if (activeSrcKeys.length > 0 && !activeSources[baseParsed[i].source]) show = false;
-            if (show && activeLblKeys.length > 0) {
-                const lblLower = baseParsed[i].labels.map(l => l.toLowerCase());
-                if (!activeLblKeys.every(k => lblLower.includes(k.toLowerCase()))) show = false;
+
+            for (const [groupName, activeFilters] of Object.entries(activeGroups)) {
+                if (groupName === 'sources') {
+                    if (!activeFilters.includes(baseParsed[i].source)) {
+                        show = false;
+                        break;
+                    }
+                } else if (groupName === 'languages') {
+                    if (!baseLangs[i].includes(activeLang)) {
+                        show = false;
+                        break;
+                    }
+                } else {
+                    const streamLabelsLower = baseParsed[i].labels.map(l => l.toLowerCase());
+                    const matchesAny = activeFilters.some(filterLower => streamLabelsLower.includes(filterLower));
+                    if (!matchesAny) {
+                        show = false;
+                        break;
+                    }
+                }
             }
-            if (show && activeLang && !baseLangs[i].includes(activeLang)) show = false;
+
+            if (show && !hasActiveResolution) {
+                const resKey = streamResolutionKey(baseParsed[i]);
+                if (!enabledResolutions.has(resKey)) {
+                    show = false;
+                }
+            }
+
+            if (show && searchTerms.length > 0) {
+                const haystack = streamSearchText(s, baseParsed[i], baseLangs[i]);
+                if (!searchTerms.every(term => haystack.includes(term))) {
+                    show = false;
+                }
+            }
+
             return { stream: s, parsed: baseParsed[i], langs: baseLangs[i], visible: show };
         });
-    }, [baseStreams, baseParsed, baseLangs, activeSources, activeLabels, activeLang]);
+    }, [baseStreams, baseParsed, baseLangs, activeSources, activeLabels, activeLang, streamQuery, stremioSettings]);
+
+    const sortedFilteredStreams = useMemo(() => {
+        const items = filteredStreams.map((item, index) => ({ ...item, index }));
+        if (sortBy === 'seeds') {
+            items.sort((a, b) => {
+                const diff = (b.parsed.seeds || 0) - (a.parsed.seeds || 0);
+                if (diff !== 0) return diff;
+                const sizeDiff = (b.parsed.size || 0) - (a.parsed.size || 0);
+                if (sizeDiff !== 0) return sizeDiff;
+                return a.index - b.index;
+            });
+        } else if (sortBy === 'size') {
+            items.sort((a, b) => {
+                const diff = (b.parsed.size || 0) - (a.parsed.size || 0);
+                if (diff !== 0) return diff;
+                const seedsDiff = (b.parsed.seeds || 0) - (a.parsed.seeds || 0);
+                if (seedsDiff !== 0) return seedsDiff;
+                return a.index - b.index;
+            });
+        }
+        return items;
+    }, [filteredStreams, sortBy]);
+
+    const toggleSort = useCallback(() => {
+        setSortBy(prev => {
+            if (prev === 'default') return 'seeds';
+            if (prev === 'seeds') return 'size';
+            return 'default';
+        });
+    }, []);
+
+    const getSortLabel = useCallback((mode) => {
+        if (mode === 'seeds') {
+            const lbl = t('discover.sortSeeds');
+            return lbl === 'discover.sortSeeds' ? 'Seeds' : lbl;
+        }
+        if (mode === 'size') {
+            const lbl = t('discover.sortSize');
+            return lbl === 'discover.sortSize' ? 'Size' : lbl;
+        }
+        const lbl = t('discover.sortDefault');
+        return lbl === 'discover.sortDefault' ? 'Default' : lbl;
+    }, []);
 
     const visibleCount = filteredStreams.filter(s => s.visible).length;
-    const hasActiveFilters = Object.keys(activeSources).length > 0 || Object.keys(activeLabels).length > 0 || activeLang;
-
-    const toggle4k = useCallback(() => {
-        if (!show4k) {
-            setShow4kWarning(true);
-            window.umami?.track('discover-4k-toggle-attempt');
-        } else {
-            setShow4k(false);
-            savePrefs({ show4k: false });
-            window.umami?.track('discover-4k-disabled');
-        }
-    }, [show4k]);
-
-    const confirm4k = useCallback(() => {
-        setShow4k(true);
-        setShow4kWarning(false);
-        savePrefs({ show4k: true });
-        window.umami?.track('discover-4k-enabled');
-    }, []);
-
-    const cancel4k = useCallback(() => {
-        setShow4kWarning(false);
-        window.umami?.track('discover-4k-cancelled');
-    }, []);
+    const hasSearchQuery = streamQuery.trim().length > 0;
+    const hasActiveFilters = Object.keys(activeSources).length > 0 || Object.keys(activeLabels).length > 0 || activeLang || hasSearchQuery;
 
     const subtitleText = useMemo(() => {
         const total = baseStreams.length;
@@ -491,16 +798,26 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
     const toggleLang = useCallback((langName) => {
         setActiveLang(prev => {
             const next = prev === langName ? null : langName;
-            savePrefs({ lang: next });
             return next;
         });
     }, []);
 
+    const highValueLabelsToShow = useMemo(() => {
+        return HIGH_VALUE_LABELS.filter(lbl =>
+            allLabels.some(l => l.toLowerCase() === lbl.toLowerCase())
+        );
+    }, [allLabels]);
+
+    const hasAdvancedFilters = useMemo(() => {
+        if (allSources.length > 1) return true;
+        if (allLangs.length > 0) return true;
+        return allLabels.some(lbl => {
+            const group = getLabelGroup(lbl);
+            return group && group !== 'resolution' && group !== 'pack';
+        });
+    }, [allSources, allLabels, allLangs]);
+
     if (streams.length === 0) {
-        // When the empty result is caused (or partly caused) by addon
-        // failures, surface that explicitly instead of the generic
-        // "no streams" copy. Without this the user can't tell whether
-        // the title genuinely has no streams or their Torrentio is down.
         if (failed.length > 0) {
             const onlyFailure = failed[0];
             const headline = failed.length === 1
@@ -565,10 +882,6 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
         <div>
             <ModalHeader title={title} poster={poster} subtitle={subtitleText} {...headerMeta}
                 extra={statusButtons}
-                afterDescription={total4kCount > 0 ? (
-                    <Toggle4k show4k={show4k} count={total4kCount} onToggle={toggle4k}
-                        showWarning={show4kWarning} onConfirm={confirm4k} onCancel={cancel4k} />
-                ) : undefined}
             />
 
             {failed.length > 0 && (
@@ -592,34 +905,171 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
                 </div>
             )}
 
-            {hasFilters && (
-                <FilterChips
-                    allSources={allSources}
-                    allLabels={allLabels}
-                    allLangs={allLangs}
-                    activeSources={activeSources}
-                    activeLabels={activeLabels}
-                    activeLang={activeLang}
-                    onToggleSource={toggleSource}
-                    onToggleLabel={toggleLabel}
-                    onToggleLang={toggleLang}
-                />
+            <div class="mb-3 flex flex-col sm:flex-row sm:items-center gap-3 w-full">
+                <div class="w-full sm:w-1/2 flex items-center gap-2">
+                    <div class="flex-1 min-w-0">
+                        <StreamSearch value={streamQuery} onChange={setStreamQuery} />
+                    </div>
+                    <button
+                        type="button"
+                        onClick={toggleSort}
+                        class="btn btn-sm border border-w-line bg-w-surface text-w-text hover:border-w-cyan/30 hover:text-w-cyan h-9 gap-1.5 px-3 flex-shrink-0"
+                        title={getSortLabel(sortBy)}
+                        aria-label={getSortLabel(sortBy)}
+                    >
+                        {sortBy === 'default' && (
+                            <>
+                                <svg class="w-4 h-4 text-w-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                                </svg>
+                                <span class="text-xs">{getSortLabel(sortBy)}</span>
+                            </>
+                        )}
+                        {sortBy === 'seeds' && (
+                            <>
+                                <span class="text-w-cyan text-sm">👤</span>
+                                <span class="text-w-cyan text-xs font-semibold">{getSortLabel(sortBy)}</span>
+                            </>
+                        )}
+                        {sortBy === 'size' && (
+                            <>
+                                <span class="text-w-cyan text-sm">💾</span>
+                                <span class="text-w-cyan text-xs font-semibold">{getSortLabel(sortBy)}</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+                <div class="w-full sm:w-1/2 flex items-center justify-between sm:justify-end gap-2 flex-wrap">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        {highValueLabelsToShow.map(lbl => {
+                            const actualLabel = allLabels.find(l => l.toLowerCase() === lbl.toLowerCase()) || lbl;
+                            const isActive = !!activeLabels[actualLabel];
+                            return (
+                                <button
+                                    key={`high-val-${actualLabel}`}
+                                    class={chipClass(isActive, 'xs')}
+                                    onClick={() => toggleLabel(actualLabel)}
+                                >
+                                    {actualLabel}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {hasAdvancedFilters && (
+                        <button
+                            type="button"
+                            class={`btn btn-xs gap-1.5 ${
+                                showAdvanced
+                                    ? 'bg-o-primary/15 border border-o-primary/30 text-o-primary'
+                                    : 'btn-ghost border border-o-line text-o-sub hover:border-o-primary/30 hover:text-o-primary'
+                            }`}
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                        >
+                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                            </svg>
+                            {t('discover.filters')}
+                            {showAdvanced ? (
+                                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="18 15 12 9 6 15"></polyline>
+                                </svg>
+                            ) : (
+                                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            )}
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {showAdvanced && hasAdvancedFilters && (
+                <div class="mb-4 p-3 sm:p-4 rounded-xl border border-w-line/50 bg-w-surface/30 flex flex-col gap-3.5 transition-all">
+                    {allSources.length > 1 && (
+                        <div>
+                            <div class="text-[11px] font-semibold text-w-muted uppercase tracking-wider mb-1.5">{t('discover.sources')}</div>
+                            <div class="flex flex-wrap gap-1.5">
+                                {allSources.map(src => (
+                                    <button
+                                        key={`src-${src}`}
+                                        class={chipClass(!!activeSources[src], 'xs')}
+                                        onClick={() => toggleSource(src)}
+                                    >
+                                        {src}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {allLangs.length > 0 && (
+                        <div>
+                            <div class="text-[11px] font-semibold text-w-muted uppercase tracking-wider mb-1.5">{t('discover.languages')}</div>
+                            <div class="flex flex-wrap gap-1.5">
+                                {allLangs.map(lang => (
+                                    <button
+                                        key={`lang-${lang.name}`}
+                                        class={chipClass(activeLang === lang.name, 'xs')}
+                                        onClick={() => toggleLang(lang.name)}
+                                    >
+                                        {lang.flag} {lang.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {Object.entries(FILTER_GROUPS).map(([groupKey, groupLabels]) => {
+                        if (groupKey === 'resolution' || groupKey === 'pack') return null;
+
+                        const availableLabels = groupLabels.filter(lbl =>
+                            allLabels.some(l => l.toLowerCase() === lbl.toLowerCase())
+                        );
+
+                        if (availableLabels.length === 0) return null;
+
+                        const groupTitleKey = `discover.${groupKey}`;
+                        const groupTitle = t(groupTitleKey) || groupKey;
+
+                        return (
+                            <div key={groupKey}>
+                                <div class="text-[11px] font-semibold text-w-muted uppercase tracking-wider mb-1.5">{groupTitle}</div>
+                                <div class="flex flex-wrap gap-1.5">
+                                    {availableLabels.map(lbl => {
+                                        const actualLabel = allLabels.find(l => l.toLowerCase() === lbl.toLowerCase()) || lbl;
+                                        return (
+                                            <button
+                                                key={`lbl-${actualLabel}`}
+                                                class={chipClass(!!activeLabels[actualLabel], 'xs')}
+                                                onClick={() => toggleLabel(actualLabel)}
+                                            >
+                                                {actualLabel}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             )}
 
-            {baseStreams.length === 0 && !show4k && total4kCount > 0 ? (
+            {baseStreams.length === 0 ? (
                 <p class="text-w-muted text-sm text-center py-6">
-                    {tf('discover.all4kStreams', total4kCount)}
+                    {t('discover.noProfileStreamMatch')}
                 </p>
             ) : (
                 <>
                     <div class="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
-                        {filteredStreams.map(({ stream, parsed: info, visible }, i) => (
+                        {sortedFilteredStreams.map(({ stream, parsed: info, visible }, i) => (
                             visible && <StreamRow key={i} stream={stream} info={info} onStreamClick={onStreamClick} />
                         ))}
                     </div>
 
                     {hasActiveFilters && visibleCount === 0 && (
-                        <p class="text-w-muted text-sm text-center py-6">{t('discover.noFilterMatch')}</p>
+                        <p class="text-w-muted text-sm text-center py-6">
+                            {hasSearchQuery ? t('discover.noStreamSearchMatch') : t('discover.noFilterMatch')}
+                        </p>
                     )}
                 </>
             )}
@@ -627,81 +1077,35 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
     );
 }
 
-function Toggle4k({ show4k, count, onToggle, showWarning, onConfirm, onCancel }) {
+function StreamSearch({ value, onChange }) {
     return (
-        <div class="mt-3 relative">
-            <label class="flex items-center gap-1.5 cursor-pointer select-none">
+        <div class="w-full">
+            <div class="relative w-full">
+                <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-w-muted pointer-events-none z-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.3-4.3"></path>
+                </svg>
                 <input
-                    type="checkbox"
-                    checked={show4k}
-                    onChange={onToggle}
-                    class="toggle toggle-xs toggle-soft"
+                    type="text"
+                    value={value}
+                    onInput={(e) => onChange(e.currentTarget.value)}
+                    placeholder={t('discover.searchStreams')}
+                    autocomplete="off"
+                    class="input input-sm relative w-full h-9 bg-w-surface border-w-line focus:border-w-cyan/50 focus:outline-none text-w-text placeholder:text-w-muted pl-9 pr-8"
                 />
-                <span class="text-xs text-w-sub">
-                    {t('discover.include4k')}
-                    <span class="text-w-muted ml-0.5">({count})</span>
-                </span>
-                {!show4k && (
-                    <span class="text-[10px] text-w-muted">{t('discover.mayNotWork')}</span>
+                {value && (
+                    <button
+                        type="button"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-w-muted hover:text-w-text transition-colors"
+                        onClick={() => onChange('')}
+                        aria-label={t('discover.clearSearch')}
+                    >
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6 6 18M6 6l12 12"></path>
+                        </svg>
+                    </button>
                 )}
-            </label>
-
-            {showWarning && (
-                <div class="absolute left-0 top-full mt-1.5 z-dropdown bg-w-card border border-w-line rounded-xl shadow-lg p-3 w-64">
-                    <p class="text-[10px] font-semibold text-w-text uppercase tracking-wide">{t('discover.warning4kTitle')}</p>
-                    <p class="text-[11px] text-w-muted mt-0.5 leading-snug">
-                        {t('discover.warning4kBody')}
-                    </p>
-                    <div class="flex justify-between gap-1.5 mt-2">
-                        <button
-                            class="btn btn-ghost btn-xs text-w-muted"
-                            onClick={onCancel}
-                        >
-                            {t('discover.cancel')}
-                        </button>
-                        <button
-                            class="btn btn-xs btn-ghost border border-red-400/30 text-red-400/70 hover:bg-red-400/10 hover:text-red-400"
-                            onClick={onConfirm}
-                        >
-                            {t('discover.show4k')}
-                        </button>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-}
-
-function FilterChips({ allSources, allLabels, allLangs, activeSources, activeLabels, activeLang, onToggleSource, onToggleLabel, onToggleLang }) {
-    return (
-        <div class="flex flex-wrap gap-1.5 mb-3">
-            {allSources.map(src => (
-                <button
-                    key={`src-${src}`}
-                    class={chipClass(activeSources[src], 'xs')}
-                    onClick={() => onToggleSource(src)}
-                >
-                    {src}
-                </button>
-            ))}
-            {allLabels.map(lbl => (
-                <button
-                    key={`lbl-${lbl}`}
-                    class={chipClass(activeLabels[lbl], 'xs')}
-                    onClick={() => onToggleLabel(lbl)}
-                >
-                    {lbl}
-                </button>
-            ))}
-            {allLangs.map(lang => (
-                <button
-                    key={`lang-${lang.name}`}
-                    class={chipClass(activeLang === lang.name, 'xs')}
-                    onClick={() => onToggleLang(lang.name)}
-                >
-                    {lang.flag} {lang.name}
-                </button>
-            ))}
+            </div>
         </div>
     );
 }
