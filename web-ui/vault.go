@@ -135,7 +135,7 @@ func initializeReaper(c *cli.Context) (*reaper, error) {
 	// Setting HTTP Client
 	cl := http.DefaultClient
 
-	// Setting Webtor API
+	// Setting Octor API
 	sapi := api.New(c, cl)
 
 	// Setting Claims Client

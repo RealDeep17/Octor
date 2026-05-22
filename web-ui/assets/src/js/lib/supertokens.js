@@ -90,7 +90,7 @@ async function initSuperTokens(csrf) {
         appInfo: {
             apiDomain:   window._domain,
             apiBasePath: '/auth',
-            appName:     'webtor',
+            appName:     'octor',
         },
         recipeList: [
             Session.init({

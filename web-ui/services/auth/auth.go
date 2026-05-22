@@ -115,7 +115,7 @@ func (s *Auth) Init() error {
 	smtpSettings := emaildelivery.SMTPSettings{
 		Host: s.smtpHost,
 		From: emaildelivery.SMTPFrom{
-			Name:  "Webtor",
+			Name:  "Octor",
 			Email: s.smtpUser,
 		},
 		Username: &s.smtpUser,
@@ -137,7 +137,7 @@ func (s *Auth) Init() error {
 			// APIKey: <API_KEY(if configured)>,
 		},
 		AppInfo: supertokens.AppInfo{
-			AppName:         "webtor",
+			AppName:         "octor",
 			APIDomain:       s.domain,
 			WebsiteDomain:   s.domain,
 			APIBasePath:     &apiBasePath,

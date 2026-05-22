@@ -1,7 +1,7 @@
 import av from '../../lib/av';
 import { langPath } from '../../lib/i18n';
 
-// rgba colors mirror the w-cyan / w-purple / green-500 tokens at low alpha
+// rgba colors mirror the o-primary / o-primary / green-500 tokens at low alpha
 const TINTS = {
     caching:  'rgba(0, 206, 201, 0.10)',
     cached:   'rgba(0, 206, 201, 0.06)',
@@ -20,24 +20,24 @@ const FLIP_PCT = 10;
 
 const BADGE_CONFIG = {
     idle: {
-        classes: 'badge badge-sm bg-base-200/50 border-w-line/30 text-w-muted gap-1.5',
+        classes: 'badge badge-sm bg-base-200/50 border-o-line/30 text-o-muted gap-1.5',
         icon: '<span class="loading loading-dots loading-xs"></span>',
     },
     caching: {
-        classes: 'badge badge-sm bg-w-cyan/10 border-w-cyan/30 text-w-cyan gap-1.5',
+        classes: 'badge badge-sm bg-o-primary/10 border-o-primary/30 text-o-primary gap-1.5',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>',
     },
     cached: {
-        classes: 'badge badge-sm bg-w-cyan/10 border-w-cyan/30 text-w-cyan gap-1.5',
+        classes: 'badge badge-sm bg-o-primary/10 border-o-primary/30 text-o-primary gap-1.5',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>',
     },
     vaulting: {
         // no leading icon: the row gradient + first-cell pulse already signal progress
-        classes: 'badge badge-sm bg-w-purple/10 border-w-purple/30 text-w-purpleL',
+        classes: 'badge badge-sm bg-o-primary/10 border-o-primary/30 text-o-accent',
         icon: '',
     },
     waiting: {
-        classes: 'badge badge-sm bg-base-200/50 border-w-line/30 text-w-muted gap-1.5',
+        classes: 'badge badge-sm bg-base-200/50 border-o-line/30 text-o-muted gap-1.5',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 animate-pulse"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>',
     },
     vaulted: {
