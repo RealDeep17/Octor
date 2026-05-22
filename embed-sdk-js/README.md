@@ -1,6 +1,6 @@
 # embed-sdk-js
 
-Webtor.io SDK for online torrent streaming your site
+Octor SDK for online torrent streaming your site
 
 ## Features
 
@@ -13,7 +13,7 @@ Webtor.io SDK for online torrent streaming your site
 Generates embed for video player:
 ```html
 <video controls src="magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel"></video>
-<script src="https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
+<script src="https://cdn.jsdelivr.net/npm/@octor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
 ```
 
 Generates embed for video player with subtitle tracks, poster, custom title and width:
@@ -21,7 +21,7 @@ Generates embed for video player with subtitle tracks, poster, custom title and 
 <video controls src="magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel" poster="https://via.placeholder.com/150/0000FF/808080" width="100%" data-title="Sintel">
     <track srclang="en" label="test" default src="https://raw.githubusercontent.com/andreyvit/subtitle-tools/master/sample.srt">
 </video>
-<script src="https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
+<script src="https://cdn.jsdelivr.net/npm/@octor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
 ```
 Video element is replaced by wrapper div in this scenarios.
 
@@ -44,10 +44,10 @@ data-*       | Set specific configuration value for a key (see [Player configura
 
 Generates embed for video player:
 ```html
-    <div id="player" class="webtor" />
+    <div id="player" class="octor" />
     <script>
-        window.webtor = window.webtor || [];
-        window.webtor.push({
+        window.octor = window.octor || [];
+        window.octor.push({
             id: 'player',
             magnet: 'magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F',
             poster: 'https://via.placeholder.com/150/0000FF/808080',
@@ -62,9 +62,9 @@ Generates embed for video player:
             lang: 'en',
         });
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
+    <script src="https://cdn.jsdelivr.net/npm/@octor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
 ```
-[Here is live examples](https://webtor.io/embed/example)
+[Here is live examples](https://octor/embed/example)
 
 ## Embed configuration
 
@@ -88,7 +88,7 @@ lang       | Override ui language (optional)
 userLang   | Override user language (optional)
 controls   | Enables all features (true/false, default: true)
 features   | Enables or disables specific player features (optional)
-baseUrl    | Url of Webtor instance (By default: https://webtor.io)
+baseUrl    | Url of Octor instance (By default: https://octor)
 
 ## Subtitle configuration
 
@@ -115,7 +115,7 @@ chromecast    | Enables chromecast support
 embed         | Enables embed button
 opensubtitles | Enables OpenSubtitles support
 
-## Using with your own self-hosted Webtor instance
+## Using with your own self-hosted Octor instance
 
-After installing Webtor instance according to the [instruction](https://github.com/webtor-io/self-hosted/) just switch `baseUrl` configuration attribute to your own. 
+After installing Octor instance according to the [instruction](https://github.com/webtor-io/self-hosted/) just switch `baseUrl` configuration attribute to your own. 
 

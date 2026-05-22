@@ -29,7 +29,7 @@ Two signed JWTs are involved:
 - **Primary token** — signed by web-ui (in `prepareRequest`) into the X-Token header on every rest-api call. rest-api copies the same string verbatim into the `?token=` query of every signed export URL it returns. Carries identity, plan rate, and the new `rules` claim.
 - **Grace token** (new) — separate signed JWT issued by web-ui per (user, torrent_hash). Carries `kind=grace`, `hash`, `rate=50M`. No expiry. Travels inside the primary token's `rules` claim.
 
-Both signed with the shared `WEBTOR_API_SECRET` (HS256). Note that web-ui owns URL-token signing end-to-end — rest-api is a pass-through for the X-Token header, never re-signing.
+Both signed with the shared `OCTOR_API_SECRET` (HS256). Note that web-ui owns URL-token signing end-to-end — rest-api is a pass-through for the X-Token header, never re-signing.
 
 ## Token & rule shape
 
@@ -120,7 +120,7 @@ Session offset is quantized to 30s by the transcoder seek-quantum (`Session.Star
 | Replay primary token on other content | Primary claims carry `hash` whenever Rules is set. THP's generic `claims["hash"] != src.InfoHash → 403` check fires on the manifest request itself |
 | Replay grace token on other content | Same `hash` claim on the inner grace token — same THP check fires on segment requests |
 | Tamper with rules in URL | Rules live inside signed primary JWT; tampering invalidates signature |
-| Forge new grace token | Requires `WEBTOR_API_SECRET`; only signing services have it |
+| Forge new grace token | Requires `OCTOR_API_SECRET`; only signing services have it |
 
 ## Configuration
 

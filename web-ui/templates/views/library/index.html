@@ -4,7 +4,7 @@
   <div class="max-w-[900px] mx-auto">
 
     <!-- Badge (hidden on mobile to save vertical space) -->
-    <div class="hidden sm:inline-flex badge badge-lg bg-w-purple/10 border-w-purple/30 text-w-purpleL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+    <div class="hidden sm:inline-flex badge badge-lg bg-o-purple/10 border-o-purple/30 text-o-purpleL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z"/>
       </svg>
@@ -12,10 +12,10 @@
     </div>
 
     <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-2 sm:mb-4">{{ t $.Lang "library.title" }}</h1>
-    <p class="hidden sm:block text-[1.05rem] text-w-sub leading-relaxed mb-8">{{ t $.Lang "library.subtitle" }}</p>
+    <p class="hidden sm:block text-[1.05rem] text-o-sub leading-relaxed mb-8">{{ t $.Lang "library.subtitle" }}</p>
 
     <!-- Menu + Filters + Sort (sticky on scroll) -->
-    <div class="sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 mb-3 bg-w-bg/90 backdrop-blur-lg border-b border-w-line/30">
+    <div class="sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 mb-3 bg-w-bg/90 backdrop-blur-lg border-b border-o-line/30">
       <div class="flex flex-col gap-3">
         <div class="flex flex-col sm:flex-row sm:items-center gap-2">
           {{ template "library/menu" . }}
@@ -26,8 +26,8 @@
         </div>
         <form method="get" action="{{ langPath $.Lang $.Path }}" data-async-target="#list" class="flex items-center" id="library-search-form">
           <div class="relative flex-1 isolate">
-              <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="{{ t $.Lang "library.searchPlaceholder" }}" class="input input-sm bg-base-300 border-w-line focus:border-w-purple focus:outline-none w-full pl-10" />
-              <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-w-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="{{ t $.Lang "library.searchPlaceholder" }}" class="input input-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full pl-10" />
+              <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-o-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </div>
           <button type="submit" class="hidden">Submit</button>
         </form>
@@ -35,12 +35,12 @@
     </div>
 
     <!-- Content -->
-    <div id="library-search-empty" class="bg-base-300/50 border border-w-line rounded-2xl p-14 text-center mb-6 hidden">
-      <svg class="w-14 h-14 mx-auto text-w-muted/30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+    <div id="library-search-empty" class="bg-base-300/50 border border-o-line rounded-2xl p-14 text-center mb-6 hidden">
+      <svg class="w-14 h-14 mx-auto text-o-muted/30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.637 10.637Z" />
       </svg>
       <p class="text-base font-semibold text-w-text mb-1">{{ t $.Lang "library.noTorrents" }}</p>
-      <p class="text-sm text-w-muted max-w-xs mx-auto">{{ t $.Lang "library.noTorrentsHint" }}</p>
+      <p class="text-sm text-o-muted max-w-xs mx-auto">{{ t $.Lang "library.noTorrentsHint" }}</p>
     </div>
 
     {{ if .Data.Items }}
@@ -48,11 +48,11 @@
     {{ else }}
       <!-- Empty state -->
       <div class="text-center py-16">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-16 h-16 text-w-muted/40 mx-auto mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-16 h-16 text-o-muted/40 mx-auto mb-4">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
         </svg>
-        <p class="text-lg font-semibold text-w-sub mb-2">{{ t $.Lang "library.noTorrents" }}</p>
-        <p class="text-sm text-w-muted mb-6">{{ t $.Lang "library.noTorrentsHint" }}</p>
+        <p class="text-lg font-semibold text-o-sub mb-2">{{ t $.Lang "library.noTorrents" }}</p>
+        <p class="text-sm text-o-muted mb-6">{{ t $.Lang "library.noTorrentsHint" }}</p>
         <a class="btn btn-soft" href="{{ langPath $.Lang "/" }}" data-async-target="main">{{ t $.Lang "library.browseTorrents" }}</a>
       </div>
     {{ end }}

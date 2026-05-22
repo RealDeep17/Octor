@@ -1,5 +1,5 @@
 # common-services
-Collection of commonly used services at webtor.io
+Collection of commonly used services at octor
 
 ## Probe
 Generates standard liveness and readiness probe endpoints for kubernetes

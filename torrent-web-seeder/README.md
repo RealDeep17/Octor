@@ -1,6 +1,6 @@
 # torrent-web-seeder
 
-BitTorrent client with HTTP interface for streaming torrent content. Part of the [Webtor](https://github.com/webtor-io) platform.
+BitTorrent client with HTTP interface for streaming torrent content. Part of the [Octor](https://github.com/webtor-io) platform.
 
 Built on [anacrolix/torrent](https://github.com/anacrolix/torrent) (custom [fork](https://github.com/webtor-io/torrent)) with mmap-based storage, LRU piece eviction, and Prometheus instrumentation.
 
@@ -23,32 +23,31 @@ Built on [anacrolix/torrent](https://github.com/anacrolix/torrent) (custom [fork
                              │
 ┌──────────┐    HTTP    ┌────▼────────────────────┐    BitTorrent
 │  Client  │◄──────────►│  torrent-web-seeder     │◄──────────────► Peers
-│          │  :8080     │                         │
+│          │  :50054    │                         │
 └──────────┘            │  ┌───────────────────┐  │
                         │  │ anacrolix/torrent  │  │
                         │  │ mmap storage + LRU │  │
 ┌──────────┐   gRPC     │  └───────────────────┘  │
 │  Proxy   │◄──────────►│                         │
-│          │  :50051    │  Prometheus metrics      │──► :8083
-└──────────┘            │  Health probes           │──► :8081
+│  :50052  │  :50054    │  Prometheus metrics      │──► :8083
+└──────────┘            │  Health probes           │──► :52054
                         │  pprof                   │──► :8082
                         └─────────────────────────┘
 ```
 
 ## Usage
 
-### Server mode (default)
+The service is managed via `systemd` and configured using `custom.env`.
 
 ```bash
-torrent-web-seeder \
-  --port 8080 \
-  --data-dir /data \
-  --torrent-store-host torrent-store \
-  --torrent-store-port 50051 \
-  --use-stat --use-probe --use-prom
+# Start the service
+./switch_mode.sh production
+
+# Check status
+systemctl status octor-torrent-web-seeder
 ```
 
-Serves torrent content over HTTP:
+Serves torrent content over HTTP on port **50054**:
 
 ```
 GET /<info-hash>/                  — file listing
@@ -57,7 +56,7 @@ GET /<info-hash>/source.torrent    — download .torrent metadata
 GET /<info-hash>/<path>?stats      — download progress page
 ```
 
-Torrent metadata is resolved from local files (`--input`) or remote torrent-store (gRPC).
+Torrent metadata is resolved from local files (`--input`) or remote torrent-store (gRPC on port 50051).
 
 ### Diagnose mode
 
@@ -120,7 +119,7 @@ All configuration via CLI flags and environment variables.
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
 | `--host` | `WEB_HOST` | — | HTTP listen host |
-| `--port` | `WEB_PORT` | `8080` | HTTP listen port |
+| `--port` | `WEB_PORT` | `50054` | HTTP listen port |
 | `--data-dir` | `DATA_DIR` | system temp | Storage directory for torrent data |
 | `--input` | `INPUT` | — | Local `.torrent` file or directory |
 | `--torrent-store-host` | `TORRENT_STORE_SERVICE_HOST` | — | Remote torrent-store gRPC host |
@@ -146,8 +145,8 @@ All configuration via CLI flags and environment variables.
 
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
-| `--use-stat` | `USE_STAT` | `false` | Enable gRPC stat service (port 50051) |
-| `--use-probe` | `USE_PROBE` | `false` | Enable health probe (port 8081) |
+| `--use-stat` | `USE_STAT` | `false` | Enable gRPC stat service (port 50054) |
+| `--use-probe` | `USE_PROBE` | `false` | Enable health probe (port 52054) |
 | `--use-pprof` | `USE_PPROF` | `false` | Enable pprof (port 8082) |
 | `--use-prom` | `USE_PROM` | `false` | Enable Prometheus metrics (port 8083) |
 
@@ -155,10 +154,10 @@ All configuration via CLI flags and environment variables.
 
 ```bash
 docker build -t torrent-web-seeder .
-docker run -p 8080:8080 -v /data:/data torrent-web-seeder
+docker run -p 50054:50054 -v /data:/data torrent-web-seeder
 ```
 
-Ports: `8080` (HTTP), `50051` (gRPC), `8081` (probes), `8082` (pprof), `8083` (Prometheus).
+Ports: `50054` (HTTP), `50054` (gRPC Stat), `52054` (probes), `8082` (pprof), `8083` (Prometheus).
 
 ## Development
 

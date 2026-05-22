@@ -2,38 +2,38 @@
 {{ define "main" }}
 <section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
   <div class="max-w-[960px] mx-auto">
-    <div class="hidden sm:inline-flex badge badge-lg bg-w-cyan/10 border-w-cyan/30 text-w-cyan gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+    <div class="hidden sm:inline-flex badge badge-lg bg-o-cyan/10 border-o-cyan/30 text-o-cyan gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 012 v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2m16 0h-2M4 13h2m7 4h.01"/></svg>
       Admin Panel
     </div>
 
     <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-2 sm:mb-4">Drive</h1>
-    <p class="hidden sm:block text-[1.05rem] text-w-sub leading-relaxed mb-8">Browse raw file chunks and storage structures on the S3 union mount.</p>
+    <p class="hidden sm:block text-[1.05rem] text-o-sub leading-relaxed mb-8">Browse raw file chunks and storage structures on the S3 union mount.</p>
 
-    <div class="sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 mb-6 bg-w-bg/90 backdrop-blur-lg border-b border-w-line/30">
+    <div class="sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 mb-6 bg-w-bg/90 backdrop-blur-lg border-b border-o-line/30">
         <div class="flex flex-col gap-3">
             <div class="flex items-center gap-2">
-                <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-purple/30 hover:text-w-purpleL" href="{{ langPath $.Lang "/admin/library" }}" data-async-target="main">Library</a>
-                <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-pink/30 hover:text-w-pinkL" href="{{ langPath $.Lang "/admin/vault" }}" data-async-target="main">Vault</a>
-                <a class="btn btn-sm bg-w-cyan/15 border-w-cyan/30 text-w-cyan" href="{{ langPath $.Lang "/admin/drive" }}" data-async-target="main">Drive</a>
-                <a class="btn btn-sm btn-ghost border border-w-line text-w-sub hover:border-w-purple/30 hover:text-w-purpleL" href="{{ langPath $.Lang "/admin/status" }}" data-async-target="main">Status</a>
+                <a class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple/30 hover:text-o-purpleL" href="{{ langPath $.Lang "/admin/library" }}" data-async-target="main">Library</a>
+                <a class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-primary/30 hover:text-o-primaryL" href="{{ langPath $.Lang "/admin/vault" }}" data-async-target="main">Vault</a>
+                <a class="btn btn-sm bg-o-cyan/15 border-o-cyan/30 text-o-cyan" href="{{ langPath $.Lang "/admin/drive" }}" data-async-target="main">Drive</a>
+                <a class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple/30 hover:text-o-purpleL" href="{{ langPath $.Lang "/admin/status" }}" data-async-target="main">Status</a>
             </div>
             
             <!-- Breadcrumbs -->
             <nav class="flex items-center gap-2 text-xs font-medium overflow-x-auto no-scrollbar py-1">
                 {{ range $i, $bc := .Data.Breadcrumbs }}
-                    {{ if $i }}<span class="text-w-muted/30">/</span>{{ end }}
-                    <a href="{{ langPath $.Lang (printf "/admin/drive/%s" $bc.Path) }}" class="text-w-sub hover:text-w-cyan transition-colors whitespace-nowrap" data-async-target="main">{{ $bc.Name }}</a>
+                    {{ if $i }}<span class="text-o-muted/30">/</span>{{ end }}
+                    <a href="{{ langPath $.Lang (printf "/admin/drive/%s" $bc.Path) }}" class="text-o-sub hover:text-o-cyan transition-colors whitespace-nowrap" data-async-target="main">{{ $bc.Name }}</a>
                 {{ end }}
             </nav>
         </div>
     </div>
 
-    <div class="bg-base-200/50 rounded-2xl border border-w-line/30 overflow-hidden">
+    <div class="bg-base-200/50 rounded-2xl border border-o-line/30 overflow-hidden">
         <div class="overflow-x-auto">
             <table class="table table-zebra table-sm">
                 <thead>
-                    <tr class="border-b border-w-line/30 text-w-muted uppercase tracking-wider text-[10px]">
+                    <tr class="border-b border-o-line/30 text-o-muted uppercase tracking-wider text-[10px]">
                         <th class="pl-4">Name</th>
                         <th>Size</th>
                         <th>Modified</th>
@@ -42,9 +42,9 @@
                 </thead>
                 <tbody>
                     {{ if .Data.Path }}
-                    <tr class="hover:bg-base-300/30 transition-colors border-b border-w-line/10">
+                    <tr class="hover:bg-base-300/30 transition-colors border-b border-o-line/10">
                         <td class="pl-4 py-3">
-                            <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .Data.ParentPath) }}" class="flex items-center gap-2 text-w-muted hover:text-w-cyan transition-colors" data-async-target="main">
+                            <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .Data.ParentPath) }}" class="flex items-center gap-2 text-o-muted hover:text-o-cyan transition-colors" data-async-target="main">
                                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg>
                                 <span>..</span>
                             </a>
@@ -56,29 +56,29 @@
                     {{ end }}
                     
                     {{ range .Data.Items }}
-                    <tr class="hover:bg-base-300/30 transition-colors border-b border-w-line/10">
+                    <tr class="hover:bg-base-300/30 transition-colors border-b border-o-line/10">
                         <td class="pl-4 py-3">
                             {{ if .IsDir }}
-                                <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .Path) }}" class="flex items-center gap-2 text-base-content hover:text-w-cyan transition-colors font-medium" data-async-target="main">
-                                    <svg class="w-4 h-4 text-w-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                                <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .Path) }}" class="flex items-center gap-2 text-base-content hover:text-o-cyan transition-colors font-medium" data-async-target="main">
+                                    <svg class="w-4 h-4 text-o-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                                     <span>{{ .Name }}</span>
                                 </a>
                             {{ else }}
-                                <div class="flex items-center gap-2 text-w-sub">
-                                    <svg class="w-4 h-4 text-w-muted/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                <div class="flex items-center gap-2 text-o-sub">
+                                    <svg class="w-4 h-4 text-o-muted/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                     <span>{{ .Name }}</span>
                                 </div>
                             {{ end }}
                         </td>
-                        <td class="text-w-muted tabular-nums">{{ if .IsDir }}-{{ else }}{{ .Size | bitsForHumans }}{{ end }}</td>
-                        <td class="text-w-muted text-[10px]">{{ .ModTime.Format "2006-01-02 15:04" }}</td>
+                        <td class="text-o-muted tabular-nums">{{ if .IsDir }}-{{ else }}{{ .Size | bitsForHumans }}{{ end }}</td>
+                        <td class="text-o-muted text-[10px]">{{ .ModTime.Format "2006-01-02 15:04" }}</td>
                         <td></td>
                     </tr>
                     {{ end }}
                     
                     {{ if not .Data.Items }}
                     <tr>
-                        <td colspan="4" class="py-12 text-center text-w-muted italic">Directory is empty</td>
+                        <td colspan="4" class="py-12 text-center text-o-muted italic">Directory is empty</td>
                     </tr>
                     {{ end }}
                 </tbody>

@@ -1,52 +1,40 @@
 # torrent-store
 
-Torrent store service with multiple backends and GRPC-access.
+Torrent store service with multiple backends and gRPC-access.
 
-## Server usage
+## Usage
 
+The service is managed via `systemd` and configured using `custom.env`.
+
+```bash
+# Start the service
+./switch_mode.sh production
+
+# Check status
+systemctl status octor-torrent-store
 ```
-./torrent-store help serve 
-NAME:
-   torrent-store serve - Serves web server
 
-USAGE:
-   torrent-store serve [command options] [arguments...]
+The service listens on gRPC port **50051**.
 
-OPTIONS:
-   --probe-host value                  probe listening host [$PROBE_HOST]
-   --probe-port value                  probe listening port (default: 8081) [$PROBE_PORT]
-   --use-probe                         enable probe [$USE_PROBE]
-   --aws-access-key-id value           AWS Access Key ID [$AWS_ACCESS_KEY_ID]
-   --aws-secret-access-key value       AWS Secret Access Key [$AWS_SECRET_ACCESS_KEY]
-   --aws-endpoint value                AWS Endpoint [$AWS_ENDPOINT]
-   --aws-region value                  AWS Region [$AWS_REGION]
-   --aws-no-ssl                         [$AWS_NO_SSL]
-   --redis-host value                  redis host (default: "localhost") [$REDIS_MASTER_SERVICE_HOST, $ REDIS_SERVICE_HOST]
-   --redis-port value                  redis port (default: 6379) [$REDIS_MASTER_SERVICE_PORT, $ REDIS_SERVICE_PORT]
-   --redis-pass value                  redis pass [$REDIS_PASS]
-   --redis-user value                  redis user (default: "default") [$REDIS_USER]
-   --redis-sentinel-port value         redis sentinel port (default: 0) [$REDIS_SERVICE_PORT_REDIS_SENTINEL]
-   --redis-sentinel-master-name value  redis sentinel master name (default: "mymaster") [$REDIS_SERVICE_SENTINEL_MASTER_NAME]
-   --pprof-host value                  pprof listening host [$PPROF_HOST]
-   --pprof-port value                  pprof listening port (default: 8082) [$PPROF_PORT]
-   --use-pprof                         enable pprof [$USE_PPROF]
-   --grpc-host value                   grpc listening host [$GRPC_HOST]
-   --grpc-port value                   grpc listening port (default: 50051) [$GRPC_PORT]
-   --badger-expire value               badger expire (sec); set 0 to disable ttl (default: 3600) [$BADGER_EXPIRE]
-   --badger-path value                 badger database path (default: "badger_data") [$BADGER_PATH]
-   --redis-expire value                redis expire (sec) (default: 86400) [$REDIS_EXPIRE]
-   --use-redis                         use redis [$USE_REDIS]
-   --aws-bucket value                  s3 store bucket (default: "torrent-store") [$AWS_BUCKET]
-   --use-s3                            use s3 [$USE_S3]
-   --abuse-host value                  abuse store host [$ABUSE_STORE_SERVICE_HOST]
-   --abuse-port value                  port of the redis service (default: 50051) [$ABUSE_STORE_SERVICE_PORT]
-   --use-abuse                         use abuse [$USE_ABUSE]
-   --stoplist-path value               stoplist path [$STOPLIST_PATH]
+## Configuration
+
+Primary configuration is stored in `custom.env`.
+
+- **gRPC Port:** 50051
+- **Redis:** `REDIS_HOST`, `REDIS_PORT=6380`
+- **S3 Gateway:** `AWS_ENDPOINT=http://localhost:9000`, `AWS_BUCKET=torrent-store`
+
+Example `custom.env`:
+```env
+GRPC_PORT=50051
+REDIS_PORT=6380
+AWS_ENDPOINT=http://localhost:9000
 ```
 
 ## Client usage
 
-It is connecting to local server instance localhost:50051.
+The client connects to the local server instance on `localhost:50051`.
+
 
 ```
 % ./client help

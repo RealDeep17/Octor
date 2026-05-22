@@ -2,7 +2,7 @@
 {{ define "main" }}
 <section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
   <div class="max-w-[900px] mx-auto">
-    <div class="hidden sm:inline-flex badge badge-lg bg-w-purple/10 border-w-purple/30 text-w-purpleL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+    <div class="hidden sm:inline-flex badge badge-lg bg-o-purple/10 border-o-purple/30 text-o-purpleL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
       </svg>
@@ -11,13 +11,13 @@
 
     <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">Privacy Policy</h1>
 
-    <p class="text-sm text-w-muted mb-8">Last updated: April 12, 2026</p>
+    <p class="text-sm text-o-muted mb-8">Last updated: April 12, 2026</p>
 
-    <p class="text-[1.05rem] text-w-sub leading-relaxed mb-8">Webtor ("we," "our," or "us") values your privacy. This Privacy Policy explains how we handle your personal information when you use our service.</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-8">Octor ("we," "our," or "us") values your privacy. This Privacy Policy explains how we handle your personal information when you use our service.</p>
 
     <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">1. Information We Collect</h2>
-    <p class="text-[1.05rem] text-w-sub leading-relaxed mb-2">We collect the following data depending on how you use Webtor:</p>
-    <ul class="list-disc list-inside text-[1.05rem] text-w-sub leading-relaxed mb-4 space-y-1 pl-2">
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-2">We collect the following data depending on how you use Octor:</p>
+    <ul class="list-disc list-inside text-[1.05rem] text-o-sub leading-relaxed mb-4 space-y-1 pl-2">
       <li><span class="font-semibold">Email address</span> — collected when you sign in with Google, used solely for authentication.</li>
       <li><span class="font-semibold">Personal library</span> — content you save to your account, including its metadata (titles, file lists). You control what is added and removed.</li>
       <li><span class="font-semibold">Watch and rating history</span> — when you mark movies or series as watched or rate them, we store a reference to the film identifier (e.g. IMDB id), your rating signal, and the watch timestamp.</li>
@@ -25,7 +25,7 @@
     </ul>
 
     <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">2. How We Use Your Information</h2>
-    <ul class="list-disc list-inside text-[1.05rem] text-w-sub leading-relaxed mb-4 space-y-1 pl-2">
+    <ul class="list-disc list-inside text-[1.05rem] text-o-sub leading-relaxed mb-4 space-y-1 pl-2">
       <li><span class="font-semibold">Email</span> — to authenticate your account and communicate about your subscription.</li>
       <li><span class="font-semibold">Library</span> — to store and organize the content you choose to save.</li>
       <li><span class="font-semibold">Watch history</span> — to power the "continue watching" feature, to display your watched/rated state across the interface, and to ground AI recommendations in your actual taste.</li>
@@ -33,21 +33,21 @@
     </ul>
 
     <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">3. Data Sharing</h2>
-    <p class="text-[1.05rem] text-w-sub leading-relaxed mb-4">We do <span class="font-semibold">not</span> sell, rent, or share your email address with third parties, except as required by law.</p>
-    <p class="text-[1.05rem] text-w-sub leading-relaxed mb-4">When you use the <span class="font-semibold">AI Discover</span> feature, your recent watch history (film titles, release years, and rating signals — up to 40 entries) along with your query text are sent to <a href="https://www.anthropic.com" target="_blank" class="link link-hover text-w-pinkL">Anthropic</a>, our AI provider, to generate personalized recommendations. <span class="font-semibold">No email address, user identifier, IP address, or any other personally identifiable information is included</span> in these requests. Anthropic processes this data under their <a href="https://www.anthropic.com/policies/privacy" target="_blank" class="link link-hover text-w-pinkL">API data usage policy</a>, which prohibits training on API inputs.</p>
-    <p class="text-[1.05rem] text-w-sub leading-relaxed mb-4">AI Discover is entirely opt-in — no data is sent to Anthropic until you actively tap a suggestion chip or type a query on the Discover page.</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">We do <span class="font-semibold">not</span> sell, rent, or share your email address with third parties, except as required by law.</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">When you use the <span class="font-semibold">AI Discover</span> feature, your recent watch history (film titles, release years, and rating signals — up to 40 entries) along with your query text are sent to <a href="https://www.anthropic.com" target="_blank" class="link link-hover text-o-primaryL">Anthropic</a>, our AI provider, to generate personalized recommendations. <span class="font-semibold">No email address, user identifier, IP address, or any other personally identifiable information is included</span> in these requests. Anthropic processes this data under their <a href="https://www.anthropic.com/policies/privacy" target="_blank" class="link link-hover text-o-primaryL">API data usage policy</a>, which prohibits training on API inputs.</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">AI Discover is entirely opt-in — no data is sent to Anthropic until you actively tap a suggestion chip or type a query on the Discover page.</p>
 
     <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">4. Data Storage and Security</h2>
-    <p class="text-[1.05rem] text-w-sub leading-relaxed mb-4">Your data is stored securely and protected against unauthorized access. Watch history and AI usage data are associated with your account and are not publicly accessible.</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">Your data is stored securely and protected against unauthorized access. Watch history and AI usage data are associated with your account and are not publicly accessible.</p>
 
     <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">5. Data Deletion</h2>
-    <p class="text-[1.05rem] text-w-sub leading-relaxed mb-4">You can delete your account and all associated data (including watch history and AI usage data) at any time from your <a href="/profile" class="link link-hover text-w-pinkL" data-async-target="main">profile page</a>.</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">You can delete your account and all associated data (including watch history and AI usage data) at any time from your <a href="/profile" class="link link-hover text-o-primaryL" data-async-target="main">profile page</a>.</p>
 
     <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">6. Analytics</h2>
-    <p class="text-[1.05rem] text-w-sub leading-relaxed mb-4">We use <a href="https://umami.is" target="_blank" class="link link-hover text-w-pinkL">Umami</a>, a privacy-focused, self-hosted analytics tool, to understand how visitors use Webtor. Umami does not use cookies, does not collect personal data, and all data is aggregated — no individual user can be identified.</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">We use <a href="https://umami.is" target="_blank" class="link link-hover text-o-primaryL">Umami</a>, a privacy-focused, self-hosted analytics tool, to understand how visitors use Octor. Umami does not use cookies, does not collect personal data, and all data is aggregated — no individual user can be identified.</p>
 
     <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">7. Changes to This Policy</h2>
-    <p class="text-[1.05rem] text-w-sub leading-relaxed mb-4">We may update this policy from time to time. Changes will be posted on this page with an updated revision date.</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">We may update this policy from time to time. Changes will be posted on this page with an updated revision date.</p>
   </div>
 </section>
 {{ end }}

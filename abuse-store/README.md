@@ -1,6 +1,6 @@
 # abuse-store
 
-DMCA / abuse-notice service for the [Webtor](https://github.com/webtor-io) platform.
+DMCA / abuse-notice service for the [Octor](https://github.com/webtor-io) platform.
 
 It does three things behind a single gRPC API:
 
@@ -59,13 +59,13 @@ make protoc                              # regenerate proto/*.pb.go
 --probe-port           (8081)      probe port                                [$PROBE_PORT]
 --use-probe                        enable probe                              [$USE_PROBE]
 --postgres-host                    postgres host                             [$PG_HOST]
---postgres-port        (5432)      postgres port                             [$PG_PORT]
+--postgres-port        (5433)      postgres port                             [$PG_PORT]
 --postgres-user                                                              [$PG_USER]
 --postgres-password                                                          [$PG_PASSWORD]
 --postgres-database                                                          [$PG_DATABASE]
 --postgres-ssl                                                               [$PG_SSL]
 --grpc-host                        grpc listening host                       [$GRPC_HOST]
---grpc-port            (50051)     grpc listening port                       [$GRPC_PORT]
+--grpc-port            (50059)     grpc listening port                       [$GRPC_PORT]
 --nats-service-host                nats host (auto-injected in K8s)          [$NATS_SERVICE_HOST]
 --nats-service-port    (4222)      nats port                                 [$NATS_SERVICE_PORT]
 --sync-interval, --si  (10)        PG → Badger resync interval, minutes      [$STORE_SYNC_INTERVAL]
@@ -76,8 +76,8 @@ make protoc                              # regenerate proto/*.pb.go
 --smtp-tls                         use implicit TLS (port 465 style)         [$SMTP_TLS]
 --smtp-start-tls                   use STARTTLS over plaintext connection    [$SMTP_STARTTLS]
 --smtp-tls-secure      (true)      verify TLS certificates                   [$SMTP_TLS_SECURE]
---mail-sender          (noreply@webtor.io)                                   [$MAIL_SENDER]
---mail-support         (support@webtor.io)                                   [$MAIL_SUPPORT]
+--mail-sender          (noreply@octor)                                   [$MAIL_SENDER]
+--mail-support         (support@octor)                                   [$MAIL_SUPPORT]
 ```
 
 `--smtp-tls` and `--smtp-start-tls` are mutually exclusive. Set `--smtp-tls-secure=false` only against a self-signed dev SMTP.
@@ -87,24 +87,24 @@ make protoc                              # regenerate proto/*.pb.go
 The `client/` directory contains a small `urfave/cli` tool for smoke-testing:
 
 ```bash
-go run ./client --host 127.0.0.1 --port 50051 push \
+go run ./client --host 127.0.0.1 --port 50059 push \
     --hash <infohash> --work "..." --email reporter@example.com --description "..."
 
-go run ./client --host 127.0.0.1 --port 50051 check --hash <infohash>
+go run ./client --host 127.0.0.1 --port 50059 check --hash <infohash>
 ```
 
 ## Migrations
 
-SQL files in [`migrations/`](migrations/), numbered `N_name.{up,down}.sql`, run by the `migrate` subcommand from [`webtor-io/common-services`](https://github.com/webtor-io/common-services). The Docker image copies the directory to `/migrations` so migrations are available at runtime.
+SQL files in [`migrations/`](migrations/), numbered `N_name.{up,down}.sql`, run by the `migrate` subcommand from the `common-services` package. The Docker image copies the directory to `/migrations` so migrations are available at runtime.
 
 ## Docker
 
 ```bash
-docker build -t webtor/abuse-store .
-docker run --rm -p 50051:50051 -p 8081:8081 \
-    -e PG_HOST=... -e PG_USER=... -e PG_PASSWORD=... -e PG_DATABASE=... \
+docker build -t octor/abuse-store .
+docker run --rm -p 50059:50059 -p 8081:8081 \
+    -e PG_HOST=... -e PG_PORT=5433 -e PG_USER=... -e PG_PASSWORD=... -e PG_DATABASE=... \
     -e SMTP_HOST=... -e SMTP_PORT=587 -e SMTP_USER=... -e SMTP_PASS=... -e SMTP_STARTTLS=true \
-    webtor/abuse-store
+    octor/abuse-store
 ```
 
 Built and pushed to `ghcr.io/webtor-io/abuse-store` by [`.github/workflows/docker-image.yml`](.github/workflows/docker-image.yml) on push to `main` and on `v*` tags.

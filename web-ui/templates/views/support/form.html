@@ -2,7 +2,7 @@
 {{ define "main" }}
 <section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
   <div class="max-w-[900px] mx-auto">
-    <div class="hidden sm:inline-flex badge badge-lg bg-w-cyan/10 border-w-cyan/30 text-w-cyan gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+    <div class="hidden sm:inline-flex badge badge-lg bg-o-cyan/10 border-o-cyan/30 text-o-cyan gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
@@ -11,7 +11,7 @@
 
     <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">{{ t $.Lang "support.title" }}</h1>
 
-    <p class="hidden sm:block text-[1.05rem] text-w-sub leading-relaxed mb-8">{{ t $.Lang "support.subtitle" }}</p>
+    <p class="hidden sm:block text-[1.05rem] text-o-sub leading-relaxed mb-8">{{ t $.Lang "support.subtitle" }}</p>
 
     {{ if .ErrKey }}
         <div class="bg-error/10 border border-error/30 rounded-2xl p-4 mb-6">
@@ -20,7 +20,7 @@
     {{ end }}
     {{ with .Data }}
         <form action="{{ langPath $.Lang "/support" }}" method="post" enctype="multipart/form-data" data-async-target="main">
-            <select class="select w-full bg-base-300 border-w-line focus:border-w-cyan focus:outline-none" name="cause">
+            <select class="select w-full bg-base-300 border-o-line focus:border-o-cyan focus:outline-none" name="cause">
                 {{ range $key, $val := .CauseTypes }}
                     {{ with $.Data.Form }}
                         <option {{ if eq .Cause $key }}selected{{end}} {{ if eq $key -1 }}disabled{{ end }} value="{{ $key }}">{{ t $.Lang $val }}</option>
@@ -28,12 +28,12 @@
                 {{ end }}
             </select>
             {{ with .Form }}
-                <input type="text" name="subject" placeholder="{{ t $.Lang "support.subject" }}" class="input w-full mt-4 bg-base-300 border-w-line focus:border-w-cyan focus:outline-none hidden" data-required value="{{ .Subject }}" />
-                <textarea name="description" class="textarea w-full mt-4 bg-base-300 border-w-line focus:border-w-cyan focus:outline-none hidden" placeholder="{{ t $.Lang "support.description" }}" rows="5" data-required>{{ .Description }}</textarea>
-                <input name="infohash" type="text" placeholder="{{ t $.Lang "support.infohash" }}" class="input w-full mt-4 bg-base-300 border-w-line focus:border-w-cyan focus:outline-none hidden" data-select="0,1,2" data-required value="{{ .Infohash }}" pattern=".*[0-9a-fA-F]{40}.*" />
-                <input name="filename" type="text" placeholder="{{ t $.Lang "support.filename" }}" class="input w-full mt-4 bg-base-300 border-w-line focus:border-w-cyan focus:outline-none hidden" data-select="0,1,2" value="{{ .Filename }}" />
-                <input name="email" type="email" placeholder="{{ t $.Lang "support.email" }}" class="input w-full mt-4 bg-base-300 border-w-line focus:border-w-cyan focus:outline-none hidden" data-required value="{{ .Email }}" />
-                <input name="work" type="text" placeholder="{{ t $.Lang "support.work" }}" class="input w-full mt-4 bg-base-300 border-w-line focus:border-w-cyan focus:outline-none hidden" data-select="0" value="{{ .Work }}" />
+                <input type="text" name="subject" placeholder="{{ t $.Lang "support.subject" }}" class="input w-full mt-4 bg-base-300 border-o-line focus:border-o-cyan focus:outline-none hidden" data-required value="{{ .Subject }}" />
+                <textarea name="description" class="textarea w-full mt-4 bg-base-300 border-o-line focus:border-o-cyan focus:outline-none hidden" placeholder="{{ t $.Lang "support.description" }}" rows="5" data-required>{{ .Description }}</textarea>
+                <input name="infohash" type="text" placeholder="{{ t $.Lang "support.infohash" }}" class="input w-full mt-4 bg-base-300 border-o-line focus:border-o-cyan focus:outline-none hidden" data-select="0,1,2" data-required value="{{ .Infohash }}" pattern=".*[0-9a-fA-F]{40}.*" />
+                <input name="filename" type="text" placeholder="{{ t $.Lang "support.filename" }}" class="input w-full mt-4 bg-base-300 border-o-line focus:border-o-cyan focus:outline-none hidden" data-select="0,1,2" value="{{ .Filename }}" />
+                <input name="email" type="email" placeholder="{{ t $.Lang "support.email" }}" class="input w-full mt-4 bg-base-300 border-o-line focus:border-o-cyan focus:outline-none hidden" data-required value="{{ .Email }}" />
+                <input name="work" type="text" placeholder="{{ t $.Lang "support.work" }}" class="input w-full mt-4 bg-base-300 border-o-line focus:border-o-cyan focus:outline-none hidden" data-select="0" value="{{ .Work }}" />
             {{ end }}
             <div class="mt-7 flex flex-col sm:flex-row items-end sm:items-center sm:justify-between gap-4 hidden" data-support-actions>
                 {{ if useTurnstile }}

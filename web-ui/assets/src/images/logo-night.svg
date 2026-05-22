@@ -1,8 +1,6 @@
-<svg class="icon" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-width="170px" height="170px" viewBox="0 0 170 170" enable-background="new 0 0 170 170"
-xml:space="preserve">
-  <g>
-    <polygon fill="#f670b3" points="56,0 0,0 0,170 170,170 170,0 113,0 113,89 156,89 85,156 14,89 56,89"/>
-    <polygon fill="#0f172a" points="56,0 170,0 113,0 113,89 156,89 85,156 14,89 56,89"/>
-  </g>
+<svg width="170" height="170" viewBox="0 0 170 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sleek Outlined O with 8 Vertices -->
+  <path d="M85 15L135 35L155 85L135 135L85 155L35 135L15 85L35 35L85 15Z" stroke="white" stroke-width="10" stroke-linejoin="round"/>
+  <!-- Central Play Core -->
+  <path d="M75 65V105L105 85L75 65Z" fill="white"/>
 </svg>

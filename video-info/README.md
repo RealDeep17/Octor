@@ -1,29 +1,41 @@
 # video-info
-Gathers additional info for torrent's video-content from public sources (OpenSubtitles, etc...)
 
-# Usage
+The `video-info` service gathers additional metadata for torrent video content from public sources such as OpenSubtitles (OSDB).
 
+## Features
+- Fetches video metadata and subtitles.
+- IMDB search integration.
+- S3 storage for cached subtitle files.
+- Redis-based caching for performance.
+- Integrated health probes.
+
+## Configuration
+
+Configuration can be provided via command-line flags or environment variables (recommended to use `custom.env`).
+
+| Flag | Environment Variable | Default | Description |
+|------|----------------------|---------|-------------|
+| `--port` | `PORT` | `50056` | HTTP listening port |
+| `--redis-host` | `REDIS_HOST` | `localhost` | Redis host |
+| `--redis-port` | `REDIS_PORT` | `6380` | Redis port |
+| `--s3-endpoint` | `S3_ENDPOINT` | `http://localhost:9000` | S3 Gateway endpoint |
+| `--osdb-user` | `OSDB_USER` | `""` | OpenSubtitles username |
+| `--osdb-pass` | `OSDB_PASS` | `""` | OpenSubtitles password |
+
+*S3 and Redis options are provided by the `common-services` package.*
+
+## Build & Run
+
+### Local
+```bash
+go run .
 ```
-% ./video-info --help
-NAME:
-   video-info - Generates extra video info
 
-USAGE:
-   video-info [global options] command [command options] [arguments...]
-
-VERSION:
-   0.0.1
-
-COMMANDS:
-   help, h  Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --probe-host value  probe listening host
-   --probe-port value  probe listening port (default: 8081)
-   --host value        listening host
-   --port value        http listening port (default: 8080)
-   --redis-host value  redis host (default: "localhost") [$REDIS_MASTER_SERVICE_HOST, $ REDIS_SERVICE_HOST]
-   --redis-port value  redis port (default: 6379) [$REDIS_MASTER_SERVICE_PORT, $ REDIS_SERVICE_PORT]
-   --help, -h          show help
-   --version, -v       print the version
+### Docker
+```bash
+docker build -t octor/video-info .
+docker run --rm -p 50056:50056 -p 8081:8081 octor/video-info
 ```
+
+## Service Management
+Managed via `systemd` using the `switch_mode.sh` script in the project root.

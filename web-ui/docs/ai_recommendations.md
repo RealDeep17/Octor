@@ -342,7 +342,7 @@ serves English chips on a non-English UI, which is jarring.
    (`aiClient.js currentLocale()`). It is the user's CURRENT explicit
    choice and trumps `navigator.languages`, which would otherwise overrule
    a switcher click. Browser preferences only matter as a fallback when
-   the script runs outside the normal Webtor layout.
+   the script runs outside the normal Octor layout.
 3. Each XHR/SSE request includes `locale=<code>` as a query param. The
    handler runs `normalizeLocale` to clamp it.
 4. The locale is stamped into `UserContext`, used as part of the chips

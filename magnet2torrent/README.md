@@ -1,36 +1,44 @@
-# magnet2torrent
+# Magnet2Torrent
 
-Magnet-uri to torrent converter as GRPC-service.
-Here is two parts: server and client.
+A specialized gRPC service for resolving Magnet URIs into full BitTorrent metainfo (.torrent files). It utilizes the BitTorrent DHT network to discover peers and retrieve metadata for any valid infohash.
 
-## Server usage
+## 🚀 Key Features
 
+- **Fast Resolution:** Optimized for low-latency infohash discovery.
+- **gRPC Interface:** Seamless integration with other Go microservices.
+- **Standalone Client:** Includes a utility client for manual testing and validation.
+
+## ⚙️ Configuration
+
+| Variable | Flag | Default |
+|----------|------|---------|
+| `LISTEN_HOST` | `--host` | `0.0.0.0` |
+| `LISTEN_PORT` | `--port` | `50053` |
+
+## 🛠 Usage
+
+### Service Management
+Managed via systemd and orchestrated through `switch_mode.sh`.
+
+```sh
+# Check status
+sudo systemctl status octor-magnet2torrent
 ```
-% ./server help
-NAME:
-   magnet2torrent - runs magnet2torrent server
 
-USAGE:
-   server [global options] command [command options] [arguments...]
-
-VERSION:
-   0.0.1
-
-COMMANDS:
-     help, h  Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --host value, -H value  listening host [$LISTEN_HOST]
-   --port value, -P value  listening port (default: 50051) [$LISTEN_PORT]
-   --help, -h              show help
-   --version, -v           print the version
+### Manual Run (Server)
+```sh
+./bin/magnet2torrent --port 50053
 ```
 
-## Client usage
-
-It is connecting to local server instance localhost:50051.
-It was made for testing purpose only.
-
+### Manual Run (Client)
+```sh
+./bin/magnet2torrent-client "magnet:?xt=urn:btih:..."
 ```
-% ./client magnet-uri
-```
+
+## 📐 Architecture
+
+Magnet2Torrent acts as the first step in the media ingestion pipeline. When a user provides a magnet link, the `rest-api` calls this service to obtain the torrent metadata required by the `torrent-store` and `torrent-web-seeder`.
+
+## ⚖️ License
+
+All rights reserved.

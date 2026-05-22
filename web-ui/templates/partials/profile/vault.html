@@ -1,7 +1,7 @@
 {{ define "profile/vault" }}
-    <div class="bg-base-300/50 border border-w-line rounded-2xl p-6 mb-6">
+    <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
         <h2 class="text-[1.15rem] font-bold tracking-tight mb-2 flex items-center gap-2">
-            <svg class="w-4 h-4 text-w-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <svg class="w-4 h-4 text-o-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             {{ t .Ctx.Lang "vault.dashboard.title" }}
         </h2>
         {{ if .Data }}
@@ -9,7 +9,7 @@
                 <div class="flex justify-between items-end mb-2">
                     <div>
                         <span class="text-sm font-semibold text-w-text">{{ formatVP .Data.Funded }}</span>
-                        <span class="text-xs text-w-muted">Used</span>
+                        <span class="text-xs text-o-muted">Used</span>
                     </div>
                     <div class="text-right">
                         {{ if .Data.Total }}
@@ -17,23 +17,26 @@
                         {{ else }}
                             <span class="text-sm font-semibold text-w-text">&#8734;</span>
                         {{ end }}
-                        <span class="text-xs text-w-muted">Total</span>
+                        <span class="text-xs text-o-muted">Total</span>
                     </div>
                 </div>
-                <div class="w-full bg-base-200 rounded-full h-2 overflow-hidden border border-w-line/30">
+                <div class="w-full bg-base-200 rounded-full h-2 overflow-hidden border border-o-line/30">
                     {{ if .Data.Total }}
-                        <div class="h-full bg-w-pink transition-all duration-700" style="width: {{ printf "%.1f" (multiply (div .Data.Funded (derefFloat64 .Data.Total)) 100.0) }}%"></div>
+                        <div class="h-full bg-o-primary transition-all duration-700" style="width: {{ printf "%.1f" (multiply (div .Data.Funded (derefFloat64 .Data.Total)) 100.0) }}%"></div>
                     {{ else }}
-                        <div class="h-full bg-w-pink transition-all duration-700" style="width: 5%"></div>
+                        <div class="h-full bg-o-primary transition-all duration-700" style="width: 5%"></div>
                     {{ end }}
                 </div>
             </div>
             <div class="flex items-center justify-between mt-6">
-                <div class="text-xs text-w-muted flex items-center gap-1.5">
-                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    {{ .Data.VaultedCount }} torrents saved
+                <div class="text-xs text-o-muted flex flex-col gap-1">
+                    <div class="flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        {{ .Data.VaultedCount }} torrents saved
+                    </div>
+                    <a href="{{ langPath .Ctx.Lang "/instructions/vault" }}" class="link link-hover text-o-muted hover:text-o-sub" data-umami-event="instruction-vault" target="_blank">{{ t .Ctx.Lang "profile.vault.howTo" }}</a>
                 </div>
-                <a href="{{ langPath .Ctx.Lang "/vault" }}" class="btn btn-sm btn-soft-pink" data-async-target="main" data-umami-event="profile-open-vault">Manage Storage</a>
+                <a href="{{ langPath .Ctx.Lang "/vault" }}" class="btn btn-sm btn-o-primary" data-async-target="main" data-umami-event="profile-open-vault">Manage Storage</a>
             </div>
         {{ end }}
     </div>

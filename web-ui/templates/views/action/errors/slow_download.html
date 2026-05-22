@@ -1,10 +1,10 @@
 {{ define "main" }}
 {{ $isFree := eq .Data.TierName "free" }}
 
-<div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-w-line/40">
+<div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-o-line/40">
     <div class="flex items-start gap-3 flex-wrap">
         <div class="flex items-start gap-3 flex-1 min-w-[200px]">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 shrink-0 mt-0.5 text-w-pinkL">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 shrink-0 mt-0.5 text-o-primaryL">
                 <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
             </svg>
             <h3 class="font-semibold text-base text-base-content leading-snug">{{ t $.Lang "action.slow.title.bandwidth" }}</h3>
@@ -12,28 +12,28 @@
     </div>
 
     <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mt-4 mb-3">
-        <div class="text-center p-3 rounded-lg bg-base-300/40 border border-w-line">
-            <div class="text-2xl font-bold text-w-sub leading-none">{{ printf "%.1f" .Data.MeasuredSpeedMbps }}</div>
-            <div class="text-[11px] text-w-muted mt-1.5 uppercase tracking-wide">{{ t $.Lang "action.slow.unit" }}</div>
-            <div class="text-xs text-w-muted mt-1">{{ t $.Lang "action.slow.youHave" }}</div>
+        <div class="text-center p-3 rounded-lg bg-base-300/40 border border-o-line">
+            <div class="text-2xl font-bold text-o-sub leading-none">{{ printf "%.1f" .Data.MeasuredSpeedMbps }}</div>
+            <div class="text-[11px] text-o-muted mt-1.5 uppercase tracking-wide">{{ t $.Lang "action.slow.unit" }}</div>
+            <div class="text-xs text-o-muted mt-1">{{ t $.Lang "action.slow.youHave" }}</div>
         </div>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5 text-w-muted">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5 text-o-muted">
             <path d="M5 12h14M13 6l6 6-6 6"/>
         </svg>
-        <div class="text-center p-3 rounded-lg bg-w-pink/10 border border-w-pink/30">
+        <div class="text-center p-3 rounded-lg bg-o-primary/10 border border-o-primary/30">
             <div class="text-2xl font-bold gradient-text leading-none">{{ printf "%.1f" .Data.RequiredSpeedMbps }}</div>
-            <div class="text-[11px] text-w-pinkL mt-1.5 uppercase tracking-wide">{{ t $.Lang "action.slow.unit" }}</div>
-            <div class="text-xs text-w-pinkL/80 mt-1">{{ t $.Lang "action.slow.fileNeeds" }}</div>
+            <div class="text-[11px] text-o-primaryL mt-1.5 uppercase tracking-wide">{{ t $.Lang "action.slow.unit" }}</div>
+            <div class="text-xs text-o-primaryL/80 mt-1">{{ t $.Lang "action.slow.fileNeeds" }}</div>
         </div>
     </div>
 
     <div class="mt-4">
-        <p class="text-xs text-w-muted mb-2">{{ t $.Lang "action.slow.alts.bandwidth" }}</p>
-        <ul class="text-sm text-w-sub space-y-1.5">
-            <li class="flex gap-2"><span class="text-w-muted">•</span><span>{{ t $.Lang "action.slow.alt.smallerOrSeeders" }}</span></li>
-            <li class="flex gap-2"><span class="text-w-muted">•</span><span>{{ t $.Lang "action.slow.alt.preDownload" }}</span></li>
+        <p class="text-xs text-o-muted mb-2">{{ t $.Lang "action.slow.alts.bandwidth" }}</p>
+        <ul class="text-sm text-o-sub space-y-1.5">
+            <li class="flex gap-2"><span class="text-o-muted">•</span><span>{{ t $.Lang "action.slow.alt.smallerOrSeeders" }}</span></li>
+            <li class="flex gap-2"><span class="text-o-muted">•</span><span>{{ t $.Lang "action.slow.alt.preDownload" }}</span></li>
             {{ if not $isFree }}
-            <li class="flex gap-2"><span class="text-w-muted">•</span><span>{{ t $.Lang "action.slow.alt.vault" }}</span></li>
+            <li class="flex gap-2"><span class="text-o-muted">•</span><span>{{ t $.Lang "action.slow.alt.vault" }}</span></li>
             {{ end }}
         </ul>
     </div>
@@ -50,7 +50,7 @@
             <input type="hidden" name="resource-id" value="{{ .Data.ResourceID }}" />
             <input type="hidden" name="item-id" value="{{ .Data.ItemID }}" />
             <input type="hidden" name="force-slow" value="true" />
-            <button type="submit" class="btn whitespace-nowrap {{ if .Data.IsRateLimited }}btn-ghost border border-w-line{{ else }}btn-soft{{ end }}"
+            <button type="submit" class="btn whitespace-nowrap {{ if .Data.IsRateLimited }}btn-ghost border border-o-line{{ else }}btn-soft{{ end }}"
                     data-umami-event="slow-download-continue-slow"
                     data-umami-event-tier="{{ .Data.TierName }}"
                     data-umami-event-is_rate_limited="{{ if .Data.IsRateLimited }}1{{ else }}0{{ end }}">

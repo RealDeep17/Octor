@@ -13,16 +13,16 @@ import (
 	"github.com/webtor-io/web-ui/services/api"
 )
 
-// Webtor implements Backend interface for Webtor
-type Webtor struct {
+// Octor implements Backend interface for Octor
+type Octor struct {
 	api      *api.Api
 	storeMap *lazymap.LazyMap[*ra.ResourceResponse]
 	bgMap    *lazymap.LazyMap[*ra.ResourceResponse]
 }
 
-// NewWebtor creates a new Webtor backend
-func NewWebtor(apiService *api.Api) *Webtor {
-	return &Webtor{
+// NewOctor creates a new Octor backend
+func NewOctor(apiService *api.Api) *Octor {
+	return &Octor{
 		api: apiService,
 		storeMap: lazymap.New[*ra.ResourceResponse](&lazymap.Config{
 			Expire:      5 * time.Minute,
@@ -44,7 +44,7 @@ func NewWebtor(apiService *api.Api) *Webtor {
 // Stremio addons (Torrentio etc.) typically only ship the infohash, so a
 // hash-only magnet is what we have. rest-api uses DHT (and any trackers
 // the magnet picks up) to fetch torrent metadata.
-func (s *Webtor) EnsureResource(ctx context.Context, apiClaims *api.Claims, hash string) error {
+func (s *Octor) EnsureResource(ctx context.Context, apiClaims *api.Claims, hash string) error {
 	res, err := s.api.GetResourceCached(ctx, apiClaims, hash)
 	if err != nil {
 		return errors.Wrap(err, "failed to get resource from API")
@@ -66,7 +66,7 @@ func (s *Webtor) EnsureResource(ctx context.Context, apiClaims *api.Claims, hash
 	return nil
 }
 
-func (s *Webtor) backgroundStore(apiClaims *api.Claims, hash, magnet string) {
+func (s *Octor) backgroundStore(apiClaims *api.Claims, hash, magnet string) {
 	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	_, _ = s.bgMap.Get(hash, func() (*ra.ResourceResponse, error) {
@@ -78,7 +78,7 @@ func (s *Webtor) backgroundStore(apiClaims *api.Claims, hash, magnet string) {
 // given fileIdx. rest-api accepts a numeric content_id as a file-index
 // shorthand into the torrent's natural file order, so we skip the /list
 // round-trip we'd otherwise need to translate idx → SHA1.
-func (s *Webtor) getExportItem(ctx context.Context, apiClaims *api.Claims, hash string, fileIdx int, exportType string) (*ra.ExportItem, error) {
+func (s *Octor) getExportItem(ctx context.Context, apiClaims *api.Claims, hash string, fileIdx int, exportType string) (*ra.ExportItem, error) {
 	exportResp, err := s.api.ExportResourceContent(ctx, apiClaims, hash, strconv.Itoa(fileIdx), "")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to export resource content")
@@ -93,14 +93,14 @@ func (s *Webtor) getExportItem(ctx context.Context, apiClaims *api.Claims, hash 
 	return &item, nil
 }
 
-// ResolveLink generates a webtor streaming link with cached status.
+// ResolveLink generates a octor streaming link with cached status.
 // Ensures the resource is known to rest-api first so the export call
 // can succeed even on a freshly-seen torrent.
-func (s *Webtor) ResolveLink(ctx context.Context, apiClaims *api.Claims, hash string, fileIdx int) (string, bool, error) {
+func (s *Octor) ResolveLink(ctx context.Context, apiClaims *api.Claims, hash string, fileIdx int) (string, bool, error) {
 	log.WithFields(log.Fields{
 		"hash":     hash,
 		"file_idx": fileIdx,
-	}).Debug("resolving webtor link")
+	}).Debug("resolving octor link")
 
 	if err := s.EnsureResource(ctx, apiClaims, hash); err != nil {
 		return "", false, errors.Wrap(err, "failed to ensure resource")
@@ -120,7 +120,7 @@ func (s *Webtor) ResolveLink(ctx context.Context, apiClaims *api.Claims, hash st
 		"file_idx": fileIdx,
 		"url":      item.URL,
 		"cached":   cached,
-	}).Info("generated webtor link")
+	}).Info("generated octor link")
 
 	return item.URL, cached, nil
 }

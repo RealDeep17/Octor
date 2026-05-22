@@ -1,54 +1,48 @@
-# content-transcoder
+# Content Transcoder
 
-Transcodes HTTP-stream to HLS with additional features:
-1. Web-access to transcoded content
-2. On-demand transcoding
-3. Quits after specific period of inactivity
+A robust transcoding service that converts HTTP media streams into HLS (HTTP Live Streaming) on-demand. It features intelligent session management, automatic inactivity shutdown, and integrated VOD playback capabilities.
 
-## Requirements
-1. FFmpeg 3+
+## 🚀 Key Features
 
-## Basic usage
-```
-% ./server help
-NAME:
-   content-transcoder-server - runs content transcoder
+- **On-Demand Transcoding:** Starts transcoding processes only when a user initiates a stream.
+- **HLS Segmenting:** Optimized for low-latency playback with flexible preset support.
+- **Auto-Cleanup:** Automatically terminates transcoding jobs and cleans up temporary segments after periods of inactivity.
+- **Session-Aware:** Tracks active streaming sessions to prevent redundant transcoding of the same resource.
 
-USAGE:
-   server [global options] command [command options] [arguments...]
+## ⚙️ Configuration
 
-VERSION:
-   0.0.1
+| Variable | Flag | Default |
+|----------|------|---------|
+| `WEB_PORT` | `--port` | `50055` |
+| `PROBE_PORT` | `--probe-port` | `52055` |
+| `SOURCE_URL` | `--input` | (Required) |
+| `OUTPUT` | `--output` | `out` |
+| `CONTENT_PROBER_SERVICE_HOST` | `--content-prober-host` | `127.0.0.1` |
+| `CONTENT_PROBER_SERVICE_PORT` | `--content-prober-port` | `50063` |
+| `PRESET` | `--preset` | `ultrafast` |
 
-COMMANDS:
-     help, h  Shows a list of commands or help for one command
+## 🛠 Usage
 
-GLOBAL OPTIONS:
-   --host value, -H value                    listening host
-   --port value, -P value                    listening port (default: 8080)
-   --probe-port value, --pP value            probe port (default: 8081)
-   --input value, -i value, --url value      input (url) [$INPUT, $ SOURCE_URL, $ URL]
-   --output value, -o value                  output (local path) (default: "out")
-   --content-prober-host value, --cpH value  hostname of the content prober service [$CONTENT_PROBER_SERVICE_HOST]
-   --content-prober-port value, --cpP value  port of the content prober service (default: 50051) [$CONTENT_PROBER_SERVICE_PORT]
-   --access-grace value, --ag value          access grace in seconds (default: 600) [$GRACE]
-   --preset value                            transcode preset (default: "ultrafast") [$PRESET]
-   --transcode-grace value, --tg value       transcode grace in seconds (default: 5) [$TRANSCODE_GRACE]
-   --probe-timeout value, --pt value         probe timeout in seconds (default: 600) [$PROBE_TIMEOUT]
-   --job-id value                            job id [$JOB_ID]
-   --info-hash value                         info hash [$INFO_HASH]
-   --file-path value                         file path [$FILE_PATH]
-   --extra value                             extra [$EXTRA]
-   --player                                  player
-   --help, -h                                show help
-   --version, -v                             print the version
+### Service Management
+Managed via systemd and orchestrated through `switch_mode.sh`.
+
+```sh
+# Check status
+sudo systemctl status octor-content-transcoder
 ```
 
-## Example
+### Manual Run Example
+```sh
+./bin/content-transcoder \
+    --port 50055 \
+    --input 'http://example.com/movie.mkv' \
+    --player=true
 ```
-cd server &&
-rm -rf out/* && rm -rf tmp/* &&
-go build -mod=vendor . &&
-./server --input='https://github.com/Matroska-Org/matroska-test-files/raw/master/test_files/test5.mkv' --player=true
-```
-Then you can open your browser http://localhost:8080/player/ and watch movie
+
+## 📐 Architecture
+
+Content Transcoder is a core component of the streaming pipeline. It retrieves media via the `torrent-http-proxy`, probes it using `content-prober`, and generates HLS playlists and segments that are served to the `web-ui` player.
+
+## ⚖️ License
+
+All rights reserved.

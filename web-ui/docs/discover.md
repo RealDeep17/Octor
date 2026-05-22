@@ -113,7 +113,7 @@ Controlled by `{{ if not .Tool }}` — hidden when the page is loaded as a tool/
 
 - Clicking a **movie** opens a stream modal with streams from all stream-capable addons
 - Clicking a **series** first fetches meta from Cinemeta (then falls back to user addons) to show an episode picker grouped by season, then fetches streams for the selected episode
-- Streams with an info hash link to `/{infoHash}` for playback via Webtor
+- Streams with an info hash link to `/{infoHash}` for playback via Octor
 - Stream filters (source, label, language) are reactive — `useMemo` recomputes the filtered list on every filter change
 - "Back to episodes" navigation available from streams view
 
@@ -151,7 +151,7 @@ When opened from the streams modal ("Set up addons" button), the wizard:
 
 ### Third-party Disclaimer
 
-Both wizard steps display a disclaimer: all addon sources and addons are third-party services not affiliated with Webtor.
+Both wizard steps display a disclaimer: all addon sources and addons are third-party services not affiliated with Octor.
 
 ## Watchlist
 

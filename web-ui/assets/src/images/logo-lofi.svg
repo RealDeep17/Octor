@@ -1,8 +1,15 @@
-<svg class="icon" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-width="170px" height="170px" viewBox="0 0 170 170" enable-background="new 0 0 170 170"
-xml:space="preserve">
-  <g>
-    <polygon fill="#f2f2f2" points="56,0 0,0 0,170 170,170 170,0 113,0 113,89 156,89 85,156 14,89 56,89"/>
-    <polygon fill="#212121" points="56,0 170,0 113,0 113,89 156,89 85,156 14,89 56,89"/>
-  </g>
+<svg width="170" height="170" viewBox="0 0 170 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- BOLD Segmented Ring for Lofi (No Opacity, Edge-to-Edge) -->
+  <path d="M85 0L135 20V50L85 30V0Z" fill="white"/>
+  <path d="M170 85L150 135H120L140 85H170Z" fill="white"/>
+  <path d="M85 170L35 150V120L85 140V170Z" fill="white"/>
+  <path d="M0 85L20 35H50L30 85H0Z" fill="white"/>
+  
+  <path d="M135 20L170 85H140L125 50L135 20Z" fill="white"/>
+  <path d="M150 135L85 170V140L120 120L150 135Z" fill="white"/>
+  <path d="M35 150L0 85H30L50 120L35 150Z" fill="white"/>
+  <path d="M20 35L85 0V30L50 50L20 35Z" fill="white"/>
+
+  <!-- Large Sharp Play Button -->
+  <path d="M70 55V115L115 85L70 55Z" fill="white"/>
 </svg>

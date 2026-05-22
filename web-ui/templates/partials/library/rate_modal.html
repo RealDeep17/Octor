@@ -1,7 +1,7 @@
 {{ define "library/rate_modal" }}
 {{ if .Data }}
 <dialog class="modal" open>
-    <div class="modal-box max-w-sm bg-w-card border border-w-line/50 rounded-2xl">
+    <div class="modal-box max-w-sm bg-w-card border border-o-line/50 rounded-2xl">
         <div class="flex flex-col items-center pt-2 pb-3 gap-1">
             <div class="rating rating-md gap-0.5" id="lib-rate-stars">
                 {{ range $i := seq 1 10 }}
@@ -23,13 +23,13 @@
             {{ if gt .Data.CurrentRating 0 }}
             <form action="{{ langPath .Ctx.Lang (printf "/library/%s/%s/unrate" .Data.Type .Data.VideoID) }}" method="post"
                   data-async-target="main" data-async-no-scroll="true" data-async-push-state="false">
-                <button type="submit" class="btn btn-ghost text-w-sub">
+                <button type="submit" class="btn btn-ghost text-o-sub">
                     {{ t .Ctx.Lang "library.drop" }}
                 </button>
             </form>
             {{ end }}
             <form method="dialog">
-                <button class="btn btn-ghost border border-w-line text-w-sub hover:border-w-pink hover:text-base-content">{{ t .Ctx.Lang "library.cancel" }}</button>
+                <button class="btn btn-ghost border border-o-line text-o-sub hover:border-o-primary hover:text-base-content">{{ t .Ctx.Lang "library.cancel" }}</button>
             </form>
         </div>
     </div>

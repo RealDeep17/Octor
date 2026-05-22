@@ -3,7 +3,7 @@
 Some features to mention:
 
 1. Lightweight - less JavaScript code, no frontend frameworks, fewer bytes sent to the client.
-2. Based on [webtor REST-API](https://github.com/webtor-io/rest-api).
+2. Based on [octor REST-API](https://github.com/webtor-io/rest-api).
 
 ## Roadmap
 
@@ -53,57 +53,33 @@ Some features to mention:
   - [x] TorBox
 - [x] i18n
 
-## Setting up connection to Webtor RestAPI
+## Setting up connection to Octor REST-API
 
-You have to set up connection to [Webtor RestAPI](https://github.com/webtor-io/rest-api) before using WebUI.
+The Web UI connects to the Octor REST-API. Ensure the REST-API is running on port `8080`.
 
-If you have already installed [backend part](https://github.com/webtor-io/helm-charts),
-then you have to proxy rest-api from your k8s instance to your local machine with [kubefwd](https://github.com/txn2/kubefwd):
-```
-sudo kubefwd svc -f metadata.name=rest-api -n webtor
-```
-or with [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl):
-```shell
-kubectl port-forward svc/rest-api 9090:80 -n webtor
-
-# you have to setup additional environment variables before starting application
-export REST_API_SERVICE_PORT=9090
-export REST_API_SERVICE_HOST=localhost
-```
-
-If you have [RapidAPI subscription](https://rapidapi.com/paveltatarsky-Dx4aX7s_XBt/api/webtor/)
-you can just do the following:
-
-```shell
-export RAPIDAPI_KEY={YOUR_RAPIDAPI_KEY}
-export RAPIDAPI_HOST={YOUR_RAPIDAPI_HOST}
+Configuration is managed via `custom.env`:
+```env
+REST_API_SERVICE_HOST=localhost
+REST_API_SERVICE_PORT=8080
 ```
 
 ## Usage
 
-```shell
-./web-ui help
-NAME:
-   web-ui - runs webtor web ui v2
+The service is managed via `systemd` and configured using `custom.env`.
 
-USAGE:
-   web-ui [global options] command [command options] [arguments...]
+```bash
+# Start the service
+./switch_mode.sh production
 
-VERSION:
-   0.0.1
-
-COMMANDS:
-   serve, s  Serves web server
-   help, h   Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --help, -h     show help
-   --version, -v  print the version
+# Check status
+systemctl status octor-web-ui
 ```
+
+The Web UI listens on port **8082**.
 
 ## Development
 
-```
+```bash
 npm install
 npm start
 ```

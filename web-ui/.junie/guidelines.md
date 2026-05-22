@@ -31,7 +31,7 @@ Build and configuration
 - Makefile targets
   - make build: runs npm run build then go build .
   - make run: runs the locally built binary ./web-ui s (serve).
-  - make forward-ports: uses kubefwd to forward selected services in the webtor namespace (claims-provider, supertokens, rest-api, abuse-store) for local development.
+  - make forward-ports: uses kubefwd to forward selected services in the octor namespace (claims-provider, supertokens, rest-api, abuse-store) for local development.
 
 - Docker build
   - docker build . produces a minimal Alpine image. The build performs:
@@ -47,7 +47,7 @@ Build and configuration
 - Minimum runtime configuration
   - Web listener: WEB_HOST (default ""), WEB_PORT (default 8080). Flags: --host, --port (services/web).
   - REST API access (one of):
-    - Direct Webtor REST-API: REST_API_SERVICE_HOST, REST_API_SERVICE_PORT (default 80), REST_API_SECURE (enable https), WEBTOR_API_KEY/WEBTOR_API_SECRET (if required by backend). Flags in services/api.
+    - Direct Octor REST-API: REST_API_SERVICE_HOST, REST_API_SERVICE_PORT (default 80), REST_API_SECURE (enable https), OCTOR_API_KEY/OCTOR_API_SECRET (if required by backend). Flags in services/api.
     - RapidAPI: RAPIDAPI_HOST and RAPIDAPI_KEY; when set, API calls are redirected via RapidAPI and HTTPS:443 is enforced.
   - Sessions: SESSION_SECRET (default "secret123"). Optional Redis-backed session store if REDIS_MASTER_SERVICE_HOST/REDIS_SERVICE_HOST and REDIS_MASTER_SERVICE_PORT/REDIS_SERVICE_PORT are provided; REDIS_PASS for password (handlers/session).
   - Static assets: ASSETS_PATH (default ./assets/dist), WEB_ASSETS_HOST (handlers/static). For production, ensure assets/dist exists (via npm run build).
@@ -184,9 +184,9 @@ Running the server locally
   3) go build .
   4) ./web-ui serve \
        --host=127.0.0.1 --port=8080 \
-       --webtor-rest-api-host=$REST_API_SERVICE_HOST \
-       --webtor-rest-api-port=$REST_API_SERVICE_PORT \
-       [--webtor-rest-api-secure] [--rapidapi-host=$RAPIDAPI_HOST --rapidapi-key=$RAPIDAPI_KEY]
+       --octor-rest-api-host=$REST_API_SERVICE_HOST \
+       --octor-rest-api-port=$REST_API_SERVICE_PORT \
+       [--octor-rest-api-secure] [--rapidapi-host=$RAPIDAPI_HOST --rapidapi-key=$RAPIDAPI_KEY]
 - For dev hot reload: npm start (requires air). This starts webpack-dev-server and the Go server concurrently.
 
 Testing
@@ -272,7 +272,7 @@ Frontend Development Philosophy
 
 Additional development notes
 - HTTP API client (services/api)
-  - Builds X-Token JWT per request using WEBTOR_API_SECRET and adds X-Api-Key. When RAPIDAPI_* are set, switches to RapidAPI headers instead and uses HTTPS.
+  - Builds X-Token JWT per request using OCTOR_API_SECRET and adds X-Api-Key. When RAPIDAPI_* are set, switches to RapidAPI headers instead and uses HTTPS.
   - Client embeds request context values (remote IP, user agent, domain, session hash).
   - SSE parsing for /stats streams is implemented with a scanner; be cautious about context cancellation to avoid goroutine leaks.
 

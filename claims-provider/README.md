@@ -1,30 +1,62 @@
 # claims-provider
 
-Provides claims for user by email via gRPC.
+Provides user claims by email via gRPC for the Octor platform.
 
-Run
-- Local: `go run . serve`
-- Docker: `docker build -t claims-provider . && docker run --rm -p 50051:50051 -p 8081:8081 claims-provider`
+## Features
+- gRPC API for retrieving claims.
+- In-memory caching with configurable concurrency and expiration.
+- Graceful shutdown support.
+- Integrated health probes.
 
-Configuration (flags or env)
-- GRPC_HOST / --grpc-host: gRPC listening host (default "")
-- GRPC_PORT / --grpc-port: gRPC listening port (default 50051)
-- STORE_CACHE_CONCURRENCY / --store-cache-concurrency: maximum concurrent cache builders (default 10)
-- STORE_CACHE_EXPIRE / --store-cache-expire: cache expiration for successful entries (e.g. 60s) (default 60s)
-- STORE_CACHE_ERROR_EXPIRE / --store-cache-error-expire: cache expiration for errors (default 10s)
-- STORE_CACHE_CAPACITY / --store-cache-capacity: cache capacity (default 1000)
-- STORE_DB_TIMEOUT / --store-db-timeout: DB query timeout (default 5s)
-- Probe and PG options are provided by github.com/webtor-io/common-services (HTTP probe on 8081).
+## Configuration
 
-API
-- gRPC service: ClaimsProvider
-- Method: Get(GetRequest{email}) -> GetResponse{context, claims}
+Configuration can be provided via command-line flags or environment variables (recommended to use `custom.env`).
 
-Notes
-- Server performs graceful shutdown for gRPC.
+| Flag | Environment Variable | Default | Description |
+|------|----------------------|---------|-------------|
+| `--grpc-host` | `GRPC_HOST` | `""` | gRPC listening host |
+| `--grpc-port` | `GRPC_PORT` | `50060` | gRPC listening port |
+| `--store-cache-concurrency` | `STORE_CACHE_CONCURRENCY` | `10` | Maximum concurrent cache builders |
+| `--store-cache-expire` | `STORE_CACHE_EXPIRE` | `60s` | Cache expiration for successful entries |
+| `--store-cache-error-expire` | `STORE_CACHE_ERROR_EXPIRE` | `10s` | Cache expiration for errors |
+| `--store-cache-capacity` | `STORE_CACHE_CAPACITY` | `1000` | Cache capacity |
+| `--store-db-timeout` | `STORE_DB_TIMEOUT` | `5s` | DB query timeout |
+| `--postgres-host` | `PG_HOST` | `""` | PostgreSQL host |
+| `--postgres-port` | `PG_PORT` | `5433` | PostgreSQL port |
 
-Client
-- Build: `go build -o claims-client ./client`
-- Run by email: `./claims-client --grpc-host 127.0.0.1 --grpc-port 50051 --email user@example.com`
-- Run by Email: `./claims-client --grpc-host 127.0.0.1 --grpc-port 50051 --email test@example.com`
-- You can also use env vars GRPC_HOST and GRPC_PORT instead of flags.
+*PostgreSQL and Probe options are provided by the `common-services` package (HTTP probe defaults to `8081`).*
+
+## API
+
+### gRPC Service: `ClaimsProvider`
+**Method:** `Get(GetRequest{email}) -> GetResponse{context, claims}`
+
+## Build & Run
+
+### Local
+```bash
+go run . serve
+```
+
+### Docker
+```bash
+docker build -t octor/claims-provider .
+docker run --rm -p 50060:50060 -p 8081:8081 octor/claims-provider
+```
+
+## Client CLI
+
+A test client is available in the `client/` directory.
+
+### Build
+```bash
+go build -o claims-client ./client
+```
+
+### Run
+```bash
+./claims-client --grpc-host 127.0.0.1 --grpc-port 50060 --email user@example.com
+```
+
+## Service Management
+Managed via `systemd` using the `switch_mode.sh` script in the project root.

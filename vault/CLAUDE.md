@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Vault is a permanent, deduplicated storage layer for the Webtor platform (distributed torrent streaming). It exposes HTTP APIs to queue, store, and serve files, backed by PostgreSQL and S3-compatible object storage. Background workers process store/delete jobs asynchronously. NATS is used for inter-service event publishing.
+Vault is a permanent, deduplicated storage layer for the Octor platform (distributed torrent streaming). It exposes HTTP APIs to queue, store, and serve files, backed by PostgreSQL and S3-compatible object storage. Background workers process store/delete jobs asynchronously. NATS is used for inter-service event publishing.
 
 ## Build & Run
 
@@ -36,7 +36,7 @@ The `serve` command initializes all components in order: PG connection → migra
 | `webseed.go` | GET/HEAD `/webseed/{id}/{path}` — proxies stored files from S3 with HTTP Range support |
 | `models.go` | Data models (`Resource`, `File`, `ResourceFile`, `OperationLog`) and go-pg DB helpers |
 | `worker.go` | Background job processor — polls DB every 5s, downloads from REST API, multipart-uploads to S3, publishes NATS events |
-| `api.go` | Client for Webtor's external REST API with JWT auth — fetches torrent content lists and downloads file ranges |
+| `api.go` | Client for Octor's external REST API with JWT auth — fetches torrent content lists and downloads file ranges |
 | `event_handler.go` | JetStream pull subscriber on `resource.banned` (published by abuse-store on illegal-content reports) — funnels banned infohashes into `ResourceQueueForDeletion` so the worker tears them down. Skipped when NATS or PG is not configured |
 
 **Key design patterns:**
@@ -60,7 +60,7 @@ All config via CLI flags or environment variables (urfave/cli). Key groups:
 - **PostgreSQL:** `PG_HOST`, `PG_PORT`, `PG_USER`, `PG_PASSWORD`, `PG_DB`
 - **S3:** `S3_ENDPOINT`/`AWS_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`/`AWS_ACCESS_KEY_ID`, `S3_SECRET_KEY`/`AWS_SECRET_ACCESS_KEY`
 - **Worker:** `WORKERS` (default 10), `AWS_UPLOAD_CONCURRENCY` (default 1), `AWS_UPLOAD_PART_SIZE` (default 50MB), `RESOURCE_ID` (debug single resource)
-- **REST API:** `REST_API_SERVICE_HOST`, `REST_API_SERVICE_PORT`, `REST_API_SECURE`, `WEBTOR_API_KEY`, `WEBTOR_API_SECRET`
+- **REST API:** `REST_API_SERVICE_HOST`, `REST_API_SERVICE_PORT`, `REST_API_SECURE`, `OCTOR_API_KEY`, `OCTOR_API_SECRET`
 - **NATS/Probe/Pprof:** registered via `common-services`
 
 ## Dependencies

@@ -5,33 +5,33 @@
 
     <!-- Header -->
     <div class="text-center mb-8">
-      <div class="w-14 h-14 rounded-2xl bg-w-pink/10 flex items-center justify-center mx-auto mb-5">
-        <svg class="w-7 h-7 text-w-pinkL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <div class="w-14 h-14 rounded-2xl bg-o-primary/10 flex items-center justify-center mx-auto mb-5">
+        <svg class="w-7 h-7 text-o-primaryL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 21C20 19.6044 20 18.9067 19.8278 18.3389C19.44 17.0605 18.4395 16.06 17.1611 15.6722C16.5933 15.5 15.8956 15.5 14.5 15.5H9.5C8.10444 15.5 7.40665 15.5 6.83886 15.6722C5.56045 16.06 4.56004 17.0605 4.17224 18.3389C4 18.9067 4 19.6044 4 21M16.5 7.5C16.5 9.98528 14.4853 12 12 12C9.51472 12 7.5 9.98528 7.5 7.5C7.5 5.01472 9.51472 3 12 3C14.4853 3 16.5 5.01472 16.5 7.5Z"/>
         </svg>
       </div>
       <h1 class="text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-tight leading-tight mb-2">{{ t $.Lang "auth.login.title" }}</h1>
-      <p class="text-w-sub text-sm">{{ t $.Lang "auth.login.subtitle" }}</p>
+      <p class="text-o-sub text-sm">{{ t $.Lang "auth.login.subtitle" }}</p>
     </div>
 
     <!-- Instruction notices -->
     {{ if eq .Data.Instruction "stremio-configure" }}
-    <div class="bg-w-cyan/5 border border-w-cyan/20 rounded-xl p-4 mb-6 text-center">
-      <p class="text-sm text-w-sub"><strong class="text-w-cyan">{{ t $.Lang "auth.login.note" }}</strong> {{ t $.Lang "auth.login.stremioNote" }}</p>
+    <div class="bg-o-cyan/5 border border-o-cyan/20 rounded-xl p-4 mb-6 text-center">
+      <p class="text-sm text-o-sub"><strong class="text-o-cyan">{{ t $.Lang "auth.login.note" }}</strong> {{ t $.Lang "auth.login.stremioNote" }}</p>
     </div>
     {{ end }}
     {{ with .Data.Card }}
-    <div class="bg-w-cyan/5 border border-w-cyan/20 rounded-xl p-4 mb-6">
-      <p class="text-sm text-w-sub mb-3"><strong class="text-w-cyan">{{ t $.Lang "auth.login.note" }}</strong> {{ t $.Lang .NoteKey }}</p>
-      <p class="text-xs text-w-muted leading-relaxed mb-2">{{ t $.Lang .IntroKey }}</p>
-      <ul class="list-disc pl-5 space-y-1 text-xs text-w-muted leading-relaxed">
+    <div class="bg-o-cyan/5 border border-o-cyan/20 rounded-xl p-4 mb-6">
+      <p class="text-sm text-o-sub mb-3"><strong class="text-o-cyan">{{ t $.Lang "auth.login.note" }}</strong> {{ t $.Lang .NoteKey }}</p>
+      <p class="text-xs text-o-muted leading-relaxed mb-2">{{ t $.Lang .IntroKey }}</p>
+      <ul class="list-disc pl-5 space-y-1 text-xs text-o-muted leading-relaxed">
         {{ range .FeatureKeys }}<li>{{ t $.Lang . }}</li>{{ end }}
       </ul>
     </div>
     {{ end }}
 
     <!-- OAuth buttons card -->
-    <div class="bg-w-card border border-w-line rounded-2xl p-6 mb-6">
+    <div class="bg-w-card border border-o-line rounded-2xl p-6 mb-6">
       <!-- Google -->
       <button onclick="signInWith(event, 'google')" class="btn btn-soft w-full mt-3" data-umami-event="login-google">
         <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -45,14 +45,14 @@
     </div>
 
     <!-- Divider -->
-    <div class="divider text-w-muted text-xs font-semibold tracking-widest uppercase my-5 before:bg-w-line after:bg-w-line">{{ t $.Lang "auth.login.orEmail" }}</div>
+    <div class="divider text-o-muted text-xs font-semibold tracking-widest uppercase my-5 before:bg-w-line after:bg-w-line">{{ t $.Lang "auth.login.orEmail" }}</div>
 
     <!-- Email Magic Link card -->
-    <div class="bg-w-card border border-w-line rounded-2xl p-6">
-      <p class="text-sm text-w-sub text-center mb-1">{{ t $.Lang "auth.login.emailPrompt" }}</p>
-      <p class="text-xs text-w-muted text-center mb-5">{{ t $.Lang "auth.login.emailHint" }}</p>
+    <div class="bg-w-card border border-o-line rounded-2xl p-6">
+      <p class="text-sm text-o-sub text-center mb-1">{{ t $.Lang "auth.login.emailPrompt" }}</p>
+      <p class="text-xs text-o-muted text-center mb-5">{{ t $.Lang "auth.login.emailHint" }}</p>
       <form onsubmit="submitLoginForm(this, event)" class="join w-full">
-        <input type="email" name="email" class="input w-full bg-base-300 border-w-line focus:border-w-pink focus:outline-none join-item" placeholder="{{ t $.Lang "auth.login.emailPlaceholder" }}" />
+        <input type="email" name="email" class="input w-full bg-base-300 border-o-line focus:border-o-primary focus:outline-none join-item" placeholder="{{ t $.Lang "auth.login.emailPlaceholder" }}" />
         <button type="submit" class="btn btn-soft join-item" data-umami-event="login-magic-link">{{ t $.Lang "auth.login.send" }}</button>
       </form>
       <form class="hidden progress-alert progress-alert-block mt-5 closeable">

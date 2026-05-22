@@ -2,7 +2,7 @@
 {{ define "main" }}
 <section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
   <div class="max-w-[900px] mx-auto">
-    <div class="hidden sm:inline-flex badge badge-lg bg-w-pink/10 border-w-pink/30 text-w-pinkL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+    <div class="hidden sm:inline-flex badge badge-lg bg-o-primary/10 border-o-primary/30 text-o-primaryL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
         <circle cx="12" cy="7" r="4"/>
@@ -12,21 +12,36 @@
 
     <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">{{ t $.Lang "profile.title" }}</h1>
 
-    <p class="hidden sm:block text-[1.05rem] text-w-sub leading-relaxed mb-10">{{ t $.Lang "profile.subtitle" }}</p>
+    <p class="hidden sm:block text-[1.05rem] text-o-sub leading-relaxed mb-10">{{ t $.Lang "profile.subtitle" }}</p>
 
-    <div id="tier">
+    <div id="tier" class="mb-12">
         {{ template "profile/tier" $ }}
     </div>
+
+    <!-- Appearance -->
+    <div class="flex items-center gap-3 mt-12 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">Personalization</h2>
+        <div class="flex-1 h-px bg-o-line/50"></div>
+    </div>
+    <div id="appearance">
+        {{ template "profile/appearance" $ }}
+    </div>
+
+    <!-- Vault -->
     {{ if .Data.VaultStats }}
+    <div class="flex items-center gap-3 mt-12 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">{{ t $.Lang "vault.dashboard.title" }}</h2>
+        <div class="flex-1 h-px bg-o-line/50"></div>
+    </div>
     <div id="vault" data-async-layout="{{`{{ template "profile/vault" (withContext $ .Data.VaultStats) }}`}}">
         {{ template "profile/vault" (withContext $ .Data.VaultStats) }}
     </div>
     {{ end }}
 
     <!-- Stremio -->
-    <div class="flex items-center gap-3 mt-10 mb-4">
-        <h2 class="text-xs font-semibold tracking-widest uppercase text-w-muted">{{ t $.Lang "profile.stremio" }}</h2>
-        <div class="flex-1 h-px bg-w-line/50"></div>
+    <div class="flex items-center gap-3 mt-12 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">{{ t $.Lang "profile.stremio" }}</h2>
+        <div class="flex-1 h-px bg-o-line/50"></div>
     </div>
 
     <div id="stremio" data-async-layout="{{`{{ template "profile/stremio" (withContext $ .Data.StremioAddonURL) }}`}}">
@@ -44,7 +59,7 @@
 
     <!-- Integrations -->
     <div class="flex items-center gap-3 mt-10 mb-4">
-        <h2 class="text-xs font-semibold tracking-widest uppercase text-w-muted">{{ t $.Lang "profile.integrations" }}</h2>
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">{{ t $.Lang "profile.integrations" }}</h2>
         <div class="flex-1 h-px bg-w-line/50"></div>
     </div>
 
@@ -60,9 +75,9 @@
     {{ end }}
 
     <div class="text-center mt-12 flex flex-col items-center gap-3">
-        <a href="{{ langPath $.Lang "/logout" }}" class="btn btn-ghost text-w-muted hover:text-error text-sm" data-async-target="main" data-umami-event="logout">{{ t $.Lang "profile.logout" }}</a>
+        <a href="{{ langPath $.Lang "/logout" }}" class="btn btn-ghost text-o-muted hover:text-error text-sm" data-async-target="main" data-umami-event="logout">{{ t $.Lang "profile.logout" }}</a>
         <form method="post" action="{{ langPath $.Lang "/profile/delete" }}" data-async-target="main">
-            <button type="submit" class="btn btn-ghost text-w-muted hover:text-error text-xs"
+            <button type="submit" class="btn btn-ghost text-o-muted hover:text-error text-xs"
                 data-umami-event="profile-delete"
                 onclick="return confirm('{{ t $.Lang "profile.deleteConfirm" }}')">
                 {{ t $.Lang "profile.deleteAccount" }}

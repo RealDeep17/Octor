@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Service role
 
-`abuse-store` is the DMCA / abuse-notice sink for the Webtor platform. It does three distinct jobs that share one gRPC surface:
+`abuse-store` is the DMCA / abuse-notice sink for the Octor platform. It does three distinct jobs that share one gRPC surface:
 
 1. **Stoplist** for torrents reported as illegal content. Other components (web-ui, torrent-http-proxy) call `Check(infohash)` before serving content; a positive answer blocks playback.
 2. **Mail relay** for every kind of incoming notice (illegal content, malware, app error, generic question), forwarding to support and acknowledging the reporter.
@@ -63,7 +63,7 @@ Two non-obvious choices:
 - **Always publish on `ILLEGAL_CONTENT`, even on duplicate.** A repeat report from the form re-triggers downstream cleanup, recovering from a previously dropped publish (e.g. NATS unreachable on the first attempt). At-least-once semantics; consumers must be idempotent.
 - **Best-effort, not RPC-blocking.** Marshal/connect/publish errors are logged but never fail the RPC — mirrors the mailer's behaviour. There is no outbox: if NATS is down and the reporter never re-submits, the event is lost. This is acceptable because the stoplist itself (Badger/PG) is the authoritative cut-off; downstream cleanup is housekeeping.
 
-`cs.NATS` is created from `--nats-service-host` / `--nats-service-port` (env vars `NATS_SERVICE_HOST/PORT` are auto-injected by Kubernetes from the `nats` Service in the `webtor` namespace; no chart wiring required). If the host flag is empty, `NewNATS` returns `nil` and `publishBanned` becomes a no-op — useful for local runs without NATS.
+`cs.NATS` is created from `--nats-service-host` / `--nats-service-port` (env vars `NATS_SERVICE_HOST/PORT` are auto-injected by Kubernetes from the `nats` Service in the `octor` namespace; no chart wiring required). If the host flag is empty, `NewNATS` returns `nil` and `publishBanned` becomes a no-op — useful for local runs without NATS.
 
 ### Mailer
 

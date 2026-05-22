@@ -1,9 +1,9 @@
 {{ define "main" }}
 {{ $isFree := eq .Data.TierName "free" }}
-<div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-w-line/40">
+<div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-o-line/40">
     <div class="flex items-start gap-3 flex-wrap">
         <div class="flex items-start gap-3 flex-1 min-w-[200px]">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-5 shrink-0 mt-0.5 text-w-pinkL">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-5 shrink-0 mt-0.5 text-o-primaryL">
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12 6 12 12 16 14"></polyline>
             </svg>
@@ -19,11 +19,11 @@
         {{- end }}
     </div>
 
-    <p class="text-sm text-w-sub mt-3 leading-relaxed">
+    <p class="text-sm text-o-sub mt-3 leading-relaxed">
         {{ if $isFree }}{{ t $.Lang "action.noPeers.vaultPitch" }}{{ else }}{{ t $.Lang "action.noPeers.vaultUse" }}{{ end }}
     </p>
 
-    <p class="text-xs text-w-muted mt-3">{{ t $.Lang "action.noPeers.altSearch" }}</p>
+    <p class="text-xs text-o-muted mt-3">{{ t $.Lang "action.noPeers.altSearch" }}</p>
 </div>
 
 <div class="pt-3 px-5 flex flex-wrap gap-2 justify-end items-center">

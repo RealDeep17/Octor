@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`torrent-http-proxy` is a Go HTTP proxy for the [webtor.io](https://github.com/webtor-io) platform. It routes requests to internal Kubernetes services/jobs, deploys jobs on demand, provides JWT-based authentication, and supports matryoshka-style service chaining via URL path modifications (e.g., `~hls`, `~vod`).
+`torrent-http-proxy` is a Go HTTP proxy for the [octor](https://github.com/webtor-io) platform. It routes requests to internal Kubernetes services/jobs, deploys jobs on demand, provides JWT-based authentication, and supports matryoshka-style service chaining via URL path modifications (e.g., `~hls`, `~vod`).
 
 ## Build & Run
 
@@ -59,7 +59,7 @@ HTTP Request → Web.ServeHTTP()
 
 - **Client** (`client.go`): Lazy-initialized K8s client (in-cluster or local kubeconfig)
 - **Endpoints** (`endpoints.go`): Queries K8s service endpoints with 60s cache TTL
-- **NodesStat** (`nodes_stat.go`): Lists ready nodes with role labels (prefix: `webtor.io/`)
+- **NodesStat** (`nodes_stat.go`): Lists ready nodes with role labels (prefix: `octor/`)
 
 ### Configuration
 

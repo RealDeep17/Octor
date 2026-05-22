@@ -1,33 +1,39 @@
 # Vault
 
-Permanent, deduplicated storage layer for Webtor.
+Permanent, deduplicated storage layer for Octor.
 
 ## Quick start
 
-Build (generates Swagger and binary):
+The service is managed via `systemd` and configured using `custom.env`.
 
 ```bash
-make build
+# Start the service
+./switch_mode.sh production
+
+# Check status
+systemctl status octor-vault
 ```
 
-Run (env example):
-
-```bash
-WEB_PORT=8080 \
-PG_HOST=127.0.0.1 PG_PORT=5432 PG_USER=postgres PG_PASSWORD=postgres PG_DB=vault \
-S3_ENDPOINT=http://127.0.0.1:9000 S3_REGION=us-east-1 S3_BUCKET=vault S3_ACCESS_KEY=minio S3_SECRET_KEY=miniosecret \
-./vault serve
-```
-
-Swagger UI: http://localhost:8080/swagger/index.html
+The Vault listens on port **8086**.
 
 ## Configuration
 
-- Web: `WEB_HOST` (default: empty), `WEB_PORT` (default: 8080)
-- Postgres: `PG_HOST`, `PG_PORT`, `PG_USER`, `PG_PASSWORD`, `PG_DB`
-- S3: `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`
+Primary configuration is stored in `custom.env`. 
 
-More flags (health/pprof/metrics, etc.) are provided by common-services.
+- **Web:** `WEB_PORT=8086`
+- **Postgres:** `PG_HOST`, `PG_PORT=5433`, `PG_USER`, `PG_PASSWORD`, `PG_DATABASE`
+- **Redis:** `REDIS_HOST`, `REDIS_PORT=6380`
+- **S3 Gateway:** `S3_ENDPOINT=http://localhost:9000`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`
+
+Example `custom.env`:
+```env
+WEB_PORT=8086
+PG_PORT=5433
+REDIS_PORT=6380
+S3_ENDPOINT=http://localhost:9000
+```
+
+Swagger UI: http://localhost:8086/swagger/index.html
 
 ## API (short)
 

@@ -1,9 +1,9 @@
 {{ define "vault/pledge-modal/add/success" }}
 	<div class="py-4">
 		{{ if .Data.Vaulted }}
-			<p class="text-sm text-w-sub">{{ t .Ctx.Lang "vault.alreadyStored" }}</p>
+			<p class="text-sm text-o-sub">{{ t .Ctx.Lang "vault.alreadyStored" }}</p>
 		{{ else }}
-			<p class="text-sm text-w-sub">{{ t .Ctx.Lang "vault.pledgeSuccess" }}</p>
+			<p class="text-sm text-o-sub">{{ t .Ctx.Lang "vault.pledgeSuccess" }}</p>
 		{{ end }}
 	</div>
 	<div class="modal-action justify-center">
@@ -12,7 +12,7 @@
 		</form>
 		<form method="get" action="{{ langPath .Ctx.Lang .Ctx.Path }}" data-async-target="#pledge-modal" data-async-push-state="false">
 			<input type="hidden" name="pledge-remove-form" value="true" />
-			<button type="submit" class="btn btn-ghost border border-w-line text-w-sub hover:border-w-pink hover:text-base-content" data-umami-event="vault-pledge-remove-requested">{{ t .Ctx.Lang "vault.removePledge" }}</button>
+			<button type="submit" class="btn btn-ghost border border-o-line text-o-sub hover:border-o-primary hover:text-base-content" data-umami-event="vault-pledge-remove-requested">{{ t .Ctx.Lang "vault.removePledge" }}</button>
 		</form>
 	</div>
 	<script>

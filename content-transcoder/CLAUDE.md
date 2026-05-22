@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-HTTP stream to HLS (HTTP Live Streaming) transcoder. Accepts a source URL, transcodes it using FFmpeg, and serves the resulting HLS segments via an HTTP server. Part of the [webtor.io](https://webtor.io) ecosystem.
+HTTP stream to HLS (HTTP Live Streaming) transcoder. Accepts a source URL, transcodes it using FFmpeg, and serves the resulting HLS segments via an HTTP server. Part of the [octor](https://octor) ecosystem.
 
 ## Build & Run
 

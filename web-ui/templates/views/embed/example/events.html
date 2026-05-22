@@ -1,13 +1,13 @@
 {{ define "main" }}
-<div id="player" class="webtor"></div>
+<div id="player" class="octor"></div>
 <script>
-    window.webtor = window.webtor || [];
-    window.webtor.push({
+    window.octor = window.octor || [];
+    window.octor.push({
         id: 'player',
         magnet: '{{ demoMagnet }}',
         baseUrl: '{{ domain }}',
         on: function(e) {
-            if (e.name === window.webtor.INITED) {
+            if (e.name === window.octor.INITED) {
                 console.log('inited!', e);
             }
         }

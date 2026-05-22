@@ -1,7 +1,7 @@
 import uuid from './uuid';
 import { initialize } from '@open-iframe-resizer/core';
 const defaults = {
-    baseUrl:    'https://webtor.io',
+    baseUrl:    'https://octor',
     width:      '800px',
     height:     null,
     mode:       'video',
@@ -40,7 +40,7 @@ class Player {
         this.send('open', parsePath(val));
     }
 }
-class WebtorGenerator {
+class OctorGenerator {
     TORRENT_FETCHED = 'torrent fetched';
     TORRENT_ERROR   = 'torrent error';
     INIT            = 'init';
@@ -55,7 +55,7 @@ class WebtorGenerator {
 
     push(data) {
         const id = uuid();
-        const elId = `webtor-${id}`;
+        const elId = `octor-${id}`;
         let dd = Object.assign({}, defaults, data);
         if (dd.path) {
             dd = Object.assign({}, dd, parsePath(dd.path));
@@ -123,9 +123,9 @@ class WebtorGenerator {
 
 export default function(data) {
     if (!data) {
-        return new WebtorGenerator();
+        return new OctorGenerator();
     } else if (Array.isArray(data)) {
-        const wg = new WebtorGenerator();
+        const wg = new OctorGenerator();
         for (const d of data) {
             wg.push(d);
         }

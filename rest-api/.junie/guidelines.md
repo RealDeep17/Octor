@@ -24,8 +24,8 @@ This document captures project-specific build, configuration, and testing practi
 
 - Docker image
   - Multi-stage Dockerfile builds a statically linked binary with `CGO_ENABLED=0` and `GOOS=linux` and runs it as `./server serve`.
-  - Build: `docker build -t webtor/rest-api:dev .`
-  - Run: `docker run --rm -p 8080:8080 webtor/rest-api:dev`
+  - Build: `docker build -t octor/rest-api:dev .`
+  - Run: `docker run --rm -p 8080:8080 octor/rest-api:dev`
   - Exposed ports: 8080 and 8081 (8081 is typically used by probes/pprof when enabled via flags below).
 
 - Runtime configuration (CLI flags and env)

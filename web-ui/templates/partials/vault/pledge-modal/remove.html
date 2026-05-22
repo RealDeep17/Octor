@@ -1,10 +1,10 @@
 {{ define "vault/pledge-modal/remove" }}
 <h3 class="text-xl font-bold tracking-tight flex items-center gap-2 w-full">
-	<svg class="w-5 h-5 text-w-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+	<svg class="w-5 h-5 text-o-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
 	{{ t .Ctx.Lang "vault.removeTitle" }}
 </h3>
 {{ if eq .Data.Status "success" }}
-	<p class="pt-4 pb-2 text-sm text-w-sub">
+	<p class="pt-4 pb-2 text-sm text-o-sub">
 		{{ t .Ctx.Lang "vault.removeSuccess" }}
 	</p>
 
@@ -17,7 +17,7 @@
 		document.querySelector("#pledge-button").reload();
 	</script>
 	{{ else if eq .Data.Status "error" }}
-		<p class="pt-4 pb-2 text-sm text-w-sub">
+		<p class="pt-4 pb-2 text-sm text-o-sub">
 			{{ t .Ctx.Lang "vault.removeError" }}
 		</p>
 		{{ if .Data.ErrKey }}
@@ -31,7 +31,7 @@
 			</form>
 		</div>
 	{{ else if .Data.Frozen }}
-		<p class="pt-4 pb-2 text-sm text-w-sub">
+		<p class="pt-4 pb-2 text-sm text-o-sub">
 			{{ t .Ctx.Lang "vault.frozen" }}
 		</p>
 
@@ -41,7 +41,7 @@
 			</form>
 		</div>
 	{{ else }}
-		<p class="pt-4 pb-2 text-sm text-w-sub">
+		<p class="pt-4 pb-2 text-sm text-o-sub">
 			{{ t .Ctx.Lang "vault.removeConfirm" }}
 		</p>
 
@@ -53,7 +53,7 @@
 				</button>
 			</form>
 			<form method="dialog">
-				<button class="btn btn-ghost border border-w-line text-w-sub hover:border-w-pink hover:text-base-content" data-umami-event="vault-pledge-remove-cancelled">{{ t .Ctx.Lang "vault.cancel" }}</button>
+				<button class="btn btn-ghost border border-o-line text-o-sub hover:border-o-primary hover:text-base-content" data-umami-event="vault-pledge-remove-cancelled">{{ t .Ctx.Lang "vault.cancel" }}</button>
 			</form>
 		</div>
 	{{ end }}

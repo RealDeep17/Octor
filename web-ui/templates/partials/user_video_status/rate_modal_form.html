@@ -21,13 +21,13 @@
     {{ if gt .Data.CurrentRating 0 }}
     <form action="{{ langPath .Ctx.Lang (printf "/library/%s/%s/unrate" .Data.Type .Data.VideoID) }}" method="post"
           data-async-target="main" data-async-no-scroll="true" data-async-push-state="false">
-        <button type="submit" class="btn btn-ghost text-w-sub" data-umami-event="rate-removed">
+        <button type="submit" class="btn btn-ghost text-o-sub" data-umami-event="rate-removed">
             {{ t .Ctx.Lang "library.drop" }}
         </button>
     </form>
     {{ end }}
     <form method="dialog">
-        <button class="btn btn-ghost border border-w-line text-w-sub hover:border-w-pink hover:text-base-content" data-umami-event="rate-cancelled">{{ t .Ctx.Lang "library.cancel" }}</button>
+        <button class="btn btn-ghost border border-o-line text-o-sub hover:border-o-primary hover:text-base-content" data-umami-event="rate-cancelled">{{ t .Ctx.Lang "library.cancel" }}</button>
     </form>
 </div>
 <script>

@@ -4,32 +4,54 @@
     <div class="max-w-[1100px] mx-auto overflow-hidden">
         <!-- Header -->
         <div class="flex items-center justify-between mb-5 gap-3">
-            <div class="badge badge-lg bg-w-pink/10 border-w-pink/30 text-w-pinkL gap-2 px-4 py-3 text-xs font-semibold tracking-widest uppercase">
+            <div class="badge badge-lg bg-o-primary/10 border-o-primary/30 text-o-primaryL gap-2 px-4 py-3 text-xs font-semibold tracking-widest uppercase">
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 {{ t .Ctx.Lang "library.continueWatching" }}
             </div>
+            <form method="post" action="{{ langPath .Ctx.Lang "/watch/clear" }}" data-async-target="main" data-async-no-scroll="true">
+                <button type="submit" class="text-[10px] text-o-muted hover:text-o-primary transition-colors flex items-center gap-1.5 uppercase font-bold tracking-widest group">
+                    <svg class="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                    </svg>
+                    {{ t .Ctx.Lang "library.clearAll" }}
+                </button>
+            </form>
         </div>
 
         <!-- Card Ribbon -->
         <div class="flex gap-4 overflow-x-auto pb-4 scrollbar-none">
             {{ range .Data }}
-            <a href="{{ langPath $.Ctx.Lang (printf "/%s" .ResourceID) }}?file={{ .Path }}#action=stream" data-async-target="main" data-umami-event="continue-watching-click" class="shrink-0 w-[140px] group cursor-pointer">
-                <div class="relative aspect-[2/3] rounded-xl overflow-hidden border border-w-line group-hover:border-w-pink/30 group-hover:shadow-[0_0_20px_rgba(232,67,147,0.1)] transition-all duration-300">
+            <a href="{{ langPath $.Ctx.Lang (printf "/%s" .ResourceID) }}?file={{ .Path }}#action=stream" data-async-target="main" data-umami-event="continue-watching-click" class="shrink-0 w-[140px] group cursor-pointer relative">
+                <div class="relative aspect-[2/3] rounded-xl overflow-hidden border border-o-line group-hover:border-o-primary/30 group-hover:shadow-[0_0_20px_rgba(var(--o-glow-rgb),0.1)] transition-all duration-300">
                     {{ if .PosterURL }}
                     <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                          src="{{ .PosterURL }}" alt="{{ .DisplayName }}" loading="lazy" />
                     {{ else }}
-                    <div class="w-full h-full bg-gradient-to-br from-w-purple/20 via-w-pink/10 to-w-cyan/15 flex items-center justify-center">
-                        <div class="text-center font-bold text-sm p-2 text-w-purpleL/60 line-clamp-3">{{ .DisplayName }}</div>
+                    <div class="w-full h-full bg-gradient-to-br from-o-purple/20 via-o-primary/10 to-o-cyan/15 flex items-center justify-center">
+                        <div class="text-center font-bold text-sm p-2 text-o-purpleL/60 line-clamp-3">{{ .DisplayName }}</div>
                     </div>
                     {{ end }}
                     <!-- Progress bar -->
                     <div class="absolute bottom-0 left-0 right-0 h-1 bg-black/40">
-                        <div class="h-full bg-w-pink transition-all" style="width: {{ .Progress }}%"></div>
+                        <div class="h-full bg-o-primary transition-all" style="width: {{ .Progress }}%"></div>
                     </div>
+
+                    <!-- Remove button -->
+                    <form method="post" action="{{ langPath $.Ctx.Lang "/watch/remove" }}" 
+                          data-async-target="main" data-async-no-scroll="true"
+                          onclick="event.stopPropagation();"
+                          class="absolute top-2 right-2 z-20">
+                        <input type="hidden" name="resource_id" value="{{ .ResourceID }}" />
+                        <button type="submit" class="w-7 h-7 flex items-center justify-center rounded-full bg-black/60 text-white/70 hover:bg-o-primary hover:text-white transition-all backdrop-blur-md sm:opacity-0 sm:group-hover:opacity-100" title="{{ t $.Ctx.Lang "library.removeFromContinueWatching" }}">
+                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </form>
                 </div>
-                <p class="mt-2 text-sm font-medium text-w-text truncate group-hover:text-w-pinkL transition-colors">{{ .DisplayName }}</p>
-                <p class="text-xs text-w-muted">{{ timeAgoLang $.Ctx.Lang .UpdatedAt }}</p>
+                <p class="mt-2 text-sm font-medium text-w-text truncate group-hover:text-o-primaryL transition-colors">{{ .DisplayName }}</p>
+                <p class="text-xs text-o-muted">{{ timeAgoLang $.Ctx.Lang .UpdatedAt }}</p>
             </a>
             {{ end }}
         </div>

@@ -1,7 +1,7 @@
 {{ define "profile/embed_domains" }}
-    <div class="bg-base-300/50 border border-w-line rounded-2xl p-6 mb-6">
+    <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
         <h2 class="text-[1.15rem] font-bold tracking-tight mb-4 flex items-center gap-2">
-            <svg class="w-4 h-4 text-w-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            <svg class="w-4 h-4 text-o-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
             {{ t .Ctx.Lang "profile.embedDomains.title" }}
         </h2>
 
@@ -13,7 +13,7 @@
                 <input
                     name="domain"
                     placeholder="{{ t .Ctx.Lang "profile.embedDomains.placeholder" }}"
-                    class="input bg-base-300 border-w-line focus:border-w-pink focus:outline-none w-full join-item"
+                    class="input bg-base-300 border-o-line focus:border-o-primary focus:outline-none w-full join-item"
                     pattern="[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)+"
                     title="{{ t .Ctx.Lang "profile.embedDomains.validation" }}"
                     {{ if $canAddDomain }}required{{ else }}disabled{{ end }}
@@ -23,7 +23,7 @@
                 </button>
             </form>
             {{ if not $canAddDomain }}
-                <div class="text-sm text-w-muted mt-3">
+                <div class="text-sm text-o-muted mt-3">
                     {{ t .Ctx.Lang "profile.embedDomains.maxReached" }}
                 </div>
             {{ end }}
@@ -46,7 +46,7 @@
                             <form method="post" enctype="multipart/form-data" data-async-push-state="false" action="{{ langPath $.Ctx.Lang (printf "/embed-domain/delete/%s" .ID) }}" data-async-target="#embed-domains" class="inline">
                                 <button
                                     type="submit"
-                                    class="btn btn-ghost btn-sm text-w-pinkL hover:bg-w-pink/10"
+                                    class="btn btn-ghost btn-sm text-o-primaryL hover:bg-o-primary/10"
                                     data-umami-event="embed-domain-delete"
                                     aria-label="Delete domain"
                                     onclick="return confirm({{ t $.Ctx.Lang "profile.embedDomains.deleteConfirm" | json }})"
@@ -60,7 +60,7 @@
                     {{ end }}
                 </div>
             {{ else }}
-                <div class="text-center py-6 text-w-muted" id="empty-state">
+                <div class="text-center py-6 text-o-muted" id="empty-state">
                     <p>{{ t .Ctx.Lang "profile.embedDomains.noDomains" }}</p>
                     <p class="text-xs mt-1">{{ t .Ctx.Lang "profile.embedDomains.noDomainsHint" }}</p>
                 </div>
@@ -68,8 +68,8 @@
         </div>
 
         <div class="mt-4 space-y-1">
-            <a href="https://github.com/webtor-io/embed-sdk-js" class="text-sm text-w-muted hover:text-w-sub link link-hover block" data-umami-event="instruction-embed-sdk" target="_blank">{{ t .Ctx.Lang "profile.embedDomains.learnSdk" }}</a>
-            <a href="https://github.com/webtor-io/wordpress-plugin" class="text-sm text-w-muted hover:text-w-sub link link-hover block" data-umami-event="instruction-wordpress-plugin" target="_blank">{{ t .Ctx.Lang "profile.embedDomains.wordpressPlugin" }}</a>
+            <a href="https://github.com/RealDeep17/Octor" class="text-sm text-o-muted hover:text-o-sub link link-hover block" data-umami-event="instruction-embed-sdk" target="_blank">{{ t .Ctx.Lang "profile.embedDomains.learnSdk" }}</a>
+            <a href="https://github.com/RealDeep17/Octor" class="text-sm text-o-muted hover:text-o-sub link link-hover block" data-umami-event="instruction-wordpress-plugin" target="_blank">{{ t .Ctx.Lang "profile.embedDomains.wordpressPlugin" }}</a>
         </div>
     </div>
 {{ end }}

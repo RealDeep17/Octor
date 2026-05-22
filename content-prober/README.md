@@ -1,40 +1,48 @@
-# content-prober
-Wrapper around ffprobe with GRPC access and Redis backend
+# Content Prober
 
-## Requirements
-1. FFmpeg 3+
+A high-performance media probing service that wraps `ffprobe`. It provides gRPC and HTTP interfaces for analyzing media content and caches results in Redis for rapid subsequent lookups.
 
-## Basic usage
-```
-% ./server help
-NAME:
-   content-prober-server - runs content prober
+## 🚀 Key Features
 
-USAGE:
-   server [global options] command [command options] [arguments...]
+- **FFprobe Integration:** Deep analysis of media streams, formats, and metadata.
+- **Redis Caching:** Transparently caches probe results to minimize redundant processing.
+- **Dual Interface:** Supports both gRPC (internal service mesh) and HTTP (external/utility) access.
 
-VERSION:
-   0.0.1
+## ⚙️ Configuration
 
-COMMANDS:
-     help, h  Shows a list of commands or help for one command
+Configuration is managed via environment variables or CLI flags.
 
-GLOBAL OPTIONS:
-   --host value, -H value                 listening host
-   --port value, -P value                 listening port (default: 50051)
-   --redis-host value, --rH value         hostname of the redis servicea (default: 127.0.0.1) [$REDIS_MASTER_SERVICE_HOST, $ REDIS_SERVICE_HOST]
-   --redis-port value, --rP value         port of the redis service (default: 6379) [$REDIS_MASTER_SERVICE_PORT, $ REDIS_SERVICE_PORT]
-   --redis-db value, --rDB value          redis db (default: 0) [$REDIS_DB]
-   --redis-password value, --rPASS value  redis password [$REDIS_PASS, $ REDIS_PASSWORD]
-   --help, -h                             show help
-   --version, -v                          print the version
+| Variable | Flag | Default |
+|----------|------|---------|
+| `LISTEN_HOST` | `--host` | `0.0.0.0` |
+| `HTTP_PORT` | `--http-port` | `50062` |
+| `GRPC_PORT` | `--port` | `50063` |
+| `REDIS_HOST` | `--redis-host` | `127.0.0.1` |
+| `REDIS_PORT` | `--redis-port` | `6380` |
+
+## 🛠 Usage
+
+### Service Management
+Content Prober is managed via systemd and orchestrated through `switch_mode.sh`.
+
+```sh
+# Check status
+sudo systemctl status octor-content-prober
 ```
-## Docker image
+
+### Manual Run
+```sh
+./bin/content-prober \
+    --http-port 50062 \
+    --port 50063 \
+    --redis-host localhost \
+    --redis-port 6380
 ```
-docker pull webtor/content-prober
-```
-## Helm Chart
-```
-helm repo add webtor https://charts.webtor.io
-helm install webtor/content-prober
-```
+
+## 📐 Architecture
+
+Content Prober acts as an internal utility service. It is primarily used by the `content-transcoder` and `web-ui` to identify stream layouts (audio/video/subtitles) before playback begins.
+
+## ⚖️ License
+
+All rights reserved.
