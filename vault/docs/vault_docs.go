@@ -10,9 +10,9 @@ const docTemplatevault = `{
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
         "contact": {
-            "name": "Webtor Support",
-            "url": "https://webtor.io/support",
-            "email": "support@webtor.io"
+            "name": "Octor Support",
+            "url": "https://octor/support",
+            "email": "support@octor"
         },
         "version": "{{.Version}}"
     },

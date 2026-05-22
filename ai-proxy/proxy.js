@@ -7,7 +7,7 @@
  * streaming, tool-use (for chips), and prompt-caching beta headers – so the
  * Go code never needs to know it is talking to Gemini.
  *
- * Required env vars (loaded from custom.env by run_dev.sh):
+ * Required env vars (loaded from custom.env):
  *   GEMINI_API_KEY              – your Google AI Studio key
  *   AI_RECOMMENDATIONS_MODEL   – model string (default: gemini-3.1-flash-lite)
  *

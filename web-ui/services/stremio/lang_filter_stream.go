@@ -12,7 +12,7 @@ import (
 // service (see services/stremio/library.go). Library streams represent
 // torrents the user has already added to their Vault and must bypass the
 // language filter — the user has already opted in to those titles.
-const libraryBingeGroupPrefix = "webtorio|"
+const libraryBingeGroupPrefix = "octorio|"
 
 // LangFilterStream drops streams whose title does not advertise the user's
 // preferred language. Mirrors the strict filter applied by Discover's

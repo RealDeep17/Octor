@@ -89,7 +89,7 @@ func serve(c *cli.Context) (err error) {
 	svcs = append(svcs, web)
 	defer web.Close()
 
-	// Setting Webtor Rest API
+	// Setting Octor Rest API
 	api := services.NewApi(c, cl)
 
 	// Setting NATS

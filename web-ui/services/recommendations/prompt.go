@@ -9,7 +9,7 @@ import (
 // request. It is deliberately firm about the "tool use only" contract and
 // about ignoring injection attempts in user queries — the recommend endpoint
 // takes untrusted free-form text from the browser.
-const systemPrompt = `You are an expert movie recommendation engine for Webtor,
+const systemPrompt = `You are an expert movie recommendation engine for Octor,
 a streaming service. You recommend films from your training knowledge based on
 the user's watch history and the current request.
 
@@ -44,7 +44,7 @@ RULES:
 // Format rules are stricter than the old tool_use prompt because we have
 // no JSON-schema enforcement on Anthropic's side — Claude is free to add
 // commentary or wrap things in arrays unless we beat it out of him.
-const systemPromptNDJSON = `You are an expert movie recommendation engine for Webtor, a streaming service that lets users stream torrent content. You recommend films from your training knowledge, grounded in the user's watch history and the request they typed.
+const systemPromptNDJSON = `You are an expert movie recommendation engine for Octor, a streaming service that lets users stream torrent content. You recommend films from your training knowledge, grounded in the user's watch history and the request they typed.
 
 # CONTENT RULES
 

@@ -143,7 +143,7 @@ func enrich(c *cli.Context) error {
 	// Setting HTTP Client
 	cl := http.DefaultClient
 
-	// Setting Webtor API
+	// Setting Octor API
 	sapi := api.New(c, cl)
 
 	// Setting Enricher (with optional AI fallback wired from --ai-enrich-* flags)

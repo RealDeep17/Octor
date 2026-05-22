@@ -1,7 +1,7 @@
 {
-  "name": "@webtor/embed-sdk-js",
+  "name": "@octor/embed-sdk-js",
   "version": "0.2.19",
-  "description": "Webtor.io embed SDK for online torrent streaming and download on your site",
+  "description": "Octor embed SDK for online torrent streaming and download on your site",
   "main": "src/index.js",
   "browserslist": "> 2%, not dead",
   "repository": {
@@ -18,13 +18,13 @@
     "dist/"
   ],
   "keywords": [
-    "webtor",
+    "octor",
     "torrent",
     "streaming",
     "sdk",
     "player"
   ],
-  "homepage": "https://webtor.io",
+  "homepage": "https://octor",
   "author": "Pavel Tatarskiy",
   "license": "MIT",
   "devDependencies": {

@@ -98,21 +98,21 @@ av(async function(){
             // refresh/delete buttons and the toggle, which we leave
             // untouched.
             const labelEl = addonItem.querySelector('.flex-1.min-w-0');
-            const url = addonItem.querySelector('.text-w-muted')?.textContent
+            const url = addonItem.querySelector('.text-o-muted')?.textContent
                 || addonItem.querySelector('.font-medium')?.textContent
                 || '';
             if (labelEl && data.name) {
                 labelEl.innerHTML = `
                     <div class="font-semibold text-sm truncate"></div>
-                    <div class="text-xs text-w-muted truncate"></div>
+                    <div class="text-xs text-o-muted truncate"></div>
                     <div class="flex flex-wrap gap-1 mt-1.5"></div>
                 `;
                 labelEl.querySelector('.font-semibold').textContent = data.name;
-                labelEl.querySelector('.text-w-muted').textContent = url;
+                labelEl.querySelector('.text-o-muted').textContent = url;
                 const resBox = labelEl.querySelector('.flex-wrap');
                 for (const r of (data.resources || [])) {
                     const span = document.createElement('span');
-                    span.className = 'text-[10px] px-1.5 py-0.5 rounded bg-w-cyan/10 text-w-cyan font-medium';
+                    span.className = 'text-[10px] px-1.5 py-0.5 rounded bg-o-primary/10 text-o-primary font-medium';
                     span.textContent = r;
                     resBox.appendChild(span);
                 }

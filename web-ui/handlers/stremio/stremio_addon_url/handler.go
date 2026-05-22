@@ -209,9 +209,9 @@ func (s *Handler) addAddonUrl(ctx context.Context, addonUrl string, user *auth.U
 		return errors.New("URL must point to a Stremio addon manifest.json file")
 	}
 
-	// Prevent users from adding Webtor's own manifest URL
+	// Prevent users from adding Octor's own manifest URL
 	if s.domain != "" && (parsedUrl.Hostname() == s.domain || parsedUrl.Hostname() == "localhost" || parsedUrl.Hostname() == "127.0.0.1") {
-		return errors.New("cannot add Webtor's own manifest URL")
+		return errors.New("cannot add Octor's own manifest URL")
 	}
 
 	// Validate addon URL availability and manifest structure, capturing

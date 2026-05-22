@@ -1,12 +1,12 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Simple API to communicate with Webtor service.",
-        "title": "Webtor API",
+        "description": "Simple API to communicate with Octor service.",
+        "title": "Octor API",
         "contact": {
-            "name": "Webtor Support",
-            "url": "https://webtor.io/support",
-            "email": "support@webtor.io"
+            "name": "Octor Support",
+            "url": "https://octor/support",
+            "email": "support@octor"
         },
         "version": "0.1"
     },

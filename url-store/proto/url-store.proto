@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package webtor.url_store;
+package octor.url_store;
 option go_package = "github.com/webtor-io/url-store;url_store";
 
 service UrlStore {

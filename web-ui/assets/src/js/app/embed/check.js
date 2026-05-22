@@ -1,6 +1,6 @@
 const message = (await import('../../lib/message')).default;
 import {makeDebug} from '../../lib/debug';
-const debug = await makeDebug('webtor:embed:check');
+const debug = await makeDebug('octor:embed:check');
 // NOTE: SHA1 is used here for embed integrity verification (not cryptographic security).
 // Both client and server must agree on the algorithm, so migrating to SHA-256
 // would require a coordinated change and would break all existing embeds.
@@ -21,7 +21,7 @@ if (c) {
     message.send('inited');
 } else {
    document.body.remove();
-   console.warn('webtor check not passed, use original embed script');
+   console.warn('octor check not passed, use original embed script');
 }
 
 async function initPlaceholder(data) {

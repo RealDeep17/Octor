@@ -36,13 +36,13 @@ func (s *Handler) generateCheckScript(code string, id string) string {
 		var scripts = document.getElementsByTagName('script');
 			for (var i = scripts.length; i--;) {
 				if (
-					scripts[i].src.includes('https://cdn.jsdelivr.net/npm/@webtor/') ||
+					scripts[i].src.includes('https://cdn.jsdelivr.net/npm/@octor/') ||
 					scripts[i].src.includes('http://localhost:9009/')
 				) {
 					found = '%v';
 				}
 			}
-		var f = window.frames['webtor-%v'];
+		var f = window.frames['octor-%v'];
 		f.contentWindow.postMessage({id: '%v', name: 'check', data: found}, '*');
 	`, code, id, id)
 }

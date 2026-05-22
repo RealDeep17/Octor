@@ -34,12 +34,12 @@ import (
 )
 
 const (
-	apiKeyFlag                      = "webtor-key"
-	apiSecretFlag                   = "webtor-secret"
-	apiSecureFlag                   = "webtor-rest-api-secure"
-	apiHostFlag                     = "webtor-rest-api-host"
-	apiPortFlag                     = "webtor-rest-api-port"
-	apiExpireFlag                   = "webtor-rest-api-expire"
+	apiKeyFlag                      = "octor-key"
+	apiSecretFlag                   = "octor-secret"
+	apiSecureFlag                   = "octor-rest-api-secure"
+	apiHostFlag                     = "octor-rest-api-host"
+	apiPortFlag                     = "octor-rest-api-port"
+	apiExpireFlag                   = "octor-rest-api-expire"
 	apiCacheExpireFlag              = "web-ui-api-cache-expire"
 	useInternalTorrentHTTPProxyFlag = "use-internal-torrent-http-proxy"
 	torrentHTTPProxyHostFlag        = "torrent-http-proxy-host"
@@ -50,23 +50,23 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 	return append(f,
 		cli.StringFlag{
 			Name:   apiHostFlag,
-			Usage:  "webtor rest-api host",
+			Usage:  "octor rest-api host",
 			EnvVar: "REST_API_SERVICE_HOST",
 		},
 		cli.IntFlag{
 			Name:   apiPortFlag,
-			Usage:  "webtor rest-api port",
+			Usage:  "octor rest-api port",
 			EnvVar: "REST_API_SERVICE_PORT",
 			Value:  80,
 		},
 		cli.BoolFlag{
 			Name:   apiSecureFlag,
-			Usage:  "webtor rest-api secure (https)",
+			Usage:  "octor rest-api secure (https)",
 			EnvVar: "REST_API_SECURE",
 		},
 		cli.IntFlag{
 			Name:   apiExpireFlag,
-			Usage:  "webtor rest-api expire in days",
+			Usage:  "octor rest-api expire in days",
 			EnvVar: "REST_API_EXPIRE",
 			Value:  1,
 		},
@@ -78,15 +78,15 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:   apiKeyFlag,
-			Usage:  "webtor api key",
+			Usage:  "octor api key",
 			Value:  "",
-			EnvVar: "WEBTOR_API_KEY",
+			EnvVar: "OCTOR_API_KEY",
 		},
 		cli.StringFlag{
 			Name:   apiSecretFlag,
-			Usage:  "webtor api secret",
+			Usage:  "octor api secret",
 			Value:  "",
-			EnvVar: "WEBTOR_API_SECRET",
+			EnvVar: "OCTOR_API_SECRET",
 		},
 		cli.BoolFlag{
 			Name:   useInternalTorrentHTTPProxyFlag,

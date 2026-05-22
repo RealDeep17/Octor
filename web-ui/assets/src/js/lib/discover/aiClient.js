@@ -69,7 +69,7 @@ export function currentClock() {
 //   2. navigator.languages — fallback when <html lang> is missing or set
 //      to a value we don't support (shouldn't happen in practice since the
 //      server always renders a supported lang, but keeps the function
-//      robust if the script ever runs on a non-Webtor page).
+//      robust if the script ever runs on a non-Octor page).
 //   3. navigator.language — single-value fallback for older browsers.
 //   4. "en" hardcoded default.
 //

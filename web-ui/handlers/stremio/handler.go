@@ -186,7 +186,7 @@ func (s *Handler) resolve(c *gin.Context) {
 
 	// Step 4: Extract claims. JWT shape: {hash, idx, exp}. Path resolution
 	// (when needed by user backends) and resource registration are handled
-	// inside LinkResolver / Webtor backend.
+	// inside LinkResolver / Octor backend.
 	hash, ok := jwtClaims["hash"].(string)
 	if !ok || hash == "" {
 		log.Warn("missing or invalid hash in JWT claims")

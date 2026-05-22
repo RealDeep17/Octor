@@ -6,8 +6,8 @@ import { langPath, t } from '../i18n';
 export function chipClass(active, size = 'sm') {
     const sizeClass = size === 'xs' ? 'btn-xs' : 'btn-sm';
     return active
-        ? `btn ${sizeClass} bg-w-cyan/15 border border-w-cyan/30 text-w-cyan`
-        : `btn ${sizeClass} btn-ghost border border-w-line text-w-sub hover:border-w-cyan/30 hover:text-w-cyan`;
+        ? `btn ${sizeClass} bg-o-primary/15 border border-o-primary/30 text-o-primary`
+        : `btn ${sizeClass} btn-ghost border border-o-line text-o-sub hover:border-o-primary/30 hover:text-o-primary`;
 }
 
 // Pink-themed chip used by the Watchlist side of the Catalog | Watchlist
@@ -22,8 +22,8 @@ export function chipClass(active, size = 'sm') {
 export function watchlistChipClass(active, size = 'sm') {
     const sizeClass = size === 'xs' ? 'btn-xs' : 'btn-sm';
     return active
-        ? `btn ${sizeClass} join-item bg-w-pink/15 border border-w-pink/40 text-w-pinkL hover:bg-w-pink/20 hover:border-w-pink/50`
-        : `btn ${sizeClass} join-item btn-ghost border border-w-line text-w-sub hover:border-w-pink/40 hover:text-w-pinkL`;
+        ? `btn ${sizeClass} join-item bg-o-primary/15 border border-o-primary/40 text-o-accent hover:bg-o-primary/20 hover:border-o-primary/50`
+        : `btn ${sizeClass} join-item btn-ghost border border-o-line text-o-sub hover:border-o-primary/40 hover:text-o-accent`;
 }
 
 // Cyan-themed chip for the Catalog side of the mode switcher. Mirrors
@@ -32,8 +32,8 @@ export function watchlistChipClass(active, size = 'sm') {
 export function catalogChipClass(active, size = 'sm') {
     const sizeClass = size === 'xs' ? 'btn-xs' : 'btn-sm';
     return active
-        ? `btn ${sizeClass} join-item bg-w-cyan/15 border border-w-cyan/30 text-w-cyan hover:bg-w-cyan/20 hover:border-w-cyan/40`
-        : `btn ${sizeClass} join-item btn-ghost border border-w-line text-w-sub hover:border-w-cyan/30 hover:text-w-cyan`;
+        ? `btn ${sizeClass} join-item bg-o-primary/15 border border-o-primary/30 text-o-primary hover:bg-o-primary/20 hover:border-o-primary/40`
+        : `btn ${sizeClass} join-item btn-ghost border border-o-line text-o-sub hover:border-o-primary/30 hover:text-o-primary`;
 }
 
 // Dedup: modal restore logic used in two effects

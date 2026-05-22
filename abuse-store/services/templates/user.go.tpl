@@ -18,4 +18,4 @@ This message was generated automatically.
 
 If you have any additional question please email directly to {{ .Support }}
 
-Sincerely yours, Webtor Support Team.
+Sincerely yours, Octor Support Team.

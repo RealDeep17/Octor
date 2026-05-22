@@ -207,7 +207,7 @@ func (s *EnrichStream) updateStreamName(name string, availability *common.CheckA
 }
 
 var servicesNames = map[models.StreamingBackendType]string{
-	models.StreamingBackendTypeWebtor:     "WT",
+	models.StreamingBackendTypeOctor:     "WT",
 	models.StreamingBackendTypeRealDebrid: "RD",
 	models.StreamingBackendTypeTorbox:     "TB",
 }

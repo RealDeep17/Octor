@@ -19,13 +19,13 @@ import (
 	"github.com/webtor-io/rest-api/docs"
 )
 
-// @title           Webtor API
+// @title           Octor API
 // @version         0.1
-// @description     Simple API to communicate with Webtor service.
+// @description     Simple API to communicate with Octor service.
 
-// @contact.name   Webtor Support
-// @contact.url    https://webtor.io/support
-// @contact.email  support@webtor.io
+// @contact.name   Octor Support
+// @contact.url    https://octor/support
+// @contact.email  support@octor
 
 const (
 	webHostFlag = "host"

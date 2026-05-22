@@ -19,13 +19,13 @@ import (
 	co "github.com/webtor-io/web-ui/services/link_resolver/common"
 )
 
-// LinkResolver resolves streaming links across multiple backends (RealDebrid, Torbox, Webtor)
+// LinkResolver resolves streaming links across multiple backends (RealDebrid, Torbox, Octor)
 // by checking content availability and generating direct download URLs
 type LinkResolver struct {
 	pg                   *cs.PG
 	cacheIndex           *ci.CacheIndex
 	userBackends         map[models.StreamingBackendType]co.Backend
-	webtorBackend        *backends.Webtor
+	octorBackend        *backends.Octor
 	enabledBackendsCache *lazymap.LazyMap[[]*models.StreamingBackend]
 }
 
@@ -38,7 +38,7 @@ func New(cl *http.Client, pg *cs.PG, apiService *api.Api, cacheIndex *ci.CacheIn
 			models.StreamingBackendTypeRealDebrid: backends.NewRealDebrid(cl),
 			models.StreamingBackendTypeTorbox:     backends.NewTorbox(cl),
 		},
-		webtorBackend: backends.NewWebtor(apiService),
+		octorBackend: backends.NewOctor(apiService),
 		enabledBackendsCache: lazymap.New[[]*models.StreamingBackend](&lazymap.Config{
 			Expire:      1 * time.Minute,
 			ErrorExpire: 30 * time.Second,
@@ -79,7 +79,7 @@ func (s *LinkResolver) getUserEnabledBackends(ctx context.Context, userID uuid.U
 }
 
 // ResolveLink resolves a streaming link for the file at (hash, fileIdx).
-// All backends speak fileIdx directly: Webtor passes it through as a
+// All backends speak fileIdx directly: Octor passes it through as a
 // numeric content_id to rest-api, RD/Torbox use it as the index into
 // their own torrent.Files slice. No path lookup is needed anywhere.
 // Returns nil if content is not available or user doesn't have access.
@@ -124,16 +124,16 @@ func (s *LinkResolver) ResolveLink(ctx context.Context, userID uuid.UUID, apiCla
 		}, nil
 	}
 
-	// Fallback to webtor. Free users hit the paywall here.
+	// Fallback to octor. Free users hit the paywall here.
 	if requiresPayment && !s.isPaidUser(userClaims) {
 		return nil, nil
 	}
-	url, cached, err := s.webtorBackend.ResolveLink(ctx, apiClaims, hash, fileIdx)
+	url, cached, err := s.octorBackend.ResolveLink(ctx, apiClaims, hash, fileIdx)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to generate webtor link")
+		return nil, errors.Wrap(err, "failed to generate octor link")
 	}
 	if cached {
-		if merr := s.cacheIndex.MarkAsCached(ctx, models.StreamingBackendTypeWebtor, hash, fileIdx); merr != nil {
+		if merr := s.cacheIndex.MarkAsCached(ctx, models.StreamingBackendTypeOctor, hash, fileIdx); merr != nil {
 			return nil, errors.Wrap(merr, "failed to mark as cached in cache index")
 		}
 	}
@@ -141,11 +141,11 @@ func (s *LinkResolver) ResolveLink(ctx context.Context, userID uuid.UUID, apiCla
 	log.WithFields(log.Fields{
 		"url":          url,
 		"cached":       cached,
-		"backend_type": "webtor",
-	}).Info("generated webtor link")
+		"backend_type": "octor",
+	}).Info("generated octor link")
 	return &co.LinkResult{
 		URL:         url,
-		ServiceType: models.StreamingBackendTypeWebtor,
+		ServiceType: models.StreamingBackendTypeOctor,
 		Cached:      cached,
 	}, nil
 }
@@ -159,7 +159,7 @@ func (s *LinkResolver) isPaidUser(userClaims *claims.Data) bool {
 }
 
 // CheckAvailability reports whether the file (hash, fileIdx) is streamable
-// on any of the user's enabled backends, falling back to Webtor.
+// on any of the user's enabled backends, falling back to Octor.
 // fileIdx is always known at the call site — Stremio addons and Library
 // streams both populate StreamItem.FileIdx — which lets us skip the
 // rest-api ListResourceContent round-trip that path-based resolution
@@ -196,13 +196,13 @@ func (s *LinkResolver) CheckAvailability(ctx context.Context, id uuid.UUID, cla 
 		return nil, nil
 	}
 	for _, cir := range r {
-		if cir.BackendType == models.StreamingBackendTypeWebtor {
+		if cir.BackendType == models.StreamingBackendTypeOctor {
 			cached = true
 			break
 		}
 	}
 	// Fallback: a resource that is vaulted (vault.resource.vaulted=true) is
-	// guaranteed to be in Webtor's hot storage. The cacheIndex only learns
+	// guaranteed to be in Octor's hot storage. The cacheIndex only learns
 	// about this after a play has gone through ResolveLink, so a freshly
 	// vaulted file would otherwise miss the ⚡ marker until first stream.
 	// One indexed row read on vault.resource closes that gap cheaply.
@@ -213,7 +213,7 @@ func (s *LinkResolver) CheckAvailability(ctx context.Context, id uuid.UUID, cla 
 				log.WithError(verr).WithField("hash", hash).Debug("vault resource lookup failed")
 			} else if res != nil && res.Vaulted {
 				cached = true
-				if merr := s.cacheIndex.MarkAsCached(ctx, models.StreamingBackendTypeWebtor, hash, fileIdx); merr != nil {
+				if merr := s.cacheIndex.MarkAsCached(ctx, models.StreamingBackendTypeOctor, hash, fileIdx); merr != nil {
 					log.WithError(merr).WithField("hash", hash).Debug("failed to mark vaulted resource as cached")
 				}
 			}
@@ -221,7 +221,7 @@ func (s *LinkResolver) CheckAvailability(ctx context.Context, id uuid.UUID, cla 
 	}
 	return &co.CheckAvailabilityResult{
 		Cached:      cached,
-		ServiceType: models.StreamingBackendTypeWebtor,
+		ServiceType: models.StreamingBackendTypeOctor,
 	}, nil
 }
 

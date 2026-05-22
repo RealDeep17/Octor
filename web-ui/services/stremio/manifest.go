@@ -7,7 +7,7 @@ import (
 	"github.com/webtor-io/web-ui/services/auth"
 )
 
-const catalogID = "Webtor.io"
+const catalogID = "Octor"
 
 type Manifest struct {
 	domain string
@@ -25,10 +25,10 @@ func NewManifest(domain string, u *auth.User, hasToken bool) *Manifest {
 
 func (s *Manifest) GetManifest(c context.Context) (*ManifestResponse, error) {
 	m := &ManifestResponse{
-		Id:          "org.stremio.webtor.io",
+		Id:          "org.stremio.octor",
 		Version:     "0.0.2",
-		Name:        "Webtor.io",
-		Description: "Stream your personal torrent library from Webtor directly in Stremio. Add torrents to your Webtor account and watch them instantly — no downloading, no setup, just click and play.",
+		Name:        "Octor",
+		Description: "Stream your personal torrent library from Octor directly in Stremio. Add torrents to your Octor account and watch them instantly — no downloading, no setup, just click and play.",
 		Types:       []string{"movie", "series"},
 		Catalogs: []CatalogItem{
 			{"movie", catalogID},
@@ -36,7 +36,7 @@ func (s *Manifest) GetManifest(c context.Context) (*ManifestResponse, error) {
 		},
 		Resources:    []string{"stream", "catalog", "meta"},
 		Logo:         fmt.Sprintf("%v/assets/night/android-chrome-256x256.png", s.domain),
-		ContactEmail: "support@webtor.io",
+		ContactEmail: "support@octor",
 		AddonsConfig: &AddonsConfig{
 			Issuer:    "https://stremio-addons.net",
 			Signature: "eyJhbGciOiJkaXIiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0..jgHUY1gMFbTnCL4khCAsCA.DUQP0jZs-KpFEpL6aC4FVV08q97uhZ1RnMm4vEfbpRI0OSd1NhQaN18MxsHf5Md6gUnnzjwwprX2IoX0iF4TtG-5mPRKx2z91964sa6NqsFX_QWx3sdn6HGllbTJG_-t.RVNoutseK8lRM7QapFttQg",

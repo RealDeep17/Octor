@@ -28,9 +28,9 @@ var (
 // @version         0.1
 // @description     API to communicate with Vault service.
 
-// @contact.name   Webtor Support
-// @contact.url    https://webtor.io/support
-// @contact.email  support@webtor.io
+// @contact.name   Octor Support
+// @contact.url    https://octor/support
+// @contact.email  support@octor
 
 const (
 	webHostFlag = "host"

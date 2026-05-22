@@ -152,6 +152,88 @@ func getVideoBitrate(mp *api.MediaProbe) int64 {
 	return total
 }
 
+func getVideoBitrateForItem(mp *api.MediaProbe, item *ra.ListItem) int64 {
+	bitrate := getVideoBitrate(mp)
+	if bitrate > 0 {
+		return bitrate
+	}
+	if item == nil || item.Size <= 0 || mp.Format.Duration == "" {
+		return 0
+	}
+	duration, err := strconv.ParseFloat(mp.Format.Duration, 64)
+	if err != nil || duration <= 0 {
+		return 0
+	}
+	return int64(float64(item.Size) * 8 / duration)
+}
+
+func exportItemCached(item ra.ExportItem) bool {
+	return item.Meta != nil && item.Meta.Cache
+}
+
+func isMP4Video(item *ra.ListItem) bool {
+	if item == nil || item.MediaFormat != ra.Video {
+		return false
+	}
+	return strings.EqualFold(item.Ext, "mp4") || strings.EqualFold(item.MimeType, "video/mp4")
+}
+
+func hasCopyableVideo(mp *api.MediaProbe) bool {
+	if mp == nil {
+		return false
+	}
+	for _, st := range mp.Streams {
+		if st.CodecType != "video" {
+			continue
+		}
+		switch strings.ToLower(st.CodecName) {
+		case "h264", "hevc", "h265":
+			return true
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func needsAudioTranscode(mp *api.MediaProbe) bool {
+	if mp == nil {
+		return false
+	}
+	for _, st := range mp.Streams {
+		if st.CodecType == "audio" && !strings.EqualFold(st.CodecName, "aac") {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldUseSessionHLSForMP4Audio(item *ra.ListItem, mp *api.MediaProbe) bool {
+	return isMP4Video(item) && hasCopyableVideo(mp) && needsAudioTranscode(mp)
+}
+
+func useDirectMP4Source(sc *StreamContent, downloadURL string) {
+	directURL := directPlayURL(downloadURL)
+	sc.ExportTag.Sources = []ra.ExportSource{{
+		Src:  directURL,
+		Type: "video/mp4",
+	}}
+	sc.DirectFallbackURL = ""
+	sc.DirectFallbackType = ""
+}
+
+func transcodeHLSURL(downloadURL string) string {
+	u, err := url.Parse(downloadURL)
+	if err != nil {
+		return downloadURL
+	}
+	u.Path += "~hls/index.m3u8"
+	q := u.Query()
+	q.Del("download")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 func parseRateLimit(rate string) int64 {
 	rate = strings.TrimSpace(rate)
 	if !strings.HasSuffix(rate, "M") || len(rate) < 2 {
@@ -370,6 +452,7 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 	sc.ExportTag = exportResponse.ExportItems["stream"].Tag
 	sc.Item = &exportResponse.Source
 	se := exportResponse.ExportItems["stream"]
+	sessionStreamURL := se.URL
 	if exportResponse.Source.MediaFormat == ra.Video {
 		fallbackURL, fallbackType := detachDirectVideoFallback(sc.ExportTag)
 		if fallbackURL != "" {
@@ -398,6 +481,8 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 		directPlayFallback = true
 		se.Meta.Transcode = false
 	}
+
+	cachedMedia := exportItemCached(se)
 
 	// Step 1: Torrent warmup (skip for cached/vault content; also skipped on
 	// forceSlow — the user already accepted slow playback, so we save the warmup
@@ -445,6 +530,23 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 		sc.MediaProbe = mp
 		log.Infof("got media probe %+v", mp)
 	}
+	if probeErr == nil && isMP4Video(&exportResponse.Source) {
+		if shouldUseSessionHLSForMP4Audio(&exportResponse.Source, sc.MediaProbe) {
+			log.Info("mp4 has non-aac audio; using session hls with video copy and audio transcode")
+			sessionStreamURL = transcodeHLSURL(downloadURL)
+			if se.Meta != nil {
+				se.Meta.Transcode = true
+			}
+			directPlayFallback = false
+		} else {
+			log.Info("mp4 does not need audio transcode; using direct byte-range playback")
+			useDirectMP4Source(sc, downloadURL)
+			if se.Meta != nil {
+				se.Meta.Transcode = false
+			}
+			directPlayFallback = true
+		}
+	}
 	j.Done()
 
 	// Step 3: Bandwidth check.
@@ -461,17 +563,17 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 	// On forceSlow we emit Skip instead of running the gate — the user already
 	// opted into slow playback.
 	if sc.MediaProbe != nil {
-		bitrate := getVideoBitrate(sc.MediaProbe)
+		bitrate := getVideoBitrateForItem(sc.MediaProbe, sc.Item)
 		if bitrate > 0 {
 			if s.forceSlow {
 				j.Skip(s.t("job.checkingBandwidth"))
-			} else if se.Meta.Cache && !graceMode {
+			} else if cachedMedia && !graceMode {
 				j.InProgress(s.t("job.checkingBandwidth"))
 				if sdd, limited := checkCachedRateLimit(c, bitrate); limited {
 					return &SlowDownloadError{Data: sdd}
 				}
 				j.Done()
-			} else if !se.Meta.Cache && downloadSpeed > 0 {
+			} else if !cachedMedia && downloadSpeed > 0 {
 				j.InProgress(s.t("job.checkingBandwidth"))
 				if downloadSpeed*8 < float64(bitrate) {
 					return &SlowDownloadError{Data: buildSlowDownloadData(c, downloadSpeed, bitrate)}
@@ -483,7 +585,7 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 
 	// Step 4: Session transcoder (after bandwidth check)
 	if se.Meta.Transcode && !directPlayFallback && (exportResponse.Source.MediaFormat == ra.Video || exportResponse.Source.MediaFormat == ra.Audio) {
-		result, serr := s.bufferSessionHLS(ctx, j, exportResponse.ExportItems["stream"].URL, 30*time.Second)
+		result, serr := s.bufferSessionHLS(ctx, j, sessionStreamURL, 30*time.Second)
 		if serr != nil {
 			log.WithError(serr).Warn("failed to buffer session HLS; falling back to direct byte-range playback")
 			directURL := directPlayURL(downloadURL)
@@ -567,7 +669,6 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 	if err != nil {
 		return errors.Wrap(err, "failed to render resource")
 	}
-	j.InProgress(s.t("job.waitingPlayer"))
 	return
 }
 
@@ -763,7 +864,7 @@ func (s *ActionScript) warmUp(ctx context.Context, j *job.Job, m string, u strin
 			downloadSpeed = float64(measured) / elapsed.Seconds()
 		}
 	} else if bytes := sr.bytesRead.Load(); bytes > 0 {
-		// Hard deadline hit before measurement window opened — rough estimate
+		// Hard deadline hit before measurement window opened or started=false — rough estimate
 		// over the whole warmup span so the bandwidth-check has *some* number
 		// to classify against.
 		elapsed := time.Since(warmupStart)

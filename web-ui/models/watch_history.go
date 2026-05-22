@@ -430,6 +430,28 @@ func DeleteWatchHistory(ctx context.Context, db *pg.DB, userID uuid.UUID, resour
 	return nil
 }
 
+func DeleteAllWatchHistoryForResource(ctx context.Context, db *pg.DB, userID uuid.UUID, resourceID string) error {
+	_, err := db.Model((*WatchHistory)(nil)).
+		Context(ctx).
+		Where("user_id = ? AND resource_id = ?", userID, resourceID).
+		Delete()
+	if err != nil {
+		return errors.Wrap(err, "failed to delete watch history for resource")
+	}
+	return nil
+}
+
+func DeleteAllWatchHistory(ctx context.Context, db *pg.DB, userID uuid.UUID) error {
+	_, err := db.Model((*WatchHistory)(nil)).
+		Context(ctx).
+		Where("user_id = ?", userID).
+		Delete()
+	if err != nil {
+		return errors.Wrap(err, "failed to delete all watch history")
+	}
+	return nil
+}
+
 // SetWatchedForMovie flips watch_history.watched for every file a user has
 // played that maps (via movie + movie_metadata enrichment) to the given IMDB
 // video_id. Used by the user_video_status service to keep the per-file

@@ -260,16 +260,16 @@ func file_url_store_proto_rawDescGZIP() []byte {
 
 var file_url_store_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_url_store_proto_goTypes = []interface{}{
-	(*PushReply)(nil),    // 0: webtor.url_store.PushReply
-	(*PushRequest)(nil),  // 1: webtor.url_store.PushRequest
-	(*CheckRequest)(nil), // 2: webtor.url_store.CheckRequest
-	(*CheckReply)(nil),   // 3: webtor.url_store.CheckReply
+	(*PushReply)(nil),    // 0: octor.url_store.PushReply
+	(*PushRequest)(nil),  // 1: octor.url_store.PushRequest
+	(*CheckRequest)(nil), // 2: octor.url_store.CheckRequest
+	(*CheckReply)(nil),   // 3: octor.url_store.CheckReply
 }
 var file_url_store_proto_depIdxs = []int32{
-	1, // 0: webtor.url_store.UrlStore.Push:input_type -> webtor.url_store.PushRequest
-	2, // 1: webtor.url_store.UrlStore.Check:input_type -> webtor.url_store.CheckRequest
-	0, // 2: webtor.url_store.UrlStore.Push:output_type -> webtor.url_store.PushReply
-	3, // 3: webtor.url_store.UrlStore.Check:output_type -> webtor.url_store.CheckReply
+	1, // 0: octor.url_store.UrlStore.Push:input_type -> octor.url_store.PushRequest
+	2, // 1: octor.url_store.UrlStore.Check:input_type -> octor.url_store.CheckRequest
+	0, // 2: octor.url_store.UrlStore.Push:output_type -> octor.url_store.PushReply
+	3, // 3: octor.url_store.UrlStore.Check:output_type -> octor.url_store.CheckReply
 	2, // [2:4] is the sub-list for method output_type
 	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

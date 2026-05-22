@@ -64,7 +64,7 @@ export function ErrorState({ message, onRetry }) {
 
 // Shown in the catalog grid area when the selected catalog belongs to an
 // addon that is currently unreachable. Distinct from generic "No items
-// found" so users see why nothing loads instead of suspecting Webtor.
+// found" so users see why nothing loads instead of suspecting Octor.
 export function CatalogUnavailable({ catalog, onRetry }) {
     const [retrying, setRetrying] = useState(false);
     const handleRetry = useCallback(async () => {

@@ -1,5 +1,5 @@
 """
-Webtor metadata sidecar - OMDB-compatible proxy with adult DB support.
+Octor metadata sidecar - OMDB-compatible proxy with adult DB support.
 
 Parsing strategy borrowed from ThePornDatabase/namer:
   - Extract site, date, name from filename (namer's site.YYYY.MM.DD.name format)
@@ -576,7 +576,7 @@ def score_result(parsed: dict, scene: dict) -> float:
 _TPDB_HEADERS = lambda: {
     "Authorization": f"Bearer {THEPORNDB_API_KEY}",
     "Accept": "application/json",
-    "User-Agent": "webtor-sidecar/2",
+    "User-Agent": "octor-sidecar/2",
 }
 
 def tpdb_search(site: Optional[str], date: Optional[str], name: Optional[str], limit: int = 10) -> List[dict]:

@@ -11,7 +11,7 @@
     <div id="loading">Loading...</div>
     <button id="button">Play</button>
     <div id="player"></div>
-    <script src="https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
+    <script src="https://cdn.jsdelivr.net/npm/@octor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
     <script>
         var button = document.getElementById('button');
         var player = document.getElementById('player');
@@ -26,13 +26,13 @@
         });
 
         function initPlayer() {
-            window.webtor = window.webtor || [];
-            window.webtor.push({
+            window.octor = window.octor || [];
+            window.octor.push({
                 id: 'player',
                 width: '100%',
                 magnet: 'magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel',
                 on: function (e) {
-                    if (e.name == window.webtor.INITED) {
+                    if (e.name == window.octor.INITED) {
                         e.player.play();
                         player.style.display = 'block';
                         loading.style.display = 'none';

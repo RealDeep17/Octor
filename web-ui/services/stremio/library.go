@@ -200,13 +200,13 @@ func (s *Library) getStreamItem(ctx context.Context, vc models.VideoContentWithM
 		return nil, err
 	}
 	return &StreamItem{
-		Name:     s.makeStreamName("Webtor.io", md),
+		Name:     s.makeStreamName("Octor", md),
 		Title:    s.makeStreamTitle(title, md),
 		InfoHash: vc.GetContent().ResourceID,
 		FileIdx:  idx,
 		BehaviorHints: &StreamBehaviorHints{
 			Filename:   ti.Name,
-			BingeGroup: fmt.Sprintf("webtorio|%v", vc.GetContent().ResourceID),
+			BingeGroup: fmt.Sprintf("octorio|%v", vc.GetContent().ResourceID),
 		},
 	}, nil
 

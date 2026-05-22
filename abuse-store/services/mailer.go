@@ -56,13 +56,13 @@ func RegisterMailerFlags(f []cli.Flag) []cli.Flag {
 		cli.StringFlag{
 			Name:   mailSender,
 			Usage:  "mail sender",
-			Value:  "noreply@webtor.io",
+			Value:  "noreply@octor",
 			EnvVar: "MAIL_SENDER",
 		},
 		cli.StringFlag{
 			Name:   mailSupport,
 			Usage:  "mail support",
-			Value:  "support@webtor.io",
+			Value:  "support@octor",
 			EnvVar: "MAIL_SUPPORT",
 		},
 	)

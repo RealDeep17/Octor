@@ -64,7 +64,7 @@ func newTestService(store notificationStore, mail mailer, templateDir string) *S
 	return &Service{
 		store:                 store,
 		mail:                  mail,
-		domain:                "https://webtor.io",
+		domain:                "https://octor",
 		templateDir:           templateDir,
 		transferTimeoutPeriod: 48 * time.Hour,
 	}
@@ -389,7 +389,7 @@ func TestSendVaulted(t *testing.T) {
 		t.Errorf("expected to 'user@example.com', got %q", store.created.To)
 	}
 
-	expectedBody := "<p>My Torrent at https://webtor.io/abc123 (https://webtor.io)</p>"
+	expectedBody := "<p>My Torrent at https://octor/abc123 (https://octor)</p>"
 	if store.created.Body != expectedBody {
 		t.Errorf("expected body %q, got %q", expectedBody, store.created.Body)
 	}
@@ -424,7 +424,7 @@ func TestSendExpiring(t *testing.T) {
 		t.Errorf("unexpected title: %q", store.created.Title)
 	}
 
-	expectedBody := "7 days: Torrent 1=https://webtor.io/res1 Torrent 2=https://webtor.io/res2 (https://webtor.io)"
+	expectedBody := "7 days: Torrent 1=https://octor/res1 Torrent 2=https://octor/res2 (https://octor)"
 	if store.created.Body != expectedBody {
 		t.Errorf("expected body %q, got %q", expectedBody, store.created.Body)
 	}
@@ -482,7 +482,7 @@ func TestSendTransferTimeout(t *testing.T) {
 	if !strings.Contains(store.created.Body, "Big Torrent") {
 		t.Errorf("body should contain resource name, got %q", store.created.Body)
 	}
-	if !strings.Contains(store.created.Body, "https://webtor.io/xyz789") {
+	if !strings.Contains(store.created.Body, "https://octor/xyz789") {
 		t.Errorf("body should contain URL, got %q", store.created.Body)
 	}
 	// transferTimeoutPeriod is 48h, durafmt formats it as "2 days"
@@ -520,7 +520,7 @@ func TestSendExpired(t *testing.T) {
 		t.Errorf("unexpected title: %q", store.created.Title)
 	}
 
-	expectedBody := "Old Torrent expired url=https://webtor.io/exp456 (https://webtor.io)"
+	expectedBody := "Old Torrent expired url=https://octor/exp456 (https://octor)"
 	if store.created.Body != expectedBody {
 		t.Errorf("expected body %q, got %q", expectedBody, store.created.Body)
 	}

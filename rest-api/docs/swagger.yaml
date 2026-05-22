@@ -173,11 +173,11 @@ definitions:
     type: object
 info:
   contact:
-    email: support@webtor.io
-    name: Webtor Support
-    url: https://webtor.io/support
-  description: Simple API to communicate with Webtor service.
-  title: Webtor API
+    email: support@octor
+    name: Octor Support
+    url: https://octor/support
+  description: Simple API to communicate with Octor service.
+  title: Octor API
   version: "0.1"
 paths:
   /resource/:

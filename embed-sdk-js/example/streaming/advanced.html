@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>Webtor Player SDK Example</title>
+    <title>Octor Player SDK Example</title>
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1" name="viewport">
     <meta content="ie=edge" http-equiv="x-ua-compatible">
@@ -35,7 +35,7 @@
         }
     </style>
     <!-- <script src="../../dist/index.min.js" charset="utf-8" async></script> -->
-    <script src="https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
+    <script src="https://cdn.jsdelivr.net/npm/@octor/embed-sdk-js/dist/index.min.js" charset="utf-8" async></script>
 </head>
 
 <body>
@@ -63,10 +63,10 @@
     <div id="files"></div> 
     <script>
         var el = document.getElementById('player');
-        window.webtor = window.webtor || [];
-        window.webtor.push({
+        window.octor = window.octor || [];
+        window.octor.push({
             id: 'player',
-            // baseUrl: 'https://webtor.io',
+            // baseUrl: 'https://octor',
             // baseUrl: 'http://192.168.0.100:4000',
             magnet: 'magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel',
             title: 'Example Movie',
@@ -96,7 +96,7 @@
                 // chromecast:  false,
             },
             on: function(e) {
-                if (e.name == window.webtor.TORRENT_FETCHED) {
+                if (e.name == window.octor.TORRENT_FETCHED) {
                     console.log('Torrent fetched!', e.data.files);
 
                     var p = e.player;
@@ -114,10 +114,10 @@
                         });
                     }
                 }
-                if (e.name == window.webtor.TORRENT_ERROR) {
+                if (e.name == window.octor.TORRENT_ERROR) {
                     console.log('Torrent error!')
                 }
-                if (e.name == window.webtor.INITED) {
+                if (e.name == window.octor.INITED) {
                     var p = e.player;
                     document.getElementById('play').addEventListener('click', function(ev) {
                         p.play();
@@ -132,19 +132,19 @@
                         p.setPosition(0);
                     });
                 }
-                if (e.name == window.webtor.PLAYER_STATUS) {
+                if (e.name == window.octor.PLAYER_STATUS) {
                     document.getElementById('player-status').innerHTML = e.data;
                 }
-                if (e.name == window.webtor.OPEN) {
+                if (e.name == window.octor.OPEN) {
                     console.log(e.data);
                 }
-                if (e.name == window.webtor.CURRENT_TIME) {
+                if (e.name == window.octor.CURRENT_TIME) {
                     document.getElementById('current-time').innerHTML = parseInt(e.data);
                 }
-                if (e.name == window.webtor.DURATION) {
+                if (e.name == window.octor.DURATION) {
                     document.getElementById('duration').innerHTML = parseInt(e.data);
                 }
-                if (e.name == window.webtor.OPEN_SUBTITLES) {
+                if (e.name == window.octor.OPEN_SUBTITLES) {
                     console.log(e.data);
                 }
             },

@@ -1,4 +1,4 @@
-import init from './webtor/WebtorGenerator';
+import init from './octor/OctorGenerator';
 function clean(obj) {
     for (var propName in obj) {
         if (obj[propName] === null || obj[propName] === undefined) {
@@ -75,9 +75,9 @@ function makeEmbeds(els, init = {}) {
         };
         data = Object.assign({}, init, clean(data), attrData, config);
         parent.replaceChild(div, v);
-        window.webtor.push(clean(data));
+        window.octor.push(clean(data));
     }
 }
-window.webtor = init(window.webtor);
+window.octor = init(window.octor);
 makeEmbeds(document.querySelectorAll('video'));
 makeEmbeds(document.querySelectorAll('a[download]'), {mode: 'download', width: '400px'});

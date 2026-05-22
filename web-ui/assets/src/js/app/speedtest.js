@@ -59,8 +59,8 @@ async function runTest(root) {
             if (phaseEl) {
                 phaseEl.textContent = isPremium ? i18n.premiumServer : i18n.standardServer;
                 phaseEl.className = isPremium
-                    ? 'text-sm font-semibold text-w-purpleL mb-1'
-                    : 'text-sm font-semibold text-w-cyan mb-1';
+                    ? 'text-sm font-semibold text-o-accent mb-1'
+                    : 'text-sm font-semibold text-o-primary mb-1';
             }
             statusEl.textContent = isPremium ? i18n.testingPremium : i18n.measuring;
             speedEl.textContent = '0.0';

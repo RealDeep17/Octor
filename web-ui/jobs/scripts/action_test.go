@@ -3,6 +3,7 @@ package scripts
 import (
 	"math"
 	"testing"
+	"time"
 
 	claimsproto "github.com/webtor-io/claims-provider/proto"
 	ra "github.com/webtor-io/rest-api/services"
@@ -60,6 +61,78 @@ func TestDetachDirectVideoFallbackKeepsSingleDirectSource(t *testing.T) {
 	}
 	if len(tag.Sources) != 1 {
 		t.Fatalf("len(tag.Sources) = %d, want 1", len(tag.Sources))
+	}
+}
+
+func TestGetVideoBitrateForItemFallsBackToSizeDuration(t *testing.T) {
+	mp := &api.MediaProbe{}
+	mp.Format.Duration = "10.0"
+	item := &ra.ListItem{Size: 25_000_000}
+
+	got := getVideoBitrateForItem(mp, item)
+	if got != 20_000_000 {
+		t.Fatalf("bitrate = %d, want 20000000", got)
+	}
+}
+
+func TestIsMP4Video(t *testing.T) {
+	if !isMP4Video(&ra.ListItem{MediaFormat: ra.Video, Ext: "MP4"}) {
+		t.Fatal("MP4 video should be direct playable")
+	}
+	if isMP4Video(&ra.ListItem{MediaFormat: ra.Video, Ext: "mkv"}) {
+		t.Fatal("MKV should not be classified as MP4")
+	}
+	if isMP4Video(&ra.ListItem{MediaFormat: ra.Audio, Ext: "mp4"}) {
+		t.Fatal("audio item should not be classified as MP4 video")
+	}
+}
+
+func TestShouldUseSessionHLSForMP4Audio(t *testing.T) {
+	item := &ra.ListItem{MediaFormat: ra.Video, Ext: "mp4"}
+	mp := &api.MediaProbe{}
+	mp.Streams = append(mp.Streams,
+		struct {
+			CodecName string `json:"codec_name"`
+			CodecType string `json:"codec_type"`
+			Width     int    `json:"width,omitempty"`
+			Height    int    `json:"height,omitempty"`
+			BitRate   string `json:"bit_rate"`
+			Duration  string `json:"duration"`
+			Tags      struct {
+				CreationTime time.Time `json:"creation_time"`
+				HandlerName  string    `json:"handler_name"`
+				Language     string    `json:"language"`
+				VendorId     string    `json:"vendor_id"`
+				Title        string    `json:"title"`
+			} `json:"tags"`
+			Index         int    `json:"index,omitempty"`
+			Channels      int    `json:"channels,omitempty"`
+			ChannelLayout string `json:"channel_layout,omitempty"`
+			SampleRate    string `json:"sample_rate,omitempty"`
+		}{CodecName: "h264", CodecType: "video"},
+		struct {
+			CodecName string `json:"codec_name"`
+			CodecType string `json:"codec_type"`
+			Width     int    `json:"width,omitempty"`
+			Height    int    `json:"height,omitempty"`
+			BitRate   string `json:"bit_rate"`
+			Duration  string `json:"duration"`
+			Tags      struct {
+				CreationTime time.Time `json:"creation_time"`
+				HandlerName  string    `json:"handler_name"`
+				Language     string    `json:"language"`
+				VendorId     string    `json:"vendor_id"`
+				Title        string    `json:"title"`
+			} `json:"tags"`
+			Index         int    `json:"index,omitempty"`
+			Channels      int    `json:"channels,omitempty"`
+			ChannelLayout string `json:"channel_layout,omitempty"`
+			SampleRate    string `json:"sample_rate,omitempty"`
+		}{CodecName: "truehd", CodecType: "audio"},
+	)
+
+	if !shouldUseSessionHLSForMP4Audio(item, mp) {
+		t.Fatal("MP4 with copyable video and TrueHD audio should use session HLS")
 	}
 }
 

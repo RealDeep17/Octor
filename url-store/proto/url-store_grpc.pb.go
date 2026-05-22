@@ -34,7 +34,7 @@ func NewUrlStoreClient(cc grpc.ClientConnInterface) UrlStoreClient {
 
 func (c *urlStoreClient) Push(ctx context.Context, in *PushRequest, opts ...grpc.CallOption) (*PushReply, error) {
 	out := new(PushReply)
-	err := c.cc.Invoke(ctx, "/webtor.url_store.UrlStore/Push", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/octor.url_store.UrlStore/Push", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (c *urlStoreClient) Push(ctx context.Context, in *PushRequest, opts ...grpc
 
 func (c *urlStoreClient) Check(ctx context.Context, in *CheckRequest, opts ...grpc.CallOption) (*CheckReply, error) {
 	out := new(CheckReply)
-	err := c.cc.Invoke(ctx, "/webtor.url_store.UrlStore/Check", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/octor.url_store.UrlStore/Check", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func _UrlStore_Push_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/webtor.url_store.UrlStore/Push",
+		FullMethod: "/octor.url_store.UrlStore/Push",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UrlStoreServer).Push(ctx, req.(*PushRequest))
@@ -112,7 +112,7 @@ func _UrlStore_Check_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/webtor.url_store.UrlStore/Check",
+		FullMethod: "/octor.url_store.UrlStore/Check",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UrlStoreServer).Check(ctx, req.(*CheckRequest))
@@ -124,7 +124,7 @@ func _UrlStore_Check_Handler(srv interface{}, ctx context.Context, dec func(inte
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var UrlStore_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "webtor.url_store.UrlStore",
+	ServiceName: "octor.url_store.UrlStore",
 	HandlerType: (*UrlStoreServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

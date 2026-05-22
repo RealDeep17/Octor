@@ -1,5 +1,5 @@
 import {makeDebug} from './debug';
-const debug = await makeDebug('webtor:embed:message');
+const debug = await makeDebug('octor:embed:message');
 function inIframe() {
   try {
       return window.self !== window.top;
@@ -16,7 +16,7 @@ const message = {
   send(m, data = {}) {
     if (!inIframe) return;
     if (!id) {
-      m = 'webtor: ' + m;
+      m = 'octor: ' + m;
     } else {
       m = {
         id,

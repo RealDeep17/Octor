@@ -10,9 +10,9 @@ const docTemplate = `{
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
         "contact": {
-            "name": "Webtor Support",
-            "url": "https://webtor.io/support",
-            "email": "support@webtor.io"
+            "name": "Octor Support",
+            "url": "https://octor/support",
+            "email": "support@octor"
         },
         "version": "{{.Version}}"
     },
@@ -614,8 +614,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "",
 	Schemes:          []string{},
-	Title:            "Webtor API",
-	Description:      "Simple API to communicate with Webtor service.",
+	Title:            "Octor API",
+	Description:      "Simple API to communicate with Octor service.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -20,7 +20,7 @@ func TestNewManifest(t *testing.T) {
 }
 
 func TestManifest_GetManifest(t *testing.T) {
-	domain := "https://webtor.io"
+	domain := "https://octor"
 	manifest := NewManifest(domain, nil, false)
 
 	ctx := context.Background()
@@ -35,19 +35,19 @@ func TestManifest_GetManifest(t *testing.T) {
 	}
 
 	// Test manifest fields
-	if response.Id != "org.stremio.webtor.io" {
-		t.Errorf("Expected ID 'org.stremio.webtor.io', got '%s'", response.Id)
+	if response.Id != "org.stremio.octor" {
+		t.Errorf("Expected ID 'org.stremio.octor', got '%s'", response.Id)
 	}
 
 	if response.Version != "0.0.2" {
 		t.Errorf("Expected Version '0.0.2', got '%s'", response.Version)
 	}
 
-	if response.Name != "Webtor.io" {
-		t.Errorf("Expected Name 'Webtor.io', got '%s'", response.Name)
+	if response.Name != "Octor" {
+		t.Errorf("Expected Name 'Octor', got '%s'", response.Name)
 	}
 
-	expectedDescription := "Stream your personal torrent library from Webtor directly in Stremio. Add torrents to your Webtor account and watch them instantly — no downloading, no setup, just click and play."
+	expectedDescription := "Stream your personal torrent library from Octor directly in Stremio. Add torrents to your Octor account and watch them instantly — no downloading, no setup, just click and play."
 	if response.Description != expectedDescription {
 		t.Errorf("Description mismatch")
 	}
@@ -108,8 +108,8 @@ func TestManifest_GetManifest(t *testing.T) {
 	}
 
 	// Test contact email
-	if response.ContactEmail != "support@webtor.io" {
-		t.Errorf("Expected ContactEmail 'support@webtor.io', got '%s'", response.ContactEmail)
+	if response.ContactEmail != "support@octor" {
+		t.Errorf("Expected ContactEmail 'support@octor', got '%s'", response.ContactEmail)
 	}
 }
 
@@ -131,10 +131,10 @@ func TestManifest_GetManifest_WithDifferentDomain(t *testing.T) {
 	}
 
 	// Other fields should remain the same
-	if response.Id != "org.stremio.webtor.io" {
+	if response.Id != "org.stremio.octor" {
 		t.Errorf("ID should not change with different domain")
 	}
-	if response.Name != "Webtor.io" {
+	if response.Name != "Octor" {
 		t.Errorf("Name should not change with different domain")
 	}
 }

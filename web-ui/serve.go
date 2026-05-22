@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/webtor-io/web-ui/handlers/about"
+	"github.com/webtor-io/web-ui/handlers/docs"
 	wa "github.com/webtor-io/web-ui/handlers/action"
 	ha "github.com/webtor-io/web-ui/handlers/admin"
 	wau "github.com/webtor-io/web-ui/handlers/auth"
@@ -315,6 +316,9 @@ func serve(c *cli.Context) error {
 
 	// Setting About
 	about.RegisterHandler(r, tm)
+
+	// Setting Docs
+	docs.RegisterHandler(r, tm)
 
 	// Setting Speedtest
 	speedtest.RegisterHandler(r, tm, sapi, pg)

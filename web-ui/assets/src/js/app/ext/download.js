@@ -1,16 +1,16 @@
 import {makeDebug} from '../../lib/debug';
 import semver from 'semver'
-const debug = await makeDebug('webtor:ext');
+const debug = await makeDebug('octor:ext');
 
 function init() {
     return new Promise((resolve) => {
-        if (window.__webtorInjected) return resolve();
+        if (window.__octorInjected) return resolve();
         debug('wait for initialization');
         window.addEventListener('message', (event) => {
             if (event.source !== window)
                 return;
 
-            if (event.data.webtorInjected) return resolve();
+            if (event.data.octorInjected) return resolve();
         });
     });
 }

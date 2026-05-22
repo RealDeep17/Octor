@@ -1,5 +1,5 @@
 import {makeDebug} from './debug';
-const debug = await makeDebug('webtor:embed:message');
+const debug = await makeDebug('octor:embed:message');
 export default function init() {
     if (window.av) {
         for (const data  of window.av) {
@@ -19,7 +19,7 @@ function initAsyncView(target, init, destroy) {
     const name = url.pathname.replace(/\.js$/, '');
     target.setAttribute('data-async-view', name);
     const onLoad = function(e) {
-        debug(`webtor:async view script loaded name=%o`, name);
+        debug(`octor:async view script loaded name=%o`, name);
         const target = e.detail.target;
         target.setAttribute('data-async-view', name);
         if (!target.reload) {
@@ -32,7 +32,7 @@ function initAsyncView(target, init, destroy) {
         init.call(target);
     }
     const onDestroy = async (e) => {
-        debug(`webtor:async view script destroyed name=%o`, name);
+        debug(`octor:async view script destroyed name=%o`, name);
         const event = new CustomEvent(`async:${name}_destroyed`);
         if (destroy) {
             let target = document;

@@ -9,6 +9,7 @@ import (
 	"github.com/webtor-io/web-ui/models"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/user_video_status"
+	"github.com/webtor-io/web-ui/services/web"
 )
 
 type Handler struct {
@@ -33,6 +34,8 @@ func RegisterHandler(r *gin.Engine, pg *cs.PG, videoStatus *user_video_status.Se
 	h := &Handler{pg: pg, videoStatus: videoStatus}
 	r.PUT("/watch/position", h.updatePosition)
 	r.GET("/watch/position", h.getPosition)
+	r.POST("/watch/remove", h.removeHistory)
+	r.POST("/watch/clear", h.clearHistory)
 }
 
 func (h *Handler) updatePosition(c *gin.Context) {
@@ -144,4 +147,56 @@ func (h *Handler) getPosition(c *gin.Context) {
 		Duration: wh.Duration,
 		Watched:  wh.Watched,
 	})
+}
+
+func (h *Handler) removeHistory(c *gin.Context) {
+	user := auth.GetUserFromContext(c)
+	if !user.HasAuth() {
+		c.Status(http.StatusForbidden)
+		return
+	}
+
+	resourceID := c.PostForm("resource_id")
+	if resourceID == "" {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	db := h.pg.Get()
+	if db == nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+
+	err := models.DeleteAllWatchHistoryForResource(c.Request.Context(), db, user.ID, resourceID)
+	if err != nil {
+		_ = c.Error(err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	web.RedirectWithSuccessAndMessage(c, "toast.removedFromContinueWatching")
+}
+
+func (h *Handler) clearHistory(c *gin.Context) {
+	user := auth.GetUserFromContext(c)
+	if !user.HasAuth() {
+		c.Status(http.StatusForbidden)
+		return
+	}
+
+	db := h.pg.Get()
+	if db == nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+
+	err := models.DeleteAllWatchHistory(c.Request.Context(), db, user.ID)
+	if err != nil {
+		_ = c.Error(err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	web.RedirectWithSuccessAndMessage(c, "toast.clearedContinueWatching")
 }
