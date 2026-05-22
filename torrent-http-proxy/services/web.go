@@ -51,23 +51,23 @@ const (
 
 var (
 	promHTTPProxyRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name: "webtor_http_proxy_request_duration_seconds",
+		Name: "octor_http_proxy_request_duration_seconds",
 		Help: "HTTP Proxy request duration in seconds",
 	}, []string{"source", "role", "name", "status"})
 	promHTTPProxyRequestTTFB = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Name: "webtor_http_proxy_request_ttfb_seconds",
+		Name: "octor_http_proxy_request_ttfb_seconds",
 		Help: "HTTP Proxy request ttfb in seconds",
 	}, []string{"source", "role", "name", "status"})
 	promHTTPProxyRequestSize = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "webtor_http_proxy_request_size_bytes",
+		Name: "octor_http_proxy_request_size_bytes",
 		Help: "HTTP Proxy request size bytes",
 	}, []string{"domain", "role", "source", "name", "status"})
 	promHTTPProxyRequestCurrent = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "webtor_http_proxy_request_current",
+		Name: "octor_http_proxy_request_current",
 		Help: "HTTP Proxy request current",
 	}, []string{"source", "role", "name"})
 	promHTTPProxyRequestTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "webtor_http_proxy_request_total",
+		Name: "octor_http_proxy_request_total",
 		Help: "HTTP Proxy dial total",
 	}, []string{"source", "role", "name", "status"})
 )

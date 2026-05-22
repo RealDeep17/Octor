@@ -21,7 +21,7 @@ import (
 
 var (
 	promRetryAttempts = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "webtor_http_proxy_retry_attempts_total",
+		Name: "octor_http_proxy_retry_attempts_total",
 		Help: "Total number of upstream retry attempts",
 	}, []string{"outcome"})
 )
