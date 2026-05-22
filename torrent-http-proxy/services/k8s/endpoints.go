@@ -21,7 +21,7 @@ func RegisterEndpointsFlags(f []cli.Flag) []cli.Flag {
 		cli.StringFlag{
 			Name:   endpointsNamespaceFlag,
 			Usage:  "K8SEndpoints namespace",
-			Value:  "webtor",
+			Value:  "octor",
 			EnvVar: "ENDPOINTS_NAMESPACE",
 		},
 	)

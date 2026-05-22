@@ -13,7 +13,7 @@ import (
 type StreamingBackendType string
 
 const (
-	StreamingBackendTypeWebtor     StreamingBackendType = "webtor"
+	StreamingBackendTypeOctor     StreamingBackendType = "octor"
 	StreamingBackendTypeRealDebrid StreamingBackendType = "real_debrid"
 	StreamingBackendTypeTorbox     StreamingBackendType = "torbox"
 )

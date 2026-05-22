@@ -25,7 +25,7 @@ func RegisterNodesStatFlags(f []cli.Flag) []cli.Flag {
 			Name:   nodeLabelPrefixFlag,
 			Usage:  "node label prefix",
 			EnvVar: "NODE_LABEL_PREFIX",
-			Value:  "webtor.io/",
+			Value:  "octor/",
 		},
 	)
 }

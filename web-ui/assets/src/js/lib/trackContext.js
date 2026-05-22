@@ -5,11 +5,11 @@
 export function isReferralVisit() {
     try {
         const ss = window.sessionStorage;
-        const cached = ss.getItem('webtor.is_referral');
+        const cached = ss.getItem('octor.is_referral');
         if (cached !== null) return cached === '1' ? 1 : 0;
         const params = new URLSearchParams(window.location.search);
         const isRef = params.get('utm_campaign') === 'resource_share' ? 1 : 0;
-        ss.setItem('webtor.is_referral', isRef ? '1' : '0');
+        ss.setItem('octor.is_referral', isRef ? '1' : '0');
         return isRef;
     } catch (e) {
         return 0;

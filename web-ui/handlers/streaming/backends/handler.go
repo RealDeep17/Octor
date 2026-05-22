@@ -228,9 +228,9 @@ func (s *Handler) deleteStreamingBackend(ctx context.Context, backendID uuid.UUI
 		return errors.New("access denied")
 	}
 
-	// Don't allow deleting Webtor backend
-	if backend.Type == models.StreamingBackendTypeWebtor {
-		return errors.New("cannot delete webtor streaming backend")
+	// Don't allow deleting Octor backend
+	if backend.Type == models.StreamingBackendTypeOctor {
+		return errors.New("cannot delete octor streaming backend")
 	}
 
 	err = models.DeleteStreamingBackend(ctx, db, backendID)
