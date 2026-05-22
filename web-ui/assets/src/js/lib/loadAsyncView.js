@@ -6,12 +6,17 @@ import executeScriptElements from "./executeScriptElements";
 function loadAsyncView(target, body, options) {
     const els = target.querySelectorAll('[data-async-view]');
     for (const el of els) {
-        const view = el.getAttribute('data-async-view');
-        const detail = {
-            target: el,
-        };
-        const event = new CustomEvent(`async:${view}_destroy`, { detail });
-        window.dispatchEvent(event);
+        const viewAttr = el.getAttribute('data-async-view');
+        if (viewAttr) {
+            const views = viewAttr.split(' ');
+            for (const view of views) {
+                const detail = {
+                    target: el,
+                };
+                const event = new CustomEvent(`async:${view}_destroy`, { detail });
+                window.dispatchEvent(event);
+            }
+        }
     }
     renderBody(target, body, options);
 }

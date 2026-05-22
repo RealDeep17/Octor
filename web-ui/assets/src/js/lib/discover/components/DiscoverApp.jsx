@@ -20,7 +20,7 @@ import { AddonHealthChip } from './AddonHealthChip';
 import { AISection } from './ai/AISection';
 import { t, langPath } from '../i18n';
 
-export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
+export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix = '/discover', modalOnly = false }) {
     const [state, dispatch] = useReducer(discoverReducer, initialState);
     const [showWizard, setShowWizard] = useState(false);
     const [addonsInstalled, setAddonsInstalled] = useState(false);
@@ -39,8 +39,9 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
     const openModalByIdRef = useRef(null); // latest openModalById for popstate handler
     const performSearchRef = useRef(null); // latest performSearch for popstate handler
     const pendingStreamRef = useRef(null); // stream to reload after wizard
+    const manifestLoadPromiseRef = useRef(null);
 
-    const url = useDiscoverUrl('/discover');
+    const url = useDiscoverUrl(pathPrefix);
 
     // Create client once
     if (!clientRef.current) {
@@ -54,6 +55,36 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
             abortRef.current = null;
         }
     }
+
+    const ensureManifestsLoaded = useCallback(async () => {
+        if (client.addonStatuses) return;
+        if (manifestLoadPromiseRef.current) {
+            return manifestLoadPromiseRef.current;
+        }
+
+        dispatch({ type: 'SHOW_MODAL', modal: { view: 'loading', title: 'Connecting...', subtitle: 'Loading stream addons...' } });
+
+        manifestLoadPromiseRef.current = (async () => {
+            try {
+                const { manifests, catalogs, types, addons } = await loadManifests(client);
+                dispatch({ type: 'ADDONS_UPDATED', addons });
+                dispatch({
+                    type: 'INIT_SUCCESS',
+                    manifests,
+                    catalogs,
+                    selectedType: types[0] || 'movie',
+                    selectedCatalog: catalogs[0] || null,
+                    addons
+                });
+            } catch (e) {
+                // Ignore, proceed
+            } finally {
+                manifestLoadPromiseRef.current = null;
+            }
+        })();
+
+        return manifestLoadPromiseRef.current;
+    }, [client]);
 
     // --- Load catalog ---
     const loadCatalog = useCallback(async (catalog, skip, currentItems) => {
@@ -92,6 +123,14 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
         let cancelled = false;
         (async () => {
             try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlId = urlParams.get('id');
+
+                if (modalOnly && !urlId) {
+                    dispatch({ type: 'INIT_SUCCESS', manifests: [], catalogs: [], selectedType: 'movie', selectedCatalog: null, addons: [] });
+                    return;
+                }
+
                 const { manifests, catalogs, types, addons } = await loadManifests(client);
                 if (cancelled) return;
 
@@ -102,12 +141,10 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
                 }
 
                 // Restore state from URL params and history.state
-                const urlParams = new URLSearchParams(window.location.search);
                 const urlType = urlParams.get('type');
                 const urlSearch = urlParams.get('search');
                 const urlSearchType = urlParams.get('search-type');
                 const urlPage = parseInt(urlParams.get('page'), 10) || 0;
-                const urlId = urlParams.get('id');
                 const urlSeason = urlParams.get('season');
                 const urlEpisode = urlParams.get('episode');
                 const urlCatalogBase = urlParams.get('catalog-base');
@@ -176,16 +213,19 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
         return () => { cancelled = true; abortCatalog(); };
     }, [client]);
 
+
+
     // Load catalog when selection changes after init
     const prevCatalogRef = useRef(null);
     useEffect(() => {
+        if (modalOnly) return;
         if (state.phase !== 'ready' || state.isSearchMode) return;
         if (!state.selectedCatalog) return;
         const key = `${state.selectedCatalog.baseUrl}::${state.selectedCatalog.id}::${state.selectedType}`;
         if (prevCatalogRef.current === key && state.skip > 0) return;
         prevCatalogRef.current = key;
         loadCatalog(state.selectedCatalog, 0, []);
-    }, [state.phase, state.selectedCatalog, state.selectedType, state.isSearchMode, loadCatalog]);
+    }, [state.phase, state.selectedCatalog, state.selectedType, state.isSearchMode, loadCatalog, modalOnly]);
 
     // --- Type/Catalog selection ---
     const selectType = useCallback((type) => {
@@ -365,7 +405,9 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
     }, [client]);
 
     const cardClick = useCallback(async (item) => {
-        const type = item.type || state.selectedType;
+        await ensureManifestsLoaded();
+        const curState = stateRef.current || state;
+        const type = item.type || curState.selectedType || 'movie';
         const id = item.id;
         const restoreSeason = modalSeasonRef.current;
         modalSeasonRef.current = null;
@@ -375,7 +417,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
         // to stream" — without this we cannot answer whether Watchlist drives
         // any retention. Fired before any async work so a fetch failure still
         // counts the intent.
-        if (stateRef.current?.watchlistFilterEnabled) {
+        if (curState?.watchlistFilterEnabled) {
             window.umami?.track?.('stream-from-watchlist');
         }
 
@@ -427,7 +469,17 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
                 }
             }
         }
-    }, [client, state.selectedType, loadStreams]);
+    }, [client, loadStreams, ensureManifestsLoaded]);
+
+    // Custom window event listener to open media modal programmatically on the homepage
+    useEffect(() => {
+        const handler = (e) => {
+            const { id, type, name, poster } = e.detail;
+            cardClick({ id, type, name, poster });
+        };
+        window.addEventListener('open-discover-modal', handler);
+        return () => window.removeEventListener('open-discover-modal', handler);
+    }, [cardClick]);
 
     // Bridge from an AI recommendation card to the existing stream-loading
     // flow. AI items carry video_id (IMDB) / title / poster / plot / reason
@@ -447,15 +499,17 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
     }, [cardClick]);
 
     const openModalById = useCallback(async (id) => {
+        await ensureManifestsLoaded();
+        const curState = stateRef.current || state;
         // Try to find the item in loaded items or search results
-        const item = state.items.find(i => i.id === id)
-            || state.searchResults.find(i => i.id === id);
+        const item = curState.items.find(i => i.id === id)
+            || curState.searchResults.find(i => i.id === id);
         const ep = modalEpisodeRef.current;
         modalEpisodeRef.current = null;
 
         if (ep) {
             // Restore directly to streams for a specific episode, fetching meta for back-nav
-            const type = item?.type || state.selectedType || 'series';
+            const type = item?.type || curState.selectedType || 'series';
             const epId = `${id}:${ep.season}:${ep.episode}`;
             const name = item?.name || id;
             const epName = `${name} - ${Number(ep.season) === 0 ? 'Specials' : `S${ep.season}`} E${ep.episode}`;
@@ -481,9 +535,9 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
             cardClick(item);
         } else {
             // Item not in loaded data — open with minimal info, modal will load via API
-            cardClick({ id, name: id, type: state.selectedType });
+            cardClick({ id, name: id, type: curState.selectedType });
         }
-    }, [client, state.items, state.searchResults, state.selectedType, cardClick, loadStreams]);
+    }, [client, cardClick, loadStreams, ensureManifestsLoaded]);
 
     const onEpisodeSelect = useCallback(async (episode, item) => {
         const type = item.itemType || 'series';
@@ -516,9 +570,10 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
     }, []);
 
     const handleStreamClick = useCallback(async (infoHash, fileIdx) => {
-        const currentTitle = state.modal?.title;
-        const currentPoster = state.modal?.poster;
-        const currentBackToEpisodes = state.modal?.backToEpisodes;
+        const curState = stateRef.current || state;
+        const currentTitle = curState.modal?.title;
+        const currentPoster = curState.modal?.poster;
+        const currentBackToEpisodes = curState.modal?.backToEpisodes;
 
         dispatch({ type: 'SHOW_MODAL', modal: {
             view: 'progress', title: currentTitle, poster: currentPoster, logUrl: null, fileIdx: fileIdx != null ? fileIdx : null,
@@ -528,7 +583,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
             const formData = new FormData();
             formData.append('resource', infoHash);
             formData.append('_csrf', window._CSRF);
-            const metaId = state.modal?.metaId;
+            const metaId = curState.modal?.metaId;
             if (metaId) formData.append('hint_video_id', metaId);
             const response = await fetch(langPath('/'), {
                 method: 'POST',
@@ -554,7 +609,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
                 backToEpisodes: currentBackToEpisodes,
             }});
         }
-    }, [state.modal]);
+    }, []);
 
     const closeModal = useCallback(() => {
         dispatch({ type: 'CLOSE_MODAL' });
@@ -705,6 +760,16 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
     // --- Restore pages from URL: after each catalog load, if pages remain, trigger another loadMore ---
     useEffect(() => {
         if (state.phase !== 'ready') return;
+
+        if (modalOnly) {
+            if (modalItemIdRef.current) {
+                const id = modalItemIdRef.current;
+                modalItemIdRef.current = null;
+                restoreModalFromUrl(id, url, openModalById, modalEpisodeRef);
+            }
+            return;
+        }
+
         if (state.catalogLoading) return;
         if (state.isSearchMode) return;
         if (state.items.length === 0) return;
@@ -725,7 +790,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
             modalItemIdRef.current = null;
             restoreModalFromUrl(id, url, openModalById, modalEpisodeRef);
         }
-    }, [state.phase, state.catalogLoading, state.isSearchMode, state.items.length, loadCatalog, openModalById]);
+    }, [state.phase, state.catalogLoading, state.isSearchMode, state.items.length, loadCatalog, openModalById, modalOnly]);
 
     // Restore modal from URL after search results load
     useEffect(() => {
@@ -742,6 +807,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
 
     // Sync state to URL
     useEffect(() => {
+        if (modalOnly) return;
         if (state.phase !== 'ready') return;
         // Don't overwrite URL during page/modal restore
         if (restoreInProgressRef.current) return;
@@ -942,22 +1008,23 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
             const episode = params.get('episode');
             // For episodes, stream ID is "tt123:season:episode"
             const streamId = (season != null && episode != null) ? `${id}:${season}:${episode}` : id;
-            const type = state.modal?.backToEpisodes?.itemType || state.selectedType;
+            const curState = stateRef.current || state;
+            const type = curState.modal?.backToEpisodes?.itemType || curState.selectedType;
             pendingStreamRef.current = {
                 streamId,
                 type,
-                title: state.modal?.title,
-                poster: state.modal?.poster,
-                backToEpisodes: state.modal?.backToEpisodes,
+                title: curState.modal?.title,
+                poster: curState.modal?.poster,
+                backToEpisodes: curState.modal?.backToEpisodes,
                 id,
                 season,
                 episode,
-                modal: state.modal,
+                modal: curState.modal,
             };
         }
         closeModal();
         setShowWizard(true);
-    }, [state.modal, state.selectedType, closeModal]);
+    }, [closeModal]);
 
     // --- Watched / Rating ---
     const handleToggleWatched = useCallback(async (item) => {
@@ -1187,20 +1254,60 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons }) {
     }, []);
 
     // --- Render ---
-    if (state.phase === 'loading') {
-        return <LoadingSpinner />;
+    if (!modalOnly) {
+        if (state.phase === 'loading') {
+            return <LoadingSpinner />;
+        }
+
+        if (state.phase === 'no-addons') {
+            return <NoAddons />;
+        }
+
+        if (state.phase === 'no-catalogs') {
+            return <NoCatalogs />;
+        }
+
+        if (state.phase === 'error' && state.items.length === 0) {
+            return <ErrorState message={state.errorMessage} onRetry={retry} />;
+        }
     }
 
-    if (state.phase === 'no-addons') {
-        return <NoAddons />;
-    }
+    if (modalOnly) {
+        return (
+            <div>
+                {state.modal && (
+                    <StreamModal
+                        modal={state.modal}
+                        onClose={closeModal}
+                        onEpisodeSelect={onEpisodeSelect}
+                        onStreamClick={handleStreamClick}
+                        onBackToEpisodes={state.modal.backToEpisodes ? onBackToEpisodes : undefined}
+                        onSeasonChange={onSeasonChange}
+                        hasCustomAddons={hasCustomAddons || addonsInstalled}
+                        onSetupAddons={onSetupAddons}
+                        onRetryStreams={retryStreams}
+                        userStatuses={state.userStatuses}
+                        watchlistIds={state.watchlistIds}
+                        onToggleWatched={handleToggleWatched}
+                        onRate={handleOpenRating}
+                        onToggleWatchlist={handleToggleWatchlist}
+                    />
+                )}
 
-    if (state.phase === 'no-catalogs') {
-        return <NoCatalogs />;
-    }
+                {showWizard && state.phase === 'ready' && (
+                    <AddonWizard onComplete={onWizardComplete} onSkip={onWizardSkip} />
+                )}
 
-    if (state.phase === 'error' && state.items.length === 0) {
-        return <ErrorState message={state.errorMessage} onRetry={retry} />;
+                {ratingTarget && (
+                    <RatingDialog
+                        currentRating={ratingTarget.currentRating}
+                        onRate={handleRate}
+                        onUnrate={handleUnrate}
+                        onClose={handleCloseRating}
+                    />
+                )}
+            </div>
+        );
     }
 
     return (

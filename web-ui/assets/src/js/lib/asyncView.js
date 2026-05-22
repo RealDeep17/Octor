@@ -12,17 +12,35 @@ export default function init() {
         }
     }
 }
-function initAsyncView(target, init, destroy) {
-    const scripts = target.getElementsByTagName('script');
-    const src = scripts[scripts.length-1].src;
+function addAsyncView(el, name) {
+    if (!el) return;
+    const current = el.getAttribute('data-async-view') || '';
+    const views = current ? current.split(' ') : [];
+    if (!views.includes(name)) {
+        views.push(name);
+        el.setAttribute('data-async-view', views.join(' '));
+    }
+}
+
+function initAsyncView(target, init, destroy, script) {
+    let scriptEl = script;
+    if (!scriptEl && target) {
+        const scripts = target.getElementsByTagName('script');
+        scriptEl = scripts[scripts.length-1];
+    }
+    if (!scriptEl) {
+        debug(`octor:async view failed, no script element found`);
+        return;
+    }
+    const src = scriptEl.src;
     const url = new URL(src);
     const name = url.pathname.replace(/\.js$/, '');
-    target.setAttribute('data-async-view', name);
+    addAsyncView(target, name);
     const onLoad = function(e) {
         debug(`octor:async view script loaded name=%o`, name);
         const target = e.detail.target;
-        target.setAttribute('data-async-view', name);
-        if (!target.reload) {
+        addAsyncView(target, name);
+        if (target && !target.reload) {
             target.reload = function() {
                 return new Promise(function(resolve, _) {
                     target.reloadResolve = resolve;

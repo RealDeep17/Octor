@@ -166,6 +166,11 @@
     </div>
 
     {{ template "continue_watching" (withContext $ .ContinueWatching) }}
+    {{ if .Addons }}
+    <script>
+        window._addons = {{ .Addons | json }};
+    </script>
+    {{ end }}
     {{ template "discover" (withContext $ .Tool) }}
 </section>
 

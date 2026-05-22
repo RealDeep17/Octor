@@ -3,6 +3,8 @@ import av from '../lib/av';
 import { CINEMETA_BASE } from '../lib/discover/client';
 import { DiscoverApp } from '../lib/discover/components/DiscoverApp';
 import { init as initI18n } from '../lib/discover/i18n';
+import { stripLangPrefix } from '../lib/i18n';
+
 
 av(async function () {
     await initI18n();
@@ -30,7 +32,10 @@ av(async function () {
     const addonUrls = seeds.map(a => (a.url || '').replace(/\/manifest\.json$/, '')).filter(Boolean);
     const hasCustomAddons = serverAddons.length > 0;
     const mountEl = container.querySelector('#discover-mount') || container;
-    render(<DiscoverApp addonUrls={addonUrls} addonSeeds={seeds} hasCustomAddons={hasCustomAddons} />, mountEl);
+    const cleanPath = stripLangPrefix(window.location.pathname);
+    const modalOnly = !cleanPath.startsWith('/discover');
+    const pathPrefix = modalOnly ? '/' : '/discover';
+    render(<DiscoverApp addonUrls={addonUrls} addonSeeds={seeds} hasCustomAddons={hasCustomAddons} pathPrefix={pathPrefix} modalOnly={modalOnly} />, mountEl);
 }, function () {
     // Destroy callback: unmount Preact on async navigation away
     const container = this;

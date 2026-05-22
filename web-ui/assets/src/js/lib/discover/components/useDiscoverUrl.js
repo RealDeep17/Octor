@@ -61,7 +61,10 @@ export function useDiscoverUrl(pathPrefix) {
         // browser's pathname carries a /{lang} prefix on non-English locales,
         // so strip it before comparing — otherwise popstate on /ru/discover
         // never matches and the filter swallows the event.
-        const matches = () => stripLangPrefix(window.location.pathname).startsWith(pathPrefix);
+        const matches = () => {
+            const cleanPath = stripLangPrefix(window.location.pathname);
+            return pathPrefix === '/' ? cleanPath === '/' : cleanPath.startsWith(pathPrefix);
+        };
         const removeFilter = addPopstateFilter(matches);
         const listener = () => {
             if (!matches()) return;

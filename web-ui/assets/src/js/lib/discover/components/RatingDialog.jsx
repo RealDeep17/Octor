@@ -33,7 +33,7 @@ export function RatingDialog({ currentRating, onRate, onUnrate, onClose }) {
 
     return (
         <dialog ref={dialogRef} class="modal" onClick={handleBackdropClick}>
-            <div class="modal-box max-w-sm bg-w-card border border-w-line/50 rounded-2xl" onClick={e => e.stopPropagation()}>
+            <div class="modal-box max-w-sm bg-w-card border border-w-line/50 rounded-2xl text-left" onClick={e => e.stopPropagation()}>
                 <div class="flex flex-col items-center pt-2 pb-3 gap-1">
                     <div class="flex gap-0.5">
                         {Array.from({ length: 10 }, (_, i) => i + 1).map(val => {

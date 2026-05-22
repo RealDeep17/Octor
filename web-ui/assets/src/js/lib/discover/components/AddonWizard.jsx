@@ -334,7 +334,7 @@ export function AddonWizard({ onComplete, onSkip }) {
 
     return (
         <dialog ref={dialogRef} class="modal" onClose={handleDialogClick}>
-            <div class="modal-box bg-w-card border border-w-line/50 rounded-2xl max-w-2xl">
+            <div class="modal-box bg-w-card border border-w-line/50 rounded-2xl max-w-2xl text-left">
                 {step === 1 ? (
                     <Step1
                         sources={sources}
