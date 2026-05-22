@@ -6,7 +6,7 @@ run:
 	./web-ui s
 
 forward-ports:
-	kubefwd svc -n webtor -l "app.kubernetes.io/name in (claims-provider, supertokens, rest-api, abuse-store)"
+	kubefwd svc -n octor -l "app.kubernetes.io/name in (claims-provider, supertokens, rest-api, abuse-store)"
 
 test:
 	go test ./...

@@ -82,14 +82,14 @@ for MODE in "${MODES[@]}"; do
     done
     # Wait for postgres to be ready before DB cleanup
     for i in {1..15}; do
-        docker exec octor-postgres pg_isready -U webtor -q 2>/dev/null && break
+        docker exec octor-postgres pg_isready -U octor -q 2>/dev/null && break
         sleep 1
     done
 
     # 2. Database Cleanup
     echo "Clearing database records for resource $RESOURCE_ID..."
-    docker exec -i octor-postgres psql -U webtor -d vault -c "DELETE FROM file WHERE hash IN (SELECT file_hash FROM resource_file WHERE resource_id = '$RESOURCE_ID');" || true
-    docker exec -i octor-postgres psql -U webtor -d vault -c "DELETE FROM resource WHERE resource_id = '$RESOURCE_ID';" || true
+    docker exec -i octor-postgres psql -U octor -d vault -c "DELETE FROM file WHERE hash IN (SELECT file_hash FROM resource_file WHERE resource_id = '$RESOURCE_ID');" || true
+    docker exec -i octor-postgres psql -U octor -d vault -c "DELETE FROM resource WHERE resource_id = '$RESOURCE_ID';" || true
 
     # 3. Remote storage cleanup (direct rclone bypasses VFS overhead; no app services needed)
     echo "Wiping remote vault storage (ALPHA_UNION:vault)..."
@@ -353,8 +353,8 @@ for MODE in "${MODES[@]}"; do
     free -m > "$LOG_DIR/free.log" 2>/dev/null || true
     
     # Capture database states
-    docker exec -i octor-postgres psql -U webtor -d vault -c "SELECT * FROM resource WHERE resource_id = '$RESOURCE_ID';" > "$LOG_DIR/db-resource.log" 2>/dev/null || true
-    docker exec -i octor-postgres psql -U webtor -d vault -c "SELECT hash, status, total_size, stored_size, upload_id FROM file WHERE hash IN (SELECT file_hash FROM resource_file WHERE resource_id = '$RESOURCE_ID');" > "$LOG_DIR/db-files.log" 2>/dev/null || true
+    docker exec -i octor-postgres psql -U octor -d vault -c "SELECT * FROM resource WHERE resource_id = '$RESOURCE_ID';" > "$LOG_DIR/db-resource.log" 2>/dev/null || true
+    docker exec -i octor-postgres psql -U octor -d vault -c "SELECT hash, status, total_size, stored_size, upload_id FROM file WHERE hash IN (SELECT file_hash FROM resource_file WHERE resource_id = '$RESOURCE_ID');" > "$LOG_DIR/db-files.log" 2>/dev/null || true
 
     # Capture Prometheus Metrics from the Web Seeder
     curl -s "http://localhost:53054/metrics" > "$LOG_DIR/seeder-metrics.log" 2>/dev/null || true

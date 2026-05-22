@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 
 # Octor Hybrid Dev Runner (ARM64 Optimized) - SKIP INFRA VERSION
 # Runs infra in Docker and services on Host.

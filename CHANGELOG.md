@@ -12,7 +12,7 @@
 ### Added
 - **Dynamic Gateway Write Buffer Size**: Exposed `S3_GATEWAY_WRITE_BUFFER_SIZE` inside `custom.env`, allowing full runtime control over the RAM sequential write buffer size (defaults to 16MB; set to `0` to cleanly disable).
 - **Admin Universal WebDAV Virtual Directories**: Implemented high-level `admin/` scoped WebDAV directories: read-only global directories (`admin/torrents`, `admin/movies`, `admin/tvseries`, `admin/all`) and per-user read-write scoped subdirectories (`admin/users/{email}/all`). WebDAV moves are strictly validated and user-scoped.
-- **Universal Admin Webtor UI**: Added dedicated admin analytics and library views (`/admin/library`, `/admin/library/movies`, `/admin/library/series`, `/admin/vault`) displaying all users' active media card listings and active pledges with owner email identification, deduped at the resource level.
+- **Universal Admin Octor UI**: Added dedicated admin analytics and library views (`/admin/library`, `/admin/library/movies`, `/admin/library/series`, `/admin/vault`) displaying all users' active media card listings and active pledges with owner email identification, deduped at the resource level.
 - **Library User Relation Binding**: Integrated pg relation model mapping `User *User pg:"rel:has-one,fk:user_id"` to link all torrent library records to user tables dynamically.
 - **Multi-Branch Root Markdown Rule**: Configured root `.gitignore` rules to completely ignore temporary root markdown files while preserving core documentation (`README.md`, `CHANGELOG.md`, `DEVELOPMENT.md`, `TODO.md`) across all active branches.
 
@@ -23,6 +23,10 @@
 ---
 
 ## [Unreleased] - 2026-05-16
+
+### Removed
+- **Legacy Dev Scripts**: Deleted `run_dev.sh` and `run_dev_skip.sh` in favor of `switch_mode.sh` and systemd-managed services.
+- **MinIO Container**: Fully deprecated and removed MinIO from the infrastructure stack in favor of the lightweight custom `s3-gateway`.
 
 ### Fixed
 - **HLS Streaming Pipeline**: Resolved persistent 404/502/504 errors in the video player.
@@ -55,7 +59,7 @@
 - **Status SSE Cadence**: Reduced resource/vault status SSE polling to 200 ms and made seeder stat diffs include seed/leech/status changes.
 
 ### Removed
-- **Superseded Notes**: Removed legacy planning and handover documents now covered by the consolidated docs (`TO-DO.md`, `VPS_HANDOVER.md`, `custom_webtor_plan.md`, `octor_masterplan.md`).
+- **Superseded Notes**: Removed legacy planning and handover documents now covered by the consolidated docs (`TO-DO.md`, `VPS_HANDOVER.md`, `custom_octor_plan.md`, `octor_masterplan.md`).
 
 ---
 

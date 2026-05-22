@@ -40,14 +40,4 @@ graph TD
 - [x] Clear local `.torrent.db` state and restart `octor-torrent-web-seeder` to prevent stale SHA-1 mismatch loops.
 - [x] Verify S3 Gateway successfully boots and prints `Wrapping upload with sequential RAM write buffer: size=16777216 bytes`.
 - [x] **Live Ingestion Speed Check**: Confirm average upload speeds of 15-50 MB/s directly to Google Drive with 0% local SSD cache leakage.
-- [x] **Verify LRU Eviction Under Pressure**: Initiate a large torrent with seeder limits configured to `1.5GB`. Confirm older blocks are successfully evicted via `FALLOC_FL_PUNCH_HOLE` while the vault stream advances past 1.5GB to 100% completion.
-
-### Phase 2: Production Ingestion Scaling (1TB File Vaulting)
-- [ ] Scale production limits inside `custom.env` to maximum capacity.
-- [ ] Trigger the 1TB torrent ingestion.
-- [ ] Monitor CPU, RAM, and SSD storage size over a 6-hour period to ensure zero leaks.
-
----
-
-> [!WARNING]
-> **CRITICAL RULE FOR ALL FUTURE AGENTS:** Do not alter the zero-buffer direct-stream S3 Gateway architecture (`s3-gateway/main.go`), do not reintroduce intermediate `.uploads` disk buffering, do not reintroduce synchronous HTTP GET queries in `stat.go`, and do not overwrite Vault's true stored byte progress in `status.go`.
+- [x] **Verify LRU Eviction Under Pressure**: Initiate a large torrent with seeder limits configured to `1.5GB`. Confirm older blocks are successfully evicted via `FALLOC_FL_PUNCH_HOLE` while the vault stream advances past 1.5GB to 100% completion

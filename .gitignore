@@ -47,3 +47,7 @@ badger_data/ badger-data/
 
 # Scratch and disposable files
 /scratch/
+
+# Compiled binaries
+/caddy-custom
+

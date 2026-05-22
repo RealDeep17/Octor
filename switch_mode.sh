@@ -208,7 +208,7 @@ ensure_infra_containers() {
     echo -n "  Waiting for postgres (127.0.0.1:5433)"
     local elapsed=0
     while [ $elapsed -lt 30 ]; do
-        if docker exec octor-postgres pg_isready -U webtor -q 2>/dev/null; then
+        if docker exec octor-postgres pg_isready -U octor -q 2>/dev/null; then
             echo " ✓ ready (${elapsed}s)"
             return 0
         fi

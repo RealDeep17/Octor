@@ -65,7 +65,7 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/srv/octor/web-ui
 EnvironmentFile=/srv/octor/custom.env
-ExecStart=/srv/octor/bin/web-ui serve --port 8082 --pprof-port 51081 --probe-port 52081 --webtor-rest-api-host localhost --webtor-rest-api-port 8080 --vault-service-host localhost --vault-service-port 8086 --use-internal-torrent-http-proxy=true --torrent-http-proxy-host localhost --torrent-http-proxy-port 50052 --domain \${OCTOR_DOMAIN}
+ExecStart=/srv/octor/bin/web-ui serve --port 8082 --pprof-port 51081 --probe-port 52081 --octor-rest-api-host localhost --octor-rest-api-port 8080 --vault-service-host localhost --vault-service-port 8086 --use-internal-torrent-http-proxy=true --torrent-http-proxy-host localhost --torrent-http-proxy-port 50052 --domain \${OCTOR_DOMAIN}
 Restart=always
 RestartSec=3
 
@@ -82,7 +82,7 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/srv/octor/vault
 EnvironmentFile=/srv/octor/custom.env
-ExecStart=/srv/octor/bin/vault serve --port 8086 --pprof-port 51086 --probe-port 52086 --prom-port 53086 --webtor-rest-api-host localhost --webtor-rest-api-port 8080 --aws-endpoint \${AWS_ENDPOINT} --aws-region \${AWS_REGION} --aws-access-key-id \${AWS_ACCESS_KEY_ID} --aws-secret-access-key \${AWS_SECRET_ACCESS_KEY} --aws-bucket \${VAULT_AWS_BUCKET} --aws-no-ssl --max-concurrent-jobs \${VAULT_MAX_CONCURRENT_JOBS} --postgres-database vault
+ExecStart=/srv/octor/bin/vault serve --port 8086 --pprof-port 51086 --probe-port 52086 --prom-port 53086 --octor-rest-api-host localhost --octor-rest-api-port 8080 --aws-endpoint \${AWS_ENDPOINT} --aws-region \${AWS_REGION} --aws-access-key-id \${AWS_ACCESS_KEY_ID} --aws-secret-access-key \${AWS_SECRET_ACCESS_KEY} --aws-bucket \${VAULT_AWS_BUCKET} --aws-no-ssl --max-concurrent-jobs \${VAULT_MAX_CONCURRENT_JOBS} --postgres-database vault
 Restart=always
 RestartSec=3
 
