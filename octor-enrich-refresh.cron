@@ -1,0 +1,14 @@
+#!/bin/bash
+# ==============================================================================
+# Octor Auto-Enrich-Refresh Weekly Maintenance Cron Job
+# ==============================================================================
+# Executed automatically by system cron every week to refresh stale metadata.
+# Logs are appended to /var/log/octor-enrich-refresh.log
+# ==============================================================================
+
+echo -e "\n=== Auto-Enrich-Refresh Started: $(date) ===" >> /var/log/octor-enrich-refresh.log
+
+# Run enrich refresh command as 'ubuntu' user, sourcing custom.env
+sudo -u ubuntu bash -c 'export $(grep -v "^#" /srv/octor/custom.env | xargs) && /srv/octor/bin/web-ui enrich refresh --days 7' >> /var/log/octor-enrich-refresh.log 2>&1
+
+echo -e "=== Auto-Enrich-Refresh Finished: $(date) ===\n" >> /var/log/octor-enrich-refresh.log

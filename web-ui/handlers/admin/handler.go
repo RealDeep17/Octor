@@ -16,6 +16,7 @@ import (
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/handlers/library/shared"
 	"github.com/webtor-io/web-ui/models"
@@ -138,6 +139,7 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 	gr.GET("/status", h.status)
 	gr.GET("/drive", h.driveIndex)
 	gr.GET("/drive/*path", h.driveIndex)
+	gr.POST("/enrichment/refresh", h.refreshEnrichment)
 }
 
 type DriveItem struct {
@@ -934,4 +936,35 @@ func (h *Handler) getLiveSeeds(ctx context.Context, c *gin.Context, resourceID s
 		return 0
 	}
 	return 0
+}
+
+func (h *Handler) refreshEnrichment(c *gin.Context) {
+	db, err := h.db()
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
+		defer cancel()
+
+		ids, err := models.GetStaleOrMissingMetadataResourceIDs(bgCtx, db, 7*24*time.Hour)
+		if err != nil {
+			log.WithError(err).Error("Background metadata refresh failed to query stale resources")
+			return
+		}
+
+		log.Infof("Admin triggered background metadata refresh: found %d resources to refresh", len(ids))
+		for i, id := range ids {
+			log.Infof("Background refresh [%d/%d]: refreshing resource %s", i+1, len(ids), id)
+			err = h.enricher.Enrich(bgCtx, id, &api.Claims{}, true, "")
+			if err != nil {
+				log.WithError(err).Warnf("Background refresh: failed to refresh resource %s", id)
+			}
+		}
+		log.Info("Background metadata refresh completed successfully")
+	}()
+
+	web.RedirectWithSuccessAndMessage(c, "toast.enrichmentRefreshStarted")
 }

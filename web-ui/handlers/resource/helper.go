@@ -254,7 +254,11 @@ func (s *Helper) HasEnrichedPosterHorizontal(gd *GetData) bool {
 	if md == nil {
 		return false
 	}
-	return md.PosterHorizontalURL != "" || strings.Contains(md.PosterURL, "theporndb.net")
+	return md.PosterHorizontalURL != "" || 
+		strings.Contains(md.PosterURL, "theporndb.net") || 
+		strings.Contains(md.PosterURL, "stashdb.org") || 
+		strings.HasPrefix(md.VideoID, "tpdb:") || 
+		strings.HasPrefix(md.VideoID, "stash:")
 }
 
 func (s *Helper) GetEnrichedPosterHorizontalURL(gd *GetData) string {
@@ -293,6 +297,16 @@ func (s *Helper) GetEnrichedPosterLayout(gd *GetData) string {
 	}
 	if layout != "" {
 		return layout
+	}
+	// For adult content/scenes, default to horizontal layout to prevent vertical cropping of horizontal posters
+	md := s.getMetadata(gd)
+	if md != nil {
+		if strings.Contains(md.PosterURL, "theporndb.net") || 
+			strings.Contains(md.PosterURL, "stashdb.org") || 
+			strings.HasPrefix(md.VideoID, "tpdb:") || 
+			strings.HasPrefix(md.VideoID, "stash:") {
+			return "horizontal"
+		}
 	}
 	return "vertical"
 }

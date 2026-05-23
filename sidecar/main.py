@@ -948,6 +948,7 @@ def metadata_proxy(
     apikey: Optional[str] = Query(None),
     plot: Optional[str] = Query("short"),
     sidecar_enrichment_enabled: Optional[str] = Query(None),
+    porn: Optional[str] = Query(None),
 ):
     if not t and not i:
         return JSONResponse({"Response": "False", "Error": "No title or ID"}, status_code=400)
@@ -976,8 +977,10 @@ def metadata_proxy(
         return JSONResponse({"Response": "False", "Error": "JAV not found"}, status_code=404)
 
     # ── Path 2: Western adult scene ─────────────────────────────────────────────
-    # Only search when a known studio name OR structural date pattern is present.
-    if t and sidecar_enabled and is_adult_content(t):
+    # Only search when a known studio name OR structural date pattern is present,
+    # or if the query is explicitly flagged as adult content by the upstream parser.
+    is_adult = (porn and porn.lower() == "true") or (t and is_adult_content(t))
+    if t and sidecar_enabled and is_adult:
         log(f"Adult content detected, attempting enrichment for: {t}")
         data = adult_enrichment_lookup(t)
         if data:

@@ -45,6 +45,10 @@ func (s *Movie) GetContentType() ContentType {
 	return ContentTypeMovie
 }
 
+func (s *Movie) GetUserPosterLayout() string {
+	return s.UserPosterLayout
+}
+
 func (s *Movie) GetID() uuid.UUID {
 	return s.MovieID
 }

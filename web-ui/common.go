@@ -6,6 +6,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/urfave/cli"
 	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/api"
 	enr "github.com/webtor-io/web-ui/services/enrich"
 	ku "github.com/webtor-io/web-ui/services/kinopoisk_unofficial"
@@ -70,5 +71,6 @@ func makeEnricher(c *cli.Context, cl *http.Client, pg *cs.PG, sapi *api.Api, ant
 	aiResolver := enr.New(c, anthropicCl, pg)
 
 	// Setting Enricher
-	return enr.NewEnricher(pg, sapi, mdMappers, epMappers, aiResolver)
+	adminSvc := admin.New(c)
+	return enr.NewEnricher(pg, sapi, mdMappers, epMappers, aiResolver, adminSvc)
 }

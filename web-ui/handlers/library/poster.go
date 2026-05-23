@@ -151,9 +151,18 @@ func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterA
 		}
 		if strings.Contains(posterURL, "theporndb.net") {
 			// Extract raw original background image from CDN without signature restrictions
-			idx := strings.Index(posterURL, "/scene/")
-			if idx != -1 {
-				posterURL = "https://cdn.theporndb.net" + posterURL[idx:]
+			var sceneSuffix string
+			if idx := strings.Index(posterURL, "/scene/"); idx != -1 {
+				sceneSuffix = posterURL[idx:]
+			} else if idx := strings.Index(posterURL, "/scene%2F"); idx != -1 {
+				sceneSuffix = posterURL[idx:]
+			} else if idx := strings.Index(posterURL, "/scene%2f"); idx != -1 {
+				sceneSuffix = posterURL[idx:]
+			}
+			if sceneSuffix != "" {
+				sceneSuffix = strings.ReplaceAll(sceneSuffix, "%2F", "/")
+				sceneSuffix = strings.ReplaceAll(sceneSuffix, "%2f", "/")
+				posterURL = "https://cdn.theporndb.net" + sceneSuffix
 			}
 		}
 	} else {
@@ -208,7 +217,32 @@ func (s *Handler) getResizedJPEGPosterWithCache(ctx context.Context, db *pg.DB, 
 		// direct fetch so the poster still renders.
 		log.WithError(err).Warn("poster: S3 cache get failed, falling through to direct fetch")
 	} else if b != nil {
-		return b, nil
+		// Verify aspect ratio of the cached image to prevent vertical/horizontal mismatch
+		cfg, _, decodeErr := image.DecodeConfig(bytes.NewReader(b.Bytes()))
+		if decodeErr == nil {
+			isCachedHorizontal := cfg.Width > cfg.Height
+			var hasOnlyHorizontal bool
+			md, _ := s.getPosterMetadata(ctx, db, args.t, args.imdbID)
+			if md != nil {
+				isAdult := strings.Contains(md.PosterURL, "theporndb.net") ||
+					strings.Contains(md.PosterURL, "stashdb.org") ||
+					strings.HasPrefix(md.VideoID, "tpdb:") ||
+					strings.HasPrefix(md.VideoID, "stash:")
+				if isAdult || (md.PosterURL == "" && md.PosterHorizontalURL != "") {
+					hasOnlyHorizontal = true
+				}
+			}
+			if args.horizontal && !isCachedHorizontal {
+				log.Warnf("poster: Cached poster for %s is vertical but horizontal was requested, bypassing cache", args.imdbID)
+				b = nil
+			} else if !args.horizontal && isCachedHorizontal && !hasOnlyHorizontal {
+				log.Warnf("poster: Cached poster for %s is horizontal but vertical was requested, bypassing cache", args.imdbID)
+				b = nil
+			}
+		}
+		if b != nil {
+			return b, nil
+		}
 	}
 
 	// Create a detached context for downloading, resizing, and caching

@@ -49,10 +49,21 @@ func (s *OmdbMetadata) MakeVideoMetadata() *models.VideoMetadata {
 	var posterHorizontalURL string
 	if strings.Contains(posterURL, "theporndb.net") {
 		// Extract raw original background image from CDN without signature restrictions
-		idx := strings.Index(posterURL, "/scene/")
-		if idx != -1 {
-			posterHorizontalURL = "https://cdn.theporndb.net" + posterURL[idx:]
+		var sceneSuffix string
+		if idx := strings.Index(posterURL, "/scene/"); idx != -1 {
+			sceneSuffix = posterURL[idx:]
+		} else if idx := strings.Index(posterURL, "/scene%2F"); idx != -1 {
+			sceneSuffix = posterURL[idx:]
+		} else if idx := strings.Index(posterURL, "/scene%2f"); idx != -1 {
+			sceneSuffix = posterURL[idx:]
 		}
+		if sceneSuffix != "" {
+			sceneSuffix = strings.ReplaceAll(sceneSuffix, "%2F", "/")
+			sceneSuffix = strings.ReplaceAll(sceneSuffix, "%2f", "/")
+			posterHorizontalURL = "https://cdn.theporndb.net" + sceneSuffix
+		}
+	} else if strings.Contains(posterURL, "stashdb.org") || strings.HasPrefix(s.GetImdbID(), "stash:") || strings.HasPrefix(s.GetImdbID(), "tpdb:") {
+		posterHorizontalURL = posterURL
 	}
 	return &models.VideoMetadata{
 		VideoID:             s.GetImdbID(),

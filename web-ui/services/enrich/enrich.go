@@ -13,6 +13,7 @@ import (
 	services "github.com/webtor-io/common-services"
 	ra "github.com/webtor-io/rest-api/services"
 	"github.com/webtor-io/web-ui/models"
+	"github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/api"
 	ptn "github.com/webtor-io/web-ui/services/parse_torrent_name"
 )
@@ -23,6 +24,7 @@ type Enricher struct {
 	mappers        []MetadataMapper
 	episodeMappers []EpisodeMapper
 	aiResolver     *AIResolver
+	admin          *admin.Admin
 }
 
 type MetadataMapper interface {
@@ -116,13 +118,14 @@ func (s *Enricher) Localize(ctx context.Context, md *models.VideoMetadata, lang 
 	}
 }
 
-func NewEnricher(pg *services.PG, api *api.Api, mappers []MetadataMapper, episodeMappers []EpisodeMapper, aiResolver *AIResolver) *Enricher {
+func NewEnricher(pg *services.PG, api *api.Api, mappers []MetadataMapper, episodeMappers []EpisodeMapper, aiResolver *AIResolver, admin *admin.Admin) *Enricher {
 	return &Enricher{
 		pg:             pg,
 		api:            api,
 		mappers:        mappers,
 		episodeMappers: episodeMappers,
 		aiResolver:     aiResolver,
+		admin:          admin,
 	}
 }
 
@@ -516,15 +519,23 @@ func (s *Enricher) Enrich(ctx context.Context, hash string, claims *api.Claims, 
 		return nil
 	}
 	log.Infof("start processing media info %+v", mi)
-	sidecarEnrichment := true
+	sidecarEnrichment := false
 	if claims != nil && claims.Subject != "" {
 		userID, err := uuid.FromString(claims.Subject)
 		if err == nil {
-			settings, err := models.GetUserStremioSettingsData(ctx, db, userID)
-			if err == nil && settings != nil {
-				sidecarEnrichment = settings.SidecarEnrichment
+			u := &models.User{}
+			err = db.Model(u).Context(ctx).Where("user_id = ?", userID).Limit(1).Select()
+			if err == nil && s.admin.IsAdminEmail(u.Email) {
+				settings, err := models.GetUserStremioSettingsData(ctx, db, userID)
+				if err == nil && settings != nil {
+					sidecarEnrichment = settings.SidecarEnrichment
+				} else {
+					sidecarEnrichment = true
+				}
 			}
 		}
+	} else {
+		sidecarEnrichment = true
 	}
 	ctx = context.WithValue(ctx, "sidecar_enrichment", sidecarEnrichment)
 
@@ -638,6 +649,9 @@ func (s *Enricher) mapEpisodeMetadata(ctx context.Context, videoID string, seaso
 // budget is a per-resource cap on AI fallback misses; nil disables it.
 // See resourceAIBudget for the rationale.
 func (s *Enricher) mapMetadata(ctx context.Context, vc *models.VideoContent, t models.ContentType, f bool, hintVideoID string, pathHint string, budget *resourceAIBudget) (*models.VideoMetadata, error) {
+	if pathHint != "" {
+		ctx = context.WithValue(ctx, "path_hint", pathHint)
+	}
 	if hintVideoID != "" {
 		if md := s.lookupByHint(ctx, hintVideoID, t, f); md != nil {
 			return md, nil
@@ -723,6 +737,9 @@ func isAdultContent(vc *models.VideoContent) bool {
 func (s *Enricher) searchAllMappers(ctx context.Context, vc *models.VideoContent, t models.ContentType, f bool) (*models.VideoMetadata, error) {
 	var firstErr error
 	isAdult := isAdultContent(vc)
+	if isAdult {
+		ctx = context.WithValue(ctx, "is_adult", true)
+	}
 	for i, m := range s.mappers {
 		if isAdult && m.GetName() != "OMDB" {
 			log.WithFields(log.Fields{

@@ -18,7 +18,7 @@ func main() {
 
 	var mms []*models.MovieMetadata
 	err = db.Model(&mms).
-		Where("title ILIKE ? OR video_id ILIKE ? OR video_id ILIKE ?", "%nala%", "%tpdb%", "%stash%").
+		Where("title ILIKE ? OR video_id ILIKE ?", "%kenzie%", "%kenzie%").
 		Select()
 	if err != nil {
 		log.Fatalf("Query error: %v", err)
@@ -31,24 +31,6 @@ func main() {
 				mm.VideoID, mm.Title, mm.PosterURL, mm.PosterHorizontalURL)
 		} else {
 			fmt.Printf("VideoID: %s, Title: %s (VideoMetadata is nil)\n", mm.VideoID, mm.Title)
-		}
-	}
-
-	var sms []*models.SeriesMetadata
-	err = db.Model(&sms).
-		Where("title ILIKE ? OR video_id ILIKE ? OR video_id ILIKE ?", "%nala%", "%tpdb%", "%stash%").
-		Select()
-	if err != nil {
-		log.Fatalf("Query error: %v", err)
-	}
-
-	fmt.Printf("Found %d series metadata records:\n", len(sms))
-	for _, sm := range sms {
-		if sm.VideoMetadata != nil {
-			fmt.Printf("VideoID: %s, Title: %s, PosterURL: %s, PosterHURL: %s\n",
-				sm.VideoID, sm.Title, sm.PosterURL, sm.PosterHorizontalURL)
-		} else {
-			fmt.Printf("VideoID: %s, Title: %s (VideoMetadata is nil)\n", sm.VideoID, sm.Title)
 		}
 	}
 }

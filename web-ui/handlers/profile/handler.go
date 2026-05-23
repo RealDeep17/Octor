@@ -150,6 +150,10 @@ func deleteUser(ctx context.Context, db *pg.DB, userID uuid.UUID) error {
 func (s *Handler) delete(c *gin.Context) {
 	u := auth.GetUserFromContext(c)
 	db := s.pg.Get()
+	if db == nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("database connection is not available"))
+		return
+	}
 	if err := deleteUser(c.Request.Context(), db, u.ID); err != nil {
 		web.RedirectWithError(c, err)
 		return
@@ -176,6 +180,10 @@ func (s *Handler) get(c *gin.Context) {
 
 	// Get user domains
 	db := s.pg.Get()
+	if db == nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("database connection is not available"))
+		return
+	}
 	domains, err := models.GetUserDomains(c.Request.Context(), db, u.ID)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get user domains"))

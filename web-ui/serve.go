@@ -218,6 +218,10 @@ func serve(c *cli.Context) error {
 
 	// Setting Admin
 	adminSvc := admins.New(c)
+	r.Use(func(c *gin.Context) {
+		c.Set("admin_svc", adminSvc)
+		c.Next()
+	})
 
 	// Setting Access Token
 	ats := at.New(pg)
@@ -443,7 +447,7 @@ func serve(c *cli.Context) error {
 	}
 
 	// Setting Stremio Settings
-	settings.RegisterHandler(r, ats, pg)
+	settings.RegisterHandler(r, ats, pg, adminSvc)
 
 	// Setting Streaming Backends
 	backends.RegisterHandler(r, ats, pg, linkResolver)

@@ -447,6 +447,7 @@
     "toast.removedFromVault": "Usunięto z vault",
     "toast.user_subtitle.uploaded": "Napisy przesłane",
     "toast.user_subtitle.deleted": "Napisy usunięte",
+    "toast.enrichmentRefreshStarted": "Rozpoczęto odświeżanie metadanych w tle",
     "speedtest.badge": "Test prędkości",
     "speedtest.title": "Test prędkości połączenia",
     "speedtest.subtitle": "Zmierz prędkość pobierania z serwerów Octor, by sprawdzić jaką jakość wideo możesz strumieniować bez buforowania.",

@@ -17,14 +17,12 @@ func main() {
 	defer db.Close()
 
 	var mms []*models.MovieMetadata
-	err = db.Model(&mms).
-		Where("title ILIKE ? OR video_id ILIKE ? OR video_id ILIKE ?", "%nala%", "%tpdb%", "%stash%").
-		Select()
+	err = db.Model(&mms).Select()
 	if err != nil {
 		log.Fatalf("Query error: %v", err)
 	}
 
-	fmt.Printf("Found %d movie metadata records:\n", len(mms))
+	fmt.Printf("Found %d total movie metadata records:\n", len(mms))
 	for _, mm := range mms {
 		if mm.VideoMetadata != nil {
 			fmt.Printf("VideoID: %s, Title: %s, PosterURL: %s, PosterHURL: %s\n",
@@ -35,14 +33,12 @@ func main() {
 	}
 
 	var sms []*models.SeriesMetadata
-	err = db.Model(&sms).
-		Where("title ILIKE ? OR video_id ILIKE ? OR video_id ILIKE ?", "%nala%", "%tpdb%", "%stash%").
-		Select()
+	err = db.Model(&sms).Select()
 	if err != nil {
 		log.Fatalf("Query error: %v", err)
 	}
 
-	fmt.Printf("Found %d series metadata records:\n", len(sms))
+	fmt.Printf("Found %d total series metadata records:\n", len(sms))
 	for _, sm := range sms {
 		if sm.VideoMetadata != nil {
 			fmt.Printf("VideoID: %s, Title: %s, PosterURL: %s, PosterHURL: %s\n",

@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/webtor-io/web-ui/models"
 )
@@ -24,25 +25,22 @@ func (s *VideoContentHelper) HasYear(m models.VideoContentWithMetadata) bool {
 }
 
 func (s *VideoContentHelper) GetYear(m models.VideoContentWithMetadata) int {
-	if m.GetMetadata() != nil {
-		y := *m.GetMetadata().Year
-		return int(y)
+	if m.GetMetadata() != nil && m.GetMetadata().Year != nil {
+		return int(*m.GetMetadata().Year)
 	}
-	if m.GetContent().Year == nil {
-		return 0
+	if m.GetContent().Year != nil {
+		return int(*m.GetContent().Year)
 	}
-	y := *m.GetContent().Year
-	return int(y)
+	return 0
 }
 
 func (s *VideoContentHelper) HasRating(m models.VideoContentWithMetadata) bool {
-	return s.GetRating(m) != 0
+	return s.GetRating(m) > 0
 }
 
 func (s *VideoContentHelper) GetRating(m models.VideoContentWithMetadata) float64 {
 	if m.GetMetadata() != nil && m.GetMetadata().Rating != nil {
-		r := *m.GetMetadata().Rating
-		return r
+		return *m.GetMetadata().Rating
 	}
 	return 0
 }
@@ -59,7 +57,39 @@ func (s *VideoContentHelper) GetOriginalPoster(m models.VideoContentWithMetadata
 }
 
 func (s *VideoContentHelper) HasPosterHorizontal(m models.VideoContentWithMetadata) bool {
-	return s.GetOriginalPosterHorizontal(m) != ""
+	if m.GetMetadata() == nil {
+		return false
+	}
+	posterURL := m.GetMetadata().PosterURL
+	videoID := m.GetMetadata().VideoID
+	return m.GetMetadata().PosterHorizontalURL != "" ||
+		strings.Contains(posterURL, "theporndb.net") ||
+		strings.Contains(posterURL, "stashdb.org") ||
+		strings.HasPrefix(videoID, "tpdb:") ||
+		strings.HasPrefix(videoID, "stash:")
+}
+
+func (s *VideoContentHelper) GetPosterLayout(m models.VideoContentWithMetadata) string {
+	if m.GetMetadata() == nil {
+		return "vertical"
+	}
+	if !s.HasPosterHorizontal(m) {
+		return "vertical"
+	}
+	layout := m.GetUserPosterLayout()
+	if layout != "" {
+		return layout
+	}
+	// For adult content/scenes, default to horizontal layout to prevent vertical cropping of horizontal posters
+	posterURL := m.GetMetadata().PosterURL
+	videoID := m.GetMetadata().VideoID
+	if strings.Contains(posterURL, "theporndb.net") ||
+		strings.Contains(posterURL, "stashdb.org") ||
+		strings.HasPrefix(videoID, "tpdb:") ||
+		strings.HasPrefix(videoID, "stash:") {
+		return "horizontal"
+	}
+	return "vertical"
 }
 
 func (s *VideoContentHelper) GetOriginalPosterHorizontal(m models.VideoContentWithMetadata) string {

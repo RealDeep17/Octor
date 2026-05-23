@@ -447,6 +447,7 @@
     "toast.removedFromVault": "Rimosso dal vault",
     "toast.user_subtitle.uploaded": "Sottotitolo caricato",
     "toast.user_subtitle.deleted": "Sottotitolo eliminato",
+    "toast.enrichmentRefreshStarted": "Aggiornamento dei metadati in background avviato",
     "speedtest.badge": "Test di velocità",
     "speedtest.title": "Test della velocità di connessione",
     "speedtest.subtitle": "Misura la velocità di download dai server Octor per scoprire che qualità video puoi guardare senza buffering.",

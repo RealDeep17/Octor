@@ -45,6 +45,10 @@ func (s *Series) GetContentType() ContentType {
 	return ContentTypeSeries
 }
 
+func (s *Series) GetUserPosterLayout() string {
+	return s.UserPosterLayout
+}
+
 func (s *Series) GetID() uuid.UUID {
 	return s.SeriesID
 }

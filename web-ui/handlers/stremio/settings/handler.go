@@ -10,21 +10,23 @@ import (
 	"github.com/webtor-io/web-ui/models"
 	at "github.com/webtor-io/web-ui/services/access_token"
 	"github.com/webtor-io/web-ui/services/auth"
+	"github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/stremio"
 	"github.com/webtor-io/web-ui/services/web"
 )
 
 type Handler struct {
-	at *at.AccessToken
-	pg *cs.PG
+	at    *at.AccessToken
+	pg    *cs.PG
+	admin *admin.Admin
 }
 
-func NewHandler(at *at.AccessToken, pg *cs.PG) *Handler {
-	return &Handler{at: at, pg: pg}
+func NewHandler(at *at.AccessToken, pg *cs.PG, admin *admin.Admin) *Handler {
+	return &Handler{at: at, pg: pg, admin: admin}
 }
 
-func RegisterHandler(r *gin.Engine, at *at.AccessToken, pg *cs.PG) {
-	h := NewHandler(at, pg)
+func RegisterHandler(r *gin.Engine, at *at.AccessToken, pg *cs.PG, admin *admin.Admin) {
+	h := NewHandler(at, pg, admin)
 	gr := r.Group("/stremio/settings")
 	gr.Use(auth.HasAuth)
 	gr.POST("/update", h.updateSettings)
@@ -83,7 +85,9 @@ func (s *Handler) updateSettings(c *gin.Context) {
 
 	settingsData.PreferredResolutions = orderedQualities
 	settingsData.DiscoverOnly = c.PostForm("discover_only") == "on"
-	settingsData.SidecarEnrichment = c.PostForm("sidecar_enrichment") == "on"
+	
+	isAdmin := s.admin.IsAdminUser(user)
+	settingsData.SidecarEnrichment = isAdmin && c.PostForm("sidecar_enrichment") == "on"
 
 	// Validate preferred language against the canonical list. Unknown codes
 	// (and the explicit "any" sentinel) collapse to empty string = no filter.

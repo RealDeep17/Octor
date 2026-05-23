@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/webtor-io/web-ui/handlers/geo"
 	"github.com/webtor-io/web-ui/handlers/session"
+	"github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/claims"
@@ -23,6 +24,7 @@ type Context struct {
 	ApiClaims   *api.Claims
 	Lang        string
 	Path        string
+	IsAdmin     bool
 	ginCtx      *gin.Context
 }
 
@@ -59,16 +61,30 @@ func NewContext(c *gin.Context) *Context {
 	tu := claims.GetTierUpdateFromContext(c)
 	lang := i18n.GetLang(c)
 
+	var isAdmin bool
+	if adminSvcVal, exists := c.Get("admin_svc"); exists {
+		if adminSvc, ok := adminSvcVal.(*admin.Admin); ok {
+			isAdmin = adminSvc.IsAdminUser(user)
+		}
+	}
+
+	var csrf, sessionID string
+	if sess != nil {
+		csrf = sess.CSRF
+		sessionID = sess.ID
+	}
+
 	return &Context{
-		CSRF:        sess.CSRF,
+		CSRF:        csrf,
 		User:        user,
 		Claims:      cl,
 		ApiClaims:   aCl,
-		SessionID:   sess.ID,
+		SessionID:   sessionID,
 		Geo:         geoData,
 		TierUpdated: tu,
 		Lang:        lang,
 		Path:        c.Request.URL.Path,
+		IsAdmin:     isAdmin,
 		ginCtx:      c,
 	}
 }

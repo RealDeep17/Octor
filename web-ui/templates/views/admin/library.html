@@ -93,7 +93,7 @@
         <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2">
           <div class="w-card-frame w-full">
             <input type="checkbox" id="toggle-{{ .ResourceID }}" class="peer hidden"
-                   {{ if and (not (.Content | hasPoster)) (.Content | hasPosterHorizontal) }}checked{{ end }}
+                   {{ if eq (.Content | getPosterLayout) "horizontal" }}checked{{ end }}
                    {{ if not (and (.Content | hasPoster) (.Content | hasPosterHorizontal)) }}disabled{{ end }} />
             <figure class="aspect-[2/3] peer-checked:aspect-[3/2] overflow-hidden relative transition-all duration-300 peer-checked:[&_.vertical-img]:hidden peer-checked:[&_.horizontal-img]:block">
               {{ if or (.Content | hasPoster) (.Content | hasPosterHorizontal) }}

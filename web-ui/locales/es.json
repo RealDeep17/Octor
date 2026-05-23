@@ -447,6 +447,7 @@
     "toast.removedFromVault": "Eliminado del Vault",
     "toast.user_subtitle.uploaded": "Subtítulo subido",
     "toast.user_subtitle.deleted": "Subtítulo eliminado",
+    "toast.enrichmentRefreshStarted": "Actualización de metadatos en segundo plano iniciada",
     "speedtest.badge": "Test de velocidad",
     "speedtest.title": "Test de velocidad de conexión",
     "speedtest.subtitle": "Mide tu velocidad de descarga desde los servidores de Octor para saber qué calidad de vídeo puedes ver sin interrupciones.",

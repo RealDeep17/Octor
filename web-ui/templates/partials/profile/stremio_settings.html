@@ -65,6 +65,7 @@
             </div>
 
             <!-- Sidecar Enrichment -->
+            {{ if .Ctx.IsAdmin }}
             <div class="mt-6 pt-5 border-t border-o-line/30">
                 <div class="flex items-start gap-4">
                     <div class="flex-1">
@@ -78,6 +79,7 @@
                     </label>
                 </div>
             </div>
+            {{ end }}
 
             <div class="mt-4 flex justify-end">
                 <button type="submit" class="btn btn-soft" data-umami-event="stremio-settings-save">{{ t .Ctx.Lang "profile.settings.save" }}</button>

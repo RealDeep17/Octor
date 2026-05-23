@@ -447,6 +447,7 @@
     "toast.removedFromVault": "Removido do vault",
     "toast.user_subtitle.uploaded": "Legenda enviada",
     "toast.user_subtitle.deleted": "Legenda excluída",
+    "toast.enrichmentRefreshStarted": "Atualização de metadados em segundo plano iniciada",
     "speedtest.badge": "Teste de velocidade",
     "speedtest.title": "Teste de velocidade de conexão",
     "speedtest.subtitle": "Meça sua velocidade de download até os servidores do Octor para saber qual qualidade de vídeo roda sem travar.",

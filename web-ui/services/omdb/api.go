@@ -100,6 +100,16 @@ func New(c *cli.Context, cl *http.Client) *Api {
 }
 
 func (api *Api) SearchByTitleAndYear(ctx context.Context, title string, year *int16, omdbType OmdbType) (*OmdbResponse, error) {
+	isAdult, _ := ctx.Value("is_adult").(bool)
+	if isAdult {
+		if pathHint, ok := ctx.Value("path_hint").(string); ok && pathHint != "" {
+			parts := strings.Split(pathHint, "/")
+			filename := parts[len(parts)-1]
+			if filename != "" {
+				title = filename
+			}
+		}
+	}
 	title = strings.TrimSpace(strings.ToLower(title))
 
 	reqURL := fmt.Sprintf("%s/", api.url)
@@ -119,6 +129,9 @@ func (api *Api) SearchByTitleAndYear(ctx context.Context, title string, year *in
 	}
 	if sidecar, ok := ctx.Value("sidecar_enrichment").(bool); ok {
 		q.Set("sidecar_enrichment_enabled", strconv.FormatBool(sidecar))
+	}
+	if isAdult {
+		q.Set("porn", "true")
 	}
 	req.URL.RawQuery = q.Encode()
 
@@ -171,6 +184,9 @@ func (api *Api) GetByIMDBID(ctx context.Context, imdbID string) (*OmdbResponse, 
 	q.Set("plot", "full")
 	if sidecar, ok := ctx.Value("sidecar_enrichment").(bool); ok {
 		q.Set("sidecar_enrichment_enabled", strconv.FormatBool(sidecar))
+	}
+	if isAdult, ok := ctx.Value("is_adult").(bool); ok && isAdult {
+		q.Set("porn", "true")
 	}
 	req.URL.RawQuery = q.Encode()
 

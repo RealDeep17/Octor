@@ -23,4 +23,5 @@ type VideoContentWithMetadata interface {
 	GetMetadata() *VideoMetadata
 	GetPath() *string
 	GetEpisode(season int, episode int) *Episode
+	GetUserPosterLayout() string
 }

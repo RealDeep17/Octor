@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-pg/migrations/v8"
 	"github.com/pkg/errors"
@@ -78,6 +79,25 @@ func configureEnrich(c *cli.Command) {
 	)
 
 	c.Subcommands = []cli.Command{runCmd, popularCmd}
+	
+	refreshCmd := cli.Command{
+		Name:   "refresh",
+		Usage:  "Refreshes stale or missing metadata for previously enriched torrent resources",
+		Action: refreshEnrich,
+	}
+	refreshCmd.Flags = cs.RegisterPGFlags(refreshCmd.Flags)
+	refreshCmd.Flags = ac.RegisterFlags(refreshCmd.Flags)
+	refreshCmd.Flags = configureEnricher(refreshCmd.Flags)
+	refreshCmd.Flags = append(refreshCmd.Flags,
+		cli.IntFlag{
+			Name:   "days",
+			Usage:  "number of days after which metadata is considered stale",
+			Value:  7,
+			EnvVar: "ENRICH_REFRESH_DAYS",
+		},
+	)
+
+	c.Subcommands = []cli.Command{runCmd, popularCmd, refreshCmd}
 }
 
 func enrichPopular(c *cli.Context) error {
@@ -183,5 +203,56 @@ func enrich(c *cli.Context) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func refreshEnrich(c *cli.Context) error {
+	days := c.Int("days")
+	if days <= 0 {
+		days = 7
+	}
+	staleThreshold := time.Duration(days) * 24 * time.Hour
+
+	// Setting DB
+	pg := cs.NewPG(c)
+	defer pg.Close()
+
+	// Setting Migrations
+	col := migrations.NewCollection()
+	m := migration.NewPGMigration(pg, col)
+	err := m.Run()
+	if err != nil {
+		return err
+	}
+	db := pg.Get()
+	if db == nil {
+		return errors.New("db is nil")
+	}
+
+	// Setting HTTP Client
+	cl := http.DefaultClient
+
+	// Setting Octor API
+	sapi := api.New(c, cl)
+
+	// Setting Enricher
+	en := makeEnricher(c, cl, pg, sapi, ac.New(c))
+
+	ctx := context.Background()
+	ids, err := models.GetStaleOrMissingMetadataResourceIDs(ctx, db, staleThreshold)
+	if err != nil {
+		return err
+	}
+
+	log.Infof("found %d resources with stale, missing, or error metadata to refresh", len(ids))
+
+	for i, id := range ids {
+		log.Infof("[%d/%d] refreshing metadata for resource %s", i+1, len(ids), id)
+		err = en.Enrich(ctx, id, &api.Claims{}, true, "")
+		if err != nil {
+			log.WithError(err).Warnf("failed to refresh metadata for resource %s", id)
+		}
+	}
+
 	return nil
 }
