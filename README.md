@@ -8,6 +8,7 @@ Octor is a high-performance, microservice-based media streaming platform. It acc
 - **Unified Streaming Edge:** Optimized Torrent HTTP Proxy with HLS support and direct-play fallbacks.
 - **Rich Metadata Enrichment:** Multi-tier fallback system (TMDB, Sidecar/OMDB, AI-based resolution).
 - **Hybrid Storage Layer:** Support for local SSD/RAM caching and long-term cloud storage (Rclone/S3).
+- **Human-Readable Cloud Storage & Disaster Recovery:** Vaulted torrents are simultaneously deduplicated by hash (for system speed) and symlinked by their human-readable name in your cloud drive (for easy browsing). A one-click recovery script can fully rebuild the database directly from S3 metadata if the server fails.
 - **Zero-Leak S3 Gateway:** Custom high-performance S3 gateway optimized for buffered writes to cloud remotes.
 - **Smart Recommendations:** AI-powered discovery and content analysis.
 - **Universal WebDAV:** Administrative and user-scoped WebDAV access to all media.
@@ -44,26 +45,41 @@ Octor is a high-performance, microservice-based media streaming platform. It acc
 - **Storage:** Rclone, FUSE, Custom S3 Gateway
 - **AI:** Google Gemini, Anthropic Claude
 
-### 1. Infrastructure Setup
-Octor requires Postgres, Redis, and NATS. Use the provided Docker Compose configuration to start these dependencies:
+### 1. Build and Install
+Octor uses a unified runner script `run.sh` to manage the entire lifecycle. First, compile the microservices and install the systemd service files:
 
 ```sh
-docker compose -f docker-compose.infra.yml up -d
+# Compile all binaries from source
+./run.sh build
+
+# Install or update systemd service units
+./run.sh install
 ```
 
 ### 2. Service Orchestration
-Octor uses `systemd` for service management. The `switch_mode.sh` script is the primary tool for starting the stack and choosing performance profiles:
+The `run.sh` command is your primary tool for starting the stack and choosing performance profiles. Simply run it without arguments for the interactive menu:
 
 ```sh
-# Start the stack in RAM-disk performance mode (Recommended for speed)
-./switch_mode.sh 1
+# Open the interactive performance mode selector
+./run.sh
 ```
 
-### 3. Development Mode
-For local development, you can choice to build all services using the `Makefile`:
-
+Typical usage for a fresh start with Docker rebuild and cache clearing:
 ```sh
-make build
+# Select mode 1 (RAM), Force kill ghosts, Clear Rclone cache, Rebuild Docker
+./run.sh mode 1 f r d
+```
+
+### 3. Monitoring & Maintenance
+```sh
+# Check system health and resource usage
+./run.sh status
+
+# Clean up Go caches and old logs
+./run.sh prune --all
+
+# Troubleshoot Docker connection issues
+./run.sh doctor
 ```
 
 ## ⚙️ Configuration

@@ -36,4 +36,4 @@ docker run --rm -p 50058:50058 -p 8081:8081 octor/srt2vtt
 ```
 
 ## Service Management
-Managed via `systemd` using the `switch_mode.sh` script in the project root.
+Managed via `systemd` using the `run.sh mode` script in the project root.

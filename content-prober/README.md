@@ -23,7 +23,7 @@ Configuration is managed via environment variables or CLI flags.
 ## 🛠 Usage
 
 ### Service Management
-Content Prober is managed via systemd and orchestrated through `switch_mode.sh`.
+Content Prober is managed via systemd and orchestrated through `run.sh mode`.
 
 ```sh
 # Check status

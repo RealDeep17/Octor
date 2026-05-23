@@ -45,4 +45,4 @@ docker run --rm -p 50061:50061 -p 8081:8081 octor/url-store
 ```
 
 ## Service Management
-Managed via `systemd` using the `switch_mode.sh` script in the project root.
+Managed via `systemd` using the `run.sh mode` script in the project root.

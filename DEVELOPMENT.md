@@ -24,15 +24,25 @@ Octor is a microservice-based platform consisting of Go and Python services.
 ### Database Bootstrap
 `docker-compose.infra.yml` mounts `init-db.sql` into Postgres so the local `url_store`, `abuse_store`, and `claims_provider` databases are created on first startup.
 
+### Disaster Recovery & Storage Mapping
+Octor employs a dual-storage mapping strategy to balance internal performance with human usability and disaster resilience:
+1.  **Deduplicated System Storage (`vault/`)**: The `vault` worker stores raw torrent files hashed by their content (e.g., `vault/hash/hash`). This ensures perfect cross-user deduplication.
+2.  **Human-Readable Mapping (`media/` & `torrents/`)**: When storing a file, the `vault` worker passes an `X-Amz-Meta-Human-Path` header to the custom `s3-gateway`. The gateway automatically creates symlinks on the Google Drive mount (e.g., `media/Movie Name [hash]/Video.mp4`) pointing back to the raw hashes. Additionally, a `.json` metadata receipt containing the exact file hashes and the user's `session_id` is saved alongside the `.torrent` file.
+3.  **Self-Healing Recovery**: If the Postgres database is ever wiped, the `scripts/recover_db.go` script can be run. It connects to the `vault` and `octor` databases, scans the `torrents/` and `metadata/` folders on S3, and fully reconstructs all database tables, automatically re-assigning torrents back to the correct users' libraries based on the matched `session_id`. When users delete a torrent, its backup is safely moved to `torrents/.archived/` rather than being permanently destroyed.
+
 ## 🛠 Hybrid Development Environment
 
 To enable rapid iteration on macOS/ARM64:
 
-1.  **Infrastructure in Docker**: Run `docker-compose.infra.yml` to start DBs and queues.
-2.  **Services Managed via Systemd**: Use `./switch_mode.sh` to start and manage microservices. This script handles starting all services in the correct dependency order and allows switching between performance modes (RAM vs SSD).
-    - *Note*: Services are defined as `systemd` units (e.g., `octor-rest-api.service`).
+1.  **Unified Management**: Use `./run.sh` for all operational tasks. This script handles compiling binaries, installing systemd units, starting infrastructure, and managing microservices in the correct dependency order.
+    - **Build**: `./run.sh build`
+    - **Install Services**: `./run.sh install`
+    - **Start/Switch Modes**: `./run.sh` (Interactive) or `./run.sh mode [X]`
+    - **Status**: `./run.sh status`
 
-If Docker Desktop uses a non-default socket, run `./find_docker.sh` to locate the working socket and export the suggested `DOCKER_HOST`.
+2.  **Infrastructure**: Docker containers for Postgres, Redis, and NATS are managed automatically when using the `d` (Docker) flag with `./run.sh mode`.
+
+If Docker Desktop uses a non-default socket, run `./run.sh doctor` to locate the working socket and export the suggested `DOCKER_HOST`.
 
 ### Port Mapping Strategy (5-Digit System)
 To prevent collisions, all services follow this mapping:

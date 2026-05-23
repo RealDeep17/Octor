@@ -24,7 +24,7 @@ A robust transcoding service that converts HTTP media streams into HLS (HTTP Liv
 ## 🛠 Usage
 
 ### Service Management
-Managed via systemd and orchestrated through `switch_mode.sh`.
+Managed via systemd and orchestrated through `run.sh mode`.
 
 ```sh
 # Check status

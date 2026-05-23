@@ -33,4 +33,4 @@ docker run --rm -p 50057:50057 -p 8081:8081 octor/torrent-archiver
 ```
 
 ## Service Management
-Managed via `systemd` using the `switch_mode.sh` script in the project root.
+Managed via `systemd` using the `run.sh mode` script in the project root.

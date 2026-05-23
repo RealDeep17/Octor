@@ -18,7 +18,7 @@ A specialized gRPC service for resolving Magnet URIs into full BitTorrent metain
 ## 🛠 Usage
 
 ### Service Management
-Managed via systemd and orchestrated through `switch_mode.sh`.
+Managed via systemd and orchestrated through `run.sh mode`.
 
 ```sh
 # Check status

@@ -59,4 +59,4 @@ go build -o claims-client ./client
 ```
 
 ## Service Management
-Managed via `systemd` using the `switch_mode.sh` script in the project root.
+Managed via `systemd` using the `run.sh mode` script in the project root.

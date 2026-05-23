@@ -11,7 +11,7 @@ The service is managed via `systemd` and configured using `custom.env`.
 
 ```bash
 # Start the service
-./switch_mode.sh production
+./run.sh mode production
 
 # Check status
 systemctl status octor-rest-api

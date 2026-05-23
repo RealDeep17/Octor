@@ -10,6 +10,8 @@
 - **Default AAC Encoder Crash**: Fixed content-transcoder runtime crashes by switching the default audio encoder from `libfdk_aac` to standard `aac` in the system FFmpeg configurations.
 
 ### Added
+- **Human-Readable Cloud Storage**: The `vault` worker and `s3-gateway` now automatically map and symlink raw deduplicated file hashes into human-readable directories (e.g., `media/Movie Name [hash]/Video.mp4`) directly on the Google Drive mount, preserving cross-user deduplication while allowing native browsing.
+- **Self-Healing Disaster Recovery**: Added `scripts/recover_db.go`, a one-click fully automated recovery tool that scans cloud metadata receipts and `.torrent` files to instantly reconstruct the Postgres `vault` and `octor` (Web UI) databases, correctly re-assigning torrents to user libraries based on matched `session_id`. Torrents removed by users are now safely relocated to `torrents/.archived/` rather than permanently destroyed.
 - **Dynamic Gateway Write Buffer Size**: Exposed `S3_GATEWAY_WRITE_BUFFER_SIZE` inside `custom.env`, allowing full runtime control over the RAM sequential write buffer size (defaults to 16MB; set to `0` to cleanly disable).
 - **Admin Universal WebDAV Virtual Directories**: Implemented high-level `admin/` scoped WebDAV directories: read-only global directories (`admin/torrents`, `admin/movies`, `admin/tvseries`, `admin/all`) and per-user read-write scoped subdirectories (`admin/users/{email}/all`). WebDAV moves are strictly validated and user-scoped.
 - **Universal Admin Octor UI**: Added dedicated admin analytics and library views (`/admin/library`, `/admin/library/movies`, `/admin/library/series`, `/admin/vault`) displaying all users' active media card listings and active pledges with owner email identification, deduped at the resource level.
@@ -25,7 +27,7 @@
 ## [Unreleased] - 2026-05-16
 
 ### Removed
-- **Legacy Dev Scripts**: Deleted `run_dev.sh` and `run_dev_skip.sh` in favor of `switch_mode.sh` and systemd-managed services.
+- **Legacy Dev Scripts**: Deleted `run_dev.sh` and `run_dev_skip.sh` in favor of `run.sh mode` and systemd-managed services.
 - **MinIO Container**: Fully deprecated and removed MinIO from the infrastructure stack in favor of the lightweight custom `s3-gateway`.
 
 ### Fixed
@@ -43,7 +45,7 @@
 - **Proxy Self-Identification**: Added `--torrent-http-proxy-host` and `--port` flags to `run_dev.sh`.
 - **Legacy HLS Handler**: Compatibility route in `content-transcoder` to support older API URL formats.
 - **Infra DB Bootstrap**: Added `init-db.sql` and mounted it into `docker-compose.infra.yml` to create the local service databases automatically.
-- **Docker Socket Helper**: Added `find_docker.sh` to detect the active Docker socket on macOS/Linux host setups.
+- **Docker Socket Helper**: Added `run.sh doctor` to detect the active Docker socket on macOS/Linux host setups.
 - **Ignore Rules**: Ignored local Badger runtime data and editor swap/temp files.
 - **Cache Lifetimes**: Added `.env`-configurable media cache cleanup and metadata/temp cache expiry controls.
 - **Project README**: Added a top-level factual README with the local architecture, run flow, runtime state meanings, and environment-variable customization reference.

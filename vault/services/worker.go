@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +40,43 @@ const (
 
 func s3Key(hash string) string {
 	return hash + "/" + hash
+}
+
+func (s *Worker) recordOwnership(ctx context.Context, cla *Claims, resourceID string, torrentName string, files []ResourceFile) {
+	// This record in S3 tracks ownership and exact file hashes for disaster recovery.
+	s3Cl := s.s3.Get()
+	if s3Cl == nil {
+		return
+	}
+
+	type fileMeta struct {
+		Path string `json:"path"`
+		Hash string `json:"hash"`
+	}
+	
+	var fm []fileMeta
+	for _, f := range files {
+		fm = append(fm, fileMeta{Path: f.Path, Hash: f.FileHash})
+	}
+
+	key := fmt.Sprintf("metadata/resources/%s.json", resourceID)
+	data := map[string]interface{}{
+		"resource_id":  resourceID,
+		"torrent_name": torrentName,
+		"session_id":   cla.SessionID,
+		"vaulted_at":   time.Now().Format(time.RFC3339),
+		"files":        fm,
+	}
+	body, _ := json.Marshal(data)
+
+	_, err := s3Cl.PutObjectWithContext(ctx, &awss3.PutObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+		Body:   bytes.NewReader(body),
+	})
+	if err != nil {
+		log.WithError(err).WithField("key", key).Warn("failed to record ownership metadata")
+	}
 }
 
 // Worker processes background store and delete jobs for vault resources.
@@ -544,6 +583,16 @@ func (s *Worker) handleStore(ctx context.Context, db *pg.DB, id string) (err err
 		Role: "vault",
 	}
 
+	// Load resource details to check if selective vaulting (SelectedFiles) is active
+	resource := &Resource{}
+	err = db.Model(resource).
+		Context(ctx).
+		Where("resource_id = ?", id).
+		Select()
+	if err != nil {
+		return errors.Wrap(err, "failed to select resource details")
+	}
+
 	// Phase 1: prefetch the full listing and compute final total_size up
 	// front. This way the UI's stored/total ratio rises monotonically
 	// instead of bouncing 100% → 99% → 100% on every page boundary as
@@ -561,6 +610,19 @@ func (s *Worker) handleStore(ctx context.Context, db *pg.DB, id string) (err err
 		}
 		for _, item := range resp.Items {
 			if item.Type == ra.ListTypeFile {
+				// If selective vaulting is active, filter files by selected path
+				if len(resource.SelectedFiles) > 0 {
+					matched := false
+					for _, sel := range resource.SelectedFiles {
+						if item.PathStr == sel {
+							matched = true
+							break
+						}
+					}
+					if !matched {
+						continue
+					}
+				}
 				fileItems = append(fileItems, item)
 				totalSize += item.Size
 			}
@@ -587,30 +649,8 @@ func (s *Worker) handleStore(ctx context.Context, db *pg.DB, id string) (err err
 		return errors.Wrap(err, "failed to reset resource counters")
 	}
 
-	// Fetch torrent metainfo once for the whole run when integrity
-	// verification is enabled. The .torrent is served by the seeder at
-	// /{infohash}/source.torrent — we reuse the auth tokens already
-	// embedded in the first file's export URL to avoid resigning JWTs.
-	var mi *metainfo.Info
-	if s.verifyIntegrity && len(fileItems) > 0 {
-		ei, err := s.api.ExportResourceContent(ctx, cla, id, fileItems[0].ID)
-		if err != nil {
-			return errors.Wrap(err, "failed to export resource content for torrent fetch")
-		}
-		raw, err := s.api.FetchTorrent(ctx, ei.ExportItems["download"].URL)
-		if err != nil {
-			return errors.Wrap(err, "failed to fetch torrent for verification")
-		}
-		mi, err = parseMetainfo(raw)
-		if err != nil {
-			return errors.Wrap(err, "failed to parse torrent metainfo")
-		}
-		log.WithFields(log.Fields{
-			"id":           id,
-			"num_pieces":   mi.NumPieces(),
-			"piece_length": mi.PieceLength,
-		}).Info("integrity verification enabled")
-	}
+	// Prepare metadata for human-readable cloud storage and recovery
+	torrentName, mi := s.prepareMetadata(ctx, cla, id, fileItems)
 
 	// Track (file_hash, path) pairs produced by this run so stale links
 	// can be diff-pruned at the end. Using a map of maps guards against
@@ -629,7 +669,7 @@ func (s *Worker) handleStore(ctx context.Context, db *pg.DB, id string) (err err
 		if mi != nil {
 			fileOff = fileOffsetInTorrent(mi, item.PathStr, item.Size)
 		}
-		f, err := s.storeFile(ctx, cla, id, item, totalStored, mi, prevFiles)
+		f, err := s.storeFile(ctx, cla, id, item, totalStored, mi, prevFiles, torrentName)
 		if err != nil {
 			return errors.Wrap(err, "failed to store file")
 		}
@@ -682,15 +722,17 @@ func (s *Worker) handleStore(ctx context.Context, db *pg.DB, id string) (err err
 		}
 	}
 
-	// All new files are stored and linked. Now diff-prune: drop any
-	// resource_file rows not in `expected`, and GC orphan file rows/S3
-	// objects whose last reference we just removed. Done only on the
-	// success path — partial failures preserve the old link set so that
-	// a subsequent retry or deletion can clean up safely.
+	// All new files are stored and linked. Now diff-prune
 	var existing []ResourceFile
 	if err := db.Model(&existing).Context(ctx).Where("resource_id = ?", id).Select(); err != nil {
 		return errors.Wrap(err, "failed to list existing resource_file for pruning")
 	}
+
+	// 2. Record ownership metadata with full file list
+	if s.bucket != "" {
+		s.recordOwnership(ctx, cla, id, torrentName, existing)
+	}
+
 	for _, rf := range existing {
 		if _, ok := expected[rfKey{Hash: rf.FileHash, Path: rf.Path}]; ok {
 			continue
@@ -870,6 +912,27 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 	if s.bucket == "" {
 		return errors.New("s3 bucket is not configured")
 	}
+
+	// 0) Find torrent name for human-readable cleanup
+	torrentName := id
+	s3Cl := s.s3.Get()
+	if s3Cl != nil {
+		metaKey := fmt.Sprintf("metadata/resources/%s.json", id)
+		metaOut, err := s3Cl.GetObjectWithContext(ctx, &awss3.GetObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(metaKey),
+		})
+		if err == nil {
+			defer metaOut.Body.Close()
+			var meta map[string]string
+			if err := json.NewDecoder(metaOut.Body).Decode(&meta); err == nil {
+				if name, ok := meta["torrent_name"]; ok {
+					torrentName = name
+				}
+			}
+		}
+	}
+
 	// Lease heartbeat is managed by processClaimed, same as handleStore.
 	// 1) Collect all files linked to this resource
 	var rfs []ResourceFile
@@ -940,7 +1003,7 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 				}).Warn("failed to abort multipart upload during delete; continuing")
 			}
 		}
-		// No more references — delete S3 object (if configured) and file row
+		// No more references — delete S3 object and file row
 		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(s3Key(rf.FileHash)),
@@ -953,6 +1016,7 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 			return errors.Wrapf(delErr, "failed to delete object from S3, bucket=%s, key=%s", s.bucket, rf.FileHash)
 		}
 		log.WithFields(log.Fields{"bucket": s.bucket, "path": rf.Path, "resource_id": id, "key": rf.FileHash}).Info("deleted from s3")
+
 		// Delete file row
 		f = &File{Hash: rf.FileHash}
 		if _, err := db.Model(f).Context(ctx).WherePK().Delete(); err != nil && !errors.Is(err, pg.ErrNoRows) {
@@ -964,6 +1028,45 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 	_, err = db.Model(res).Context(ctx).WherePK().Delete()
 	if err != nil {
 		return errors.Wrap(err, "failed to delete resource from database")
+	}
+
+	// Clean up human-readable parts from S3
+	if s3Cl != nil {
+		// 1. Delete media folder (via gateway RemoveAll)
+		mediaKey := fmt.Sprintf("media/%s [%s]", torrentName, id)
+		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(mediaKey),
+		})
+
+		// 2. ARCHIVE .torrent file instead of deleting
+		torrentKey := fmt.Sprintf("torrents/%s [%s].torrent", torrentName, id)
+		archiveKey := fmt.Sprintf("torrents/.archived/%s [%s].torrent", torrentName, id)
+		_, err = s3Cl.CopyObjectWithContext(ctx, &awss3.CopyObjectInput{
+			Bucket:     aws.String(s.bucket),
+			CopySource: aws.String(url.PathEscape(s.bucket + "/" + torrentKey)),
+			Key:        aws.String(archiveKey),
+		})
+		if err == nil {
+			_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+				Bucket: aws.String(s.bucket),
+				Key:    aws.String(torrentKey),
+			})
+			log.WithField("path", archiveKey).Info("archived torrent file")
+		} else {
+			// Fallback: if copy fails, just delete it to keep storage consistent
+			_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+				Bucket: aws.String(s.bucket),
+				Key:    aws.String(torrentKey),
+			})
+		}
+
+		// 3. Delete metadata file
+		metaKey := fmt.Sprintf("metadata/resources/%s.json", id)
+		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(metaKey),
+		})
 	}
 
 	// Best-effort orphan sweep: clean up `file` rows that have no
@@ -1046,7 +1149,7 @@ func runPeriodicFlush(ctx context.Context, fn func()) context.CancelFunc {
 	return cancel
 }
 
-func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.ListItem, totalStored int64, mi *metainfo.Info, prevFiles []prevFileInfo) (*File, error) {
+func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.ListItem, totalStored int64, mi *metainfo.Info, prevFiles []prevFileInfo, torrentName string) (*File, error) {
 
 	if s.bucket == "" {
 		return nil, errors.New("s3 bucket is not configured")
@@ -1101,6 +1204,8 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 			return nil, errors.Wrap(err, "failed to reset stale stored file row from dedup")
 		}
 	}
+	humanPath := fmt.Sprintf("media/%s [%s]/%s", torrentName, id, item.PathStr)
+
 	// No existing stored file found by path+size, proceed with exporting and storing by content hash
 	ei, err := s.api.ExportResourceContent(ctx, cla, id, item.ID)
 	if err != nil {
@@ -1248,6 +1353,9 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(s3Key(hash)),
 			Body:   bytes.NewReader(nil),
+			Metadata: map[string]*string{
+				"Human-Path": aws.String(humanPath),
+			},
 		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to put zero-byte object, bucket=%s, key=%s", s.bucket, hash)
@@ -1284,6 +1392,9 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		out, err := s3Cl.CreateMultipartUploadWithContext(ctx, &awss3.CreateMultipartUploadInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(s3Key(hash)),
+			Metadata: map[string]*string{
+				"Human-Path": aws.String(humanPath),
+			},
 		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create S3 multipart upload, bucket=%s, key=%s", s.bucket, hash)
@@ -1322,6 +1433,9 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 			out, err := s3Cl.CreateMultipartUploadWithContext(ctx, &awss3.CreateMultipartUploadInput{
 				Bucket: aws.String(s.bucket),
 				Key:    aws.String(s3Key(hash)),
+				Metadata: map[string]*string{
+					"Human-Path": aws.String(humanPath),
+				},
 			})
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to recreate S3 multipart upload after NoSuchUpload, bucket=%s, key=%s", s.bucket, hash)
@@ -1699,4 +1813,43 @@ func (s *Worker) generateFileHash(ctx context.Context, item ra.ListItem, ei *ra.
 		}
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+func (s *Worker) prepareMetadata(ctx context.Context, cla *Claims, id string, fileItems []ra.ListItem) (string, *metainfo.Info) {
+	var mi *metainfo.Info
+	var torrentRaw []byte
+	if len(fileItems) > 0 {
+		ei, err := s.api.ExportResourceContent(ctx, cla, id, fileItems[0].ID)
+		if err == nil {
+			torrentRaw, err = s.api.FetchTorrent(ctx, ei.ExportItems["download"].URL)
+			if err == nil {
+				mi, _ = parseMetainfo(torrentRaw)
+			}
+		}
+	}
+
+	torrentName := id
+	if mi != nil {
+		torrentName = mi.Name
+		// Sanitize torrent name for filesystem/S3 safety
+		torrentName = strings.ReplaceAll(torrentName, "/", "_")
+		torrentName = strings.ReplaceAll(torrentName, "\\", "_")
+		torrentName = strings.ReplaceAll(torrentName, ":", "_")
+	}
+
+	if s.bucket != "" {
+		s3Cl := s.s3.Get()
+		if s3Cl != nil {
+			// 1. Store .torrent file for recovery
+			if torrentRaw != nil {
+				key := fmt.Sprintf("torrents/%s [%s].torrent", torrentName, id)
+				_, _ = s3Cl.PutObjectWithContext(ctx, &awss3.PutObjectInput{
+					Bucket: aws.String(s.bucket),
+					Key:    aws.String(key),
+					Body:   bytes.NewReader(torrentRaw),
+				})
+			}
+		}
+	}
+	return torrentName, mi
 }
