@@ -12,14 +12,15 @@ import (
 type SeriesStatus struct {
 	tableName struct{} `pg:"series_status"`
 
-	UserID    uuid.UUID       `pg:"user_id,pk"`
-	VideoID   string          `pg:"video_id,pk"`
-	Watched   bool            `pg:"watched,use_zero"`
-	Rating    *int16          `pg:"rating"`
-	Source    UserVideoSource `pg:"source"`
-	WatchedAt *time.Time      `pg:"watched_at"`
-	CreatedAt time.Time       `pg:"created_at"`
-	UpdatedAt time.Time       `pg:"updated_at"`
+	UserID       uuid.UUID       `pg:"user_id,pk"`
+	VideoID      string          `pg:"video_id,pk"`
+	Watched      bool            `pg:"watched,use_zero"`
+	Rating       *int16          `pg:"rating"`
+	Source       UserVideoSource `pg:"source"`
+	WatchedAt    *time.Time      `pg:"watched_at"`
+	PosterLayout string          `pg:"poster_layout"`
+	CreatedAt    time.Time       `pg:"created_at"`
+	UpdatedAt    time.Time       `pg:"updated_at"`
 }
 
 func UpsertSeriesStatus(ctx context.Context, db *pg.DB, s *SeriesStatus) error {
@@ -161,4 +162,25 @@ func GetSeriesStatusMap(ctx context.Context, db *pg.DB, userID uuid.UUID, videoI
 		result[s.VideoID] = s
 	}
 	return result, nil
+}
+
+func UpsertSeriesPosterLayout(ctx context.Context, db *pg.DB, userID uuid.UUID, videoID string, layout string) error {
+	status := &SeriesStatus{
+		UserID:       userID,
+		VideoID:      videoID,
+		PosterLayout: layout,
+		Source:       UserVideoSourceManual,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	_, err := db.Model(status).
+		Context(ctx).
+		OnConflict("(user_id, video_id) DO UPDATE").
+		Set("poster_layout = EXCLUDED.poster_layout").
+		Set("updated_at = EXCLUDED.updated_at").
+		Insert()
+	if err != nil {
+		return errors.Wrap(err, "failed to upsert series poster layout")
+	}
+	return nil
 }

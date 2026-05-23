@@ -1,4 +1,4 @@
-import { useCallback, useState, useMemo } from 'preact/hooks';
+import { useCallback, useState, useMemo, useEffect } from 'preact/hooks';
 import { t } from '../i18n';
 
 // 5-star half-step rating from 0-10 scale, matching library/stars.html exactly.
@@ -49,7 +49,7 @@ function StarRating({ rating }) {
 export function ItemGrid({ items, showBadges, userStatuses, watchlistIds, onClick, onToggleWatched, onRate, onToggleWatchlist }) {
     if (!items.length) return null;
     return (
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 grid-flow-row-dense gap-4">
             {items.map(item => {
                 const status = userStatuses && userStatuses[item.id];
                 const inWatchlist = !!(watchlistIds && watchlistIds.has && watchlistIds.has(item.id));
@@ -60,6 +60,7 @@ export function ItemGrid({ items, showBadges, userStatuses, watchlistIds, onClic
                         showBadge={showBadges}
                         watched={status ? status.watched : false}
                         rating={status ? status.rating : 0}
+                        layout={status ? status.layout : ''}
                         inWatchlist={inWatchlist}
                         onClick={onClick}
                         onToggleWatched={onToggleWatched}
@@ -183,10 +184,26 @@ export function RatingBadge({ rating, onClick }) {
     );
 }
 
-function ItemCard({ item, showBadge, watched, rating, inWatchlist, onClick, onToggleWatched, onRate, onToggleWatchlist }) {
+function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onClick, onToggleWatched, onRate, onToggleWatchlist }) {
     const handleClick = useCallback(() => onClick(item), [item, onClick]);
     const [imgError, setImgError] = useState(false);
+    const [imgErrorH, setImgErrorH] = useState(false);
     const onImgError = useCallback(() => setImgError(true), []);
+    const onImgErrorH = useCallback(() => setImgErrorH(true), []);
+
+    const hasV = item.hasPoster !== undefined ? item.hasPoster : !!item.poster;
+    const hasH = item.hasPosterHorizontal !== undefined ? item.hasPosterHorizontal : (!!item.posterHorizontal || !!item.background);
+    
+    const initialHorizontal = layout === 'horizontal' || (layout !== 'vertical' && !hasV && hasH);
+    const [isHorizontal, setIsHorizontal] = useState(initialHorizontal);
+
+    useEffect(() => {
+        if (layout) {
+            setIsHorizontal(layout === 'horizontal');
+        } else {
+            setIsHorizontal(!hasV && hasH);
+        }
+    }, [layout, hasV, hasH]);
 
     const handleWatchedClick = useCallback((e) => {
         e.stopPropagation();
@@ -206,21 +223,69 @@ function ItemCard({ item, showBadge, watched, rating, inWatchlist, onClick, onTo
         if (onToggleWatchlist) onToggleWatchlist(item);
     }, [item, onToggleWatchlist]);
 
+    const handleToggleLayout = useCallback((e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const nextHorizontal = !isHorizontal;
+        setIsHorizontal(nextHorizontal);
+        
+        const newLayout = nextHorizontal ? 'horizontal' : 'vertical';
+        const type = item.type === 'series' ? 'series' : 'movie';
+        
+        fetch(`/library/${type}/${item.id}/layout`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': window._CSRF || ''
+            },
+            body: JSON.stringify({ layout: newLayout })
+        }).catch(err => console.error('Failed to save layout preference:', err));
+    }, [isHorizontal, item.id, item.type]);
+
+    const srcSetH = useMemo(() => {
+        const pathH = item.posterHorizontal || item.background;
+        if (!pathH) return undefined;
+        if (pathH.includes('/poster-h/')) {
+            const base = pathH.substring(0, pathH.lastIndexOf('/'));
+            return `${base}/480.jpg 480w, ${base}/720.jpg 720w`;
+        }
+        if (pathH.includes('image.tmdb.org')) {
+            const w780 = pathH.replace(/\/w[0-9]+/, '/w780');
+            const w1280 = pathH.replace(/\/w[0-9]+/, '/w1280');
+            return `${w780} 780w, ${w1280} 1280w`;
+        }
+        return undefined;
+    }, [item.posterHorizontal, item.background]);
+
     const isImdb = item.id && item.id.startsWith('tt');
 
+    const showFallback = isHorizontal ? (!hasH || imgErrorH) : (!hasV || imgError);
+
     return (
-        <div class="group cursor-pointer flex" onClick={handleClick}>
-            <div class={`w-card-frame${watched ? ' is-watched' : ''}`}>
-                <figure class="aspect-[2/3] overflow-hidden relative">
-                    {item.poster && !imgError ? (
+        <div class={`group cursor-pointer flex ${isHorizontal ? 'col-span-2' : ''}`} onClick={handleClick}>
+            <div class={`w-card-frame${watched ? ' is-watched' : ''} w-full`}>
+                <figure class={`overflow-hidden relative transition-all duration-300 ${isHorizontal ? 'aspect-[3/2]' : 'aspect-[2/3]'}`}>
+                    {hasV && !imgError && (
                         <img
-                            class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            class={`vertical-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${isHorizontal ? 'hidden' : ''}`}
                             src={item.poster}
                             alt={item.name || ''}
                             loading="lazy"
                             onError={onImgError}
                         />
-                    ) : (
+                    )}
+                    {hasH && !imgErrorH && (
+                        <img
+                            class={`horizontal-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${!isHorizontal ? 'hidden' : ''}`}
+                            src={(item.posterHorizontal || item.background) ? (item.posterHorizontal || item.background).replace('/500.jpg', '/480.jpg') : ''}
+                            srcSet={srcSetH}
+                            sizes="(max-width: 640px) 480px, 720px"
+                            alt={item.name || ''}
+                            loading="lazy"
+                            onError={onImgErrorH}
+                        />
+                    )}
+                    {showFallback && (
                         <PosterGradient name={item.name} />
                     )}
                     {isImdb && (
@@ -229,6 +294,24 @@ function ItemCard({ item, showBadge, watched, rating, inWatchlist, onClick, onTo
                             <RatingBadge rating={rating} onClick={handleRateClick} />
                             {onToggleWatchlist && (
                                 <WatchlistBadge inWatchlist={inWatchlist} onClick={handleWatchlistClick} />
+                            )}
+                            {hasV && hasH && (
+                                <button
+                                    type="button"
+                                    onClick={handleToggleLayout}
+                                    class="w-card-badge-ghost bottom-2 left-2 cursor-pointer hover:text-w-purpleL !opacity-100 z-10"
+                                    title="Toggle aspect ratio"
+                                >
+                                    {isHorizontal ? (
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="3" y="6" width="18" height="12" rx="2" />
+                                        </svg>
+                                    ) : (
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="6" y="3" width="12" height="18" rx="2" />
+                                        </svg>
+                                    )}
+                                </button>
                             )}
                         </>
                     )}

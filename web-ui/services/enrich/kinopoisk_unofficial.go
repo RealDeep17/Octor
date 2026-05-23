@@ -36,6 +36,7 @@ func NewKinopoiskUnofficial(pg *cs.PG, api *ku.Api) *KinopoiskUnofficial {
 func (s *KinopoiskUnofficial) makeVideoMetadata(mi *km.Info) *models.VideoMetadata {
 	description, _ := mi.Metadata["description"].(string)
 	posterURL, _ := mi.Metadata["posterUrl"].(string)
+	posterHorizontalURL, _ := mi.Metadata["coverUrl"].(string)
 	var rating *float64
 	ratingFloat, ok := mi.Metadata["ratingImdb"].(float64)
 	if !ok {
@@ -57,12 +58,13 @@ func (s *KinopoiskUnofficial) makeVideoMetadata(mi *km.Info) *models.VideoMetada
 		videoID = *mi.ImdbID
 	}
 	return &models.VideoMetadata{
-		VideoID:   videoID,
-		Title:     mi.Title,
-		Year:      mi.Year,
-		Plot:      description,
-		PosterURL: posterURL,
-		Rating:    rating,
+		VideoID:             videoID,
+		Title:               mi.Title,
+		Year:                mi.Year,
+		Plot:                description,
+		PosterURL:           posterURL,
+		PosterHorizontalURL: posterHorizontalURL,
+		Rating:              rating,
 	}
 }
 

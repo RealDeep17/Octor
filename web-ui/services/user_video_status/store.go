@@ -48,6 +48,10 @@ type userVideoStatusStore interface {
 	// returns the subset that this user has actually marked watched.
 	GetMovieStatusMap(ctx context.Context, userID uuid.UUID, videoIDs []string) (map[string]*models.MovieStatus, error)
 	GetSeriesStatusMap(ctx context.Context, userID uuid.UUID, videoIDs []string) (map[string]*models.SeriesStatus, error)
+
+	// Layouts
+	UpsertMoviePosterLayout(ctx context.Context, userID uuid.UUID, videoID string, layout string) error
+	UpsertSeriesPosterLayout(ctx context.Context, userID uuid.UUID, videoID string, layout string) error
 }
 
 type pgUserVideoStatusStore struct {
@@ -120,4 +124,12 @@ func (s *pgUserVideoStatusStore) GetMovieStatusMap(ctx context.Context, userID u
 
 func (s *pgUserVideoStatusStore) GetSeriesStatusMap(ctx context.Context, userID uuid.UUID, videoIDs []string) (map[string]*models.SeriesStatus, error) {
 	return models.GetSeriesStatusMap(ctx, s.db, userID, videoIDs)
+}
+
+func (s *pgUserVideoStatusStore) UpsertMoviePosterLayout(ctx context.Context, userID uuid.UUID, videoID string, layout string) error {
+	return models.UpsertMoviePosterLayout(ctx, s.db, userID, videoID, layout)
+}
+
+func (s *pgUserVideoStatusStore) UpsertSeriesPosterLayout(ctx context.Context, userID uuid.UUID, videoID string, layout string) error {
+	return models.UpsertSeriesPosterLayout(ctx, s.db, userID, videoID, layout)
 }

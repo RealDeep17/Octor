@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN skin VARCHAR(16) DEFAULT 'linear';

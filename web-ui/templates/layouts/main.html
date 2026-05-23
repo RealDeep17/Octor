@@ -34,7 +34,8 @@
         {{ "style.css" | asset }}
         <script>
             (function() {
-                const skin = localStorage.getItem('octor-skin') || 'linear';
+                const dbSkin = "{{ if .User | hasAuth }}{{ .User.Skin }}{{ end }}";
+                const skin = dbSkin || localStorage.getItem('octor-skin') || 'linear';
                 document.documentElement.setAttribute('data-skin', skin);
             })();
         </script>

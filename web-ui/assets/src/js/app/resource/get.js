@@ -6,6 +6,89 @@ av( async function() {
             renderAd(this, ad);
         }
     }
+
+    // Aspect ratio toggler for detail page (MUST run before any action check/early return)
+    const posterContainer = document.getElementById('detail-poster-container');
+    const layoutToggle = document.getElementById('detail-layout-toggle');
+    if (posterContainer && layoutToggle) {
+        const videoType = posterContainer.getAttribute('data-video-type');
+        const videoId = posterContainer.getAttribute('data-video-id');
+
+        function applyLayout(layout) {
+            const isHorizontal = layout === 'horizontal';
+            
+            // Toggle classes on container
+            if (isHorizontal) {
+                posterContainer.classList.remove('aspect-[2/3]', 'w-[100px]', 'sm:w-[140px]');
+                posterContainer.classList.add('aspect-[3/2]', 'w-[200px]', 'sm:w-[315px]');
+            } else {
+                posterContainer.classList.remove('aspect-[3/2]', 'w-[200px]', 'sm:w-[315px]');
+                posterContainer.classList.add('aspect-[2/3]', 'w-[100px]', 'sm:w-[140px]');
+            }
+            
+            // Hide/show image elements
+            const verticalImg = document.getElementById('detail-poster-vertical');
+            const horizontalImg = document.getElementById('detail-poster-horizontal');
+            if (verticalImg) {
+                verticalImg.classList.toggle('hidden', isHorizontal);
+            }
+            if (horizontalImg) {
+                horizontalImg.classList.toggle('hidden', !isHorizontal);
+            }
+            
+            // Toggle toggle icons
+            const vertIcon = layoutToggle.querySelector('.vertical-icon');
+            const horizIcon = layoutToggle.querySelector('.horizontal-icon');
+            if (vertIcon) {
+                vertIcon.classList.toggle('hidden', isHorizontal);
+            }
+            if (horizIcon) {
+                horizIcon.classList.toggle('hidden', !isHorizontal);
+            }
+        }
+
+        // Apply local storage preference on page load if it exists
+        if (videoType && videoId) {
+            const hasAuth = posterContainer.getAttribute('data-has-auth') === 'true';
+            const dbPref = posterContainer.getAttribute('data-layout-pref');
+            if (hasAuth && dbPref) {
+                // If user is authenticated, keep localStorage in sync with database preference
+                localStorage.setItem('octor-layout-' + videoType + '-' + videoId, dbPref);
+            } else {
+                // If unauthenticated, apply localStorage preference
+                const localPref = localStorage.getItem('octor-layout-' + videoType + '-' + videoId);
+                if (localPref) {
+                    applyLayout(localPref);
+                }
+            }
+        }
+
+        layoutToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (!videoType || !videoId) return;
+            
+            const isHorizontal = posterContainer.classList.contains('aspect-[3/2]');
+            const newLayout = isHorizontal ? 'vertical' : 'horizontal';
+            
+            applyLayout(newLayout);
+            
+            // Save to localStorage
+            localStorage.setItem('octor-layout-' + videoType + '-' + videoId, newLayout);
+            
+            // Save to database
+            fetch('/library/' + videoType + '/' + videoId + '/layout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': window._CSRF || ''
+                },
+                body: JSON.stringify({ layout: newLayout })
+            }).catch(err => console.error('Failed to save detail poster layout preference:', err));
+        });
+    }
+
     const query = window.location.hash.replace('#', '');
     const urlParams = new URLSearchParams(query);
     const action = urlParams.get('action');

@@ -104,6 +104,7 @@ func ListSeriesWatchlistItems(ctx context.Context, db *pg.DB, userID uuid.UUID) 
 			smd.title,
 			smd.year,
 			smd.poster_url,
+			smd.poster_horizontal_url,
 			smd.rating,
 			sw.source,
 			extract(epoch FROM sw.created_at)::bigint AS created_at

@@ -49,6 +49,7 @@ func UpsertSeriesMetadata(
 			year = EXCLUDED.year,
 			plot = EXCLUDED.plot,
 			poster_url = EXCLUDED.poster_url,
+			poster_horizontal_url = EXCLUDED.poster_horizontal_url,
 			rating = EXCLUDED.rating
 		`).
 		Returning("series_metadata_id").

@@ -100,6 +100,18 @@
         localStorage.setItem('octor-skin', id);
         document.documentElement.setAttribute('data-skin', id);
         updateActiveSkin(id);
+        
+        const hasAuth = "{{ if $.User | hasAuth }}1{{ end }}" === "1";
+        if (hasAuth) {
+            fetch('/profile/skin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': window._CSRF || ''
+                },
+                body: JSON.stringify({ skin: id })
+            }).catch(err => console.error('Failed to save skin preference to account:', err));
+        }
     }
 
     function updateActiveSkin(id) {
@@ -116,7 +128,8 @@
 
     // Initial state
     (function() {
-        const currentSkin = localStorage.getItem('octor-skin') || 'linear';
+        const dbSkin = "{{ if $.User | hasAuth }}{{ $.User.Skin }}{{ end }}";
+        const currentSkin = dbSkin || localStorage.getItem('octor-skin') || 'linear';
         updateActiveSkin(currentSkin);
     })();
 </script>

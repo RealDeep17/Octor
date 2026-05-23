@@ -3,6 +3,7 @@ package library
 import (
 	"bytes"
 	"context"
+	"time"
 	"fmt"
 	"image/jpeg"
 	"io"
@@ -106,17 +107,27 @@ func (s *Handler) getResizedJPEGStillWithCache(ctx context.Context, db *pg.DB, s
 		return s.getResizedJPEGStill(ctx, db, args)
 	}
 	cl := s3Cl.Get()
-	b, err := s.getStillFromCache(ctx, cl, args)
+	// Create a timeout context for the S3 cache check so we don't block the request if S3 is slow/hanging
+	cacheCtx, cacheCancel := context.WithTimeout(ctx, 1*time.Second)
+	b, err := s.getStillFromCache(cacheCtx, cl, args)
+	cacheCancel()
 	if err != nil {
 		log.WithError(err).Warn("still: S3 cache get failed, falling through to direct fetch")
 	} else if b != nil {
 		return b, nil
 	}
-	b, err = s.getResizedJPEGStill(ctx, db, args)
+
+	// Create a detached context for downloading, resizing, and caching
+	// so it completes in the background and writes to S3 even if the client
+	// context gets canceled.
+	detachedCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	b, err = s.getResizedJPEGStill(detachedCtx, db, args)
 	if err != nil {
 		return nil, err
 	}
-	if err = s.putStillToCache(ctx, cl, args, b); err != nil {
+	if err = s.putStillToCache(detachedCtx, cl, args, b); err != nil {
 		log.WithError(err).Warn("still: S3 cache put failed, serving uncached")
 	}
 	return b, nil
@@ -149,7 +160,7 @@ func (s *Handler) getResizedJPEGStill(ctx context.Context, db *pg.DB, args *Stil
 		return nil, err
 	}
 
-	resized := imaging.Resize(srcImg, args.width, 0, imaging.Lanczos)
+	resized := imaging.Resize(srcImg, args.width, 0, imaging.Linear)
 
 	var buf bytes.Buffer
 	err = jpeg.Encode(&buf, resized, &jpeg.Options{Quality: PosterJPEGQuality})

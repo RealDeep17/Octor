@@ -33,8 +33,9 @@ type WatchlistItem struct {
 	Type      string   `json:"type"       pg:"type"`
 	Title     string   `json:"title"      pg:"title"`
 	Year      *int16   `json:"year"       pg:"year"`
-	PosterURL string   `json:"poster_url" pg:"poster_url"`
-	Rating    *float64 `json:"rating"     pg:"rating"`
+	PosterURL           string   `json:"poster_url" pg:"poster_url"`
+	PosterHorizontalURL string   `json:"poster_horizontal_url" pg:"poster_horizontal_url"`
+	Rating              *float64 `json:"rating"     pg:"rating"`
 	Source    string   `json:"source"     pg:"source"`
 	CreatedAt int64    `json:"created_at" pg:"created_at"`
 }
@@ -138,6 +139,7 @@ func ListMovieWatchlistItems(ctx context.Context, db *pg.DB, userID uuid.UUID) (
 			mmd.title,
 			mmd.year,
 			mmd.poster_url,
+			mmd.poster_horizontal_url,
 			mmd.rating,
 			mw.source,
 			extract(epoch FROM mw.created_at)::bigint AS created_at

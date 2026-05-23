@@ -18,6 +18,7 @@ type User struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Tier      string
+	Skin      string    `pg:"skin"`
 }
 
 // GetOrCreateUser finds or creates a user by email.
@@ -64,6 +65,15 @@ func UpdateUserTier(ctx context.Context, db *pg.DB, u *User) error {
 		Context(ctx).
 		WherePK().
 		Column("tier").
+		Update()
+	return err
+}
+
+func UpdateUserSkin(ctx context.Context, db *pg.DB, userID uuid.UUID, skin string) error {
+	_, err := db.Model((*User)(nil)).
+		Context(ctx).
+		Set("skin = ?", skin).
+		Where("user_id = ?", userID).
 		Update()
 	return err
 }

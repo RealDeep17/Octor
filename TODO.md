@@ -72,3 +72,37 @@ Add a toggle icon on the card.
 Clicking this icon must smoothly switch the individual card (and its poster) from the vertical layout to the horizontal layout, and vice versa.
 
 ### idea 3
+  1. The Infrastructure (The Search & Monitor Layer)
+  We are adding a "discovery engine" that sits behind Octor’s existing interface:
+   * Prowlarr (The Librarian): Centralizes all your torrent trackers (Indexers). It knows where to find
+     specific content (like Anime, or 4K movies).
+   * Autobrr (The Scout): Monitors Prowlarr’s feeds 24/7. It is configured with "filters" (e.g., “If a
+     movie from studio 'IPX' appears and is over 2GB, grab it”).
+   * Comet (The Translator): Acts as a bridge. It takes Prowlarr’s raw search results and converts them
+     into a Stremio-compatible format that Octor already knows how to display.
+
+  2. The Integration (The Gateway)
+  We create a new, secure Webhook API in Octor. Think of this as a "Secret Mailbox":
+   * Authentication: Guarded by a unique AUTOMATION_API_KEY. Only your Scout (Autobrr) knows this key.
+   * Targeting: The webhook is tied to a specific TARGET_EMAIL. Even though the "push" is automated,
+     Octor needs to know whose library to put the content in.
+   * The Ingest Logic: When the "mailbox" receives a magnet link, Octor internally simulates a user
+     clicking "Add to Library" and "Add to Vault." It fetches the torrent metadata, creates the database
+     entries, and triggers the cloud transfer automatically.
+
+  3. The Automation Flow (The Life of a File)
+   1. Discovery: A new video is uploaded to a tracker.
+   2. Match: Autobrr sees the upload, matches your specific quality/studio filters, and immediately
+      sends a POST request to Octor’s new Webhook.
+   3. Validation: Octor verifies the API Key and looks up the target user's ID.
+   4. Processing: Octor pulls the torrent file, parses the contents (file list/size), and adds it to the
+      user's Library.
+   5. Vaulting (Optional): If configured, Octor also triggers a "Pledge," meaning the file is
+      immediately queued for transfer to your S3 or Google Drive storage.
+   6. Visibility: The next time the user opens Octor, the video is already sitting in their Library,
+      fully enriched with posters and metadata.
+
+  4. The Bridge (Discovery UI)
+  By adding the Comet manifest URL into Octor’s "Discover" section, the user can also manually browse
+  the Prowlarr indexers using Octor’s native UI, creating a unified experience between manual browsing
+  and total automation.

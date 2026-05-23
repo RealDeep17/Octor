@@ -73,6 +73,37 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	gr := r.Group("/profile")
 	gr.Use(auth.HasAuth)
 	gr.POST("/delete", h.delete)
+	gr.POST("/skin", h.updateSkin)
+}
+
+type skinUpdateReq struct {
+	Skin string `json:"skin" binding:"required"`
+}
+
+func (s *Handler) updateSkin(c *gin.Context) {
+	var req skinUpdateReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Skin) > 16 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "skin name too long"})
+		return
+	}
+
+	u := auth.GetUserFromContext(c)
+	db := s.pg.Get()
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "no db connection"})
+		return
+	}
+
+	if err := models.UpdateUserSkin(c.Request.Context(), db, u.ID, req.Skin); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 // getAvailableBackendTypes returns the list of available streaming backend types

@@ -45,14 +45,15 @@ func (s UserVideoSource) String() string {
 type MovieStatus struct {
 	tableName struct{} `pg:"movie_status"`
 
-	UserID    uuid.UUID       `pg:"user_id,pk"`
-	VideoID   string          `pg:"video_id,pk"`
-	Watched   bool            `pg:"watched,use_zero"`
-	Rating    *int16          `pg:"rating"`
-	Source    UserVideoSource `pg:"source"`
-	WatchedAt *time.Time      `pg:"watched_at"`
-	CreatedAt time.Time       `pg:"created_at"`
-	UpdatedAt time.Time       `pg:"updated_at"`
+	UserID       uuid.UUID       `pg:"user_id,pk"`
+	VideoID      string          `pg:"video_id,pk"`
+	Watched      bool            `pg:"watched,use_zero"`
+	Rating       *int16          `pg:"rating"`
+	Source       UserVideoSource `pg:"source"`
+	WatchedAt    *time.Time      `pg:"watched_at"`
+	PosterLayout string          `pg:"poster_layout"`
+	CreatedAt    time.Time       `pg:"created_at"`
+	UpdatedAt    time.Time       `pg:"updated_at"`
 }
 
 func UpsertMovieStatus(ctx context.Context, db *pg.DB, s *MovieStatus) error {
@@ -225,3 +226,25 @@ func GetMovieStatusMap(ctx context.Context, db *pg.DB, userID uuid.UUID, videoID
 	}
 	return result, nil
 }
+
+func UpsertMoviePosterLayout(ctx context.Context, db *pg.DB, userID uuid.UUID, videoID string, layout string) error {
+	status := &MovieStatus{
+		UserID:       userID,
+		VideoID:      videoID,
+		PosterLayout: layout,
+		Source:       UserVideoSourceManual,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	_, err := db.Model(status).
+		Context(ctx).
+		OnConflict("(user_id, video_id) DO UPDATE").
+		Set("poster_layout = EXCLUDED.poster_layout").
+		Set("updated_at = EXCLUDED.updated_at").
+		Insert()
+	if err != nil {
+		return errors.Wrap(err, "failed to upsert movie poster layout")
+	}
+	return nil
+}
+

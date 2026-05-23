@@ -113,14 +113,54 @@
             });
         }
         </script>
-        <div class="relative flex gap-3 sm:gap-5">
-            <div class="shrink-0 w-[100px] sm:w-[140px] aspect-[2/3] rounded-xl overflow-hidden border border-o-line/30 shadow-lg relative">
+        <div class="relative flex items-start gap-3 sm:gap-5">
+            {{ $layout := . | getEnrichedPosterLayout }}
+            {{ $hasBoth := and (. | hasEnrichedPoster) (. | hasEnrichedPosterHorizontal) }}
+            <div id="detail-poster-container" 
+                 class="shrink-0 rounded-xl overflow-hidden border border-o-line/30 shadow-lg relative transition-all duration-300 group/poster
+                        {{ if eq $layout "horizontal" }}
+                            w-[200px] sm:w-[315px] aspect-[3/2]
+                        {{ else }}
+                            w-[100px] sm:w-[140px] aspect-[2/3]
+                        {{ end }}"
+                 data-video-type="{{ if .Movie }}movie{{ else if .Series }}series{{ end }}"
+                 data-video-id="{{ . | getEnrichedVideoID }}"
+                 data-has-auth="{{ if $.User | hasAuth }}true{{ else }}false{{ end }}"
+                 data-layout-pref="{{ $layout }}">
+                
                 <div class="absolute inset-0 bg-gradient-to-br from-o-purple/20 via-o-primary/10 to-o-cyan/15 text-o-purpleL/60 flex items-center justify-center">
                     <div class="text-center font-bold text-sm p-3 line-clamp-3 drop-shadow-sm">{{ . | getEnrichedTitle }}</div>
                 </div>
+
                 {{ if . | hasEnrichedPoster }}
-                <img src="{{ . | getEnrichedPosterURL }}" alt="{{ . | getEnrichedTitle }}" class="absolute inset-0 w-full h-full object-cover" loading="lazy"
+                <img id="detail-poster-vertical" 
+                     src="{{ . | getEnrichedPosterURL }}" 
+                     alt="{{ . | getEnrichedTitle }}" 
+                     class="absolute inset-0 w-full h-full object-cover {{ if eq $layout "horizontal" }}hidden{{ end }}" 
                      onerror="this.remove()">
+                {{ end }}
+
+                {{ if . | hasEnrichedPosterHorizontal }}
+                <img id="detail-poster-horizontal" 
+                     src="{{ . | getEnrichedPosterHorizontal480URL }}" 
+                     srcset="{{ . | getEnrichedPosterHorizontal480URL }} 480w, {{ . | getEnrichedPosterHorizontalURL }} 720w"
+                     sizes="(max-width: 640px) 480px, 720px"
+                     alt="{{ . | getEnrichedTitle }}" 
+                     class="absolute inset-0 w-full h-full object-cover {{ if ne $layout "horizontal" }}hidden{{ end }}" 
+                     onerror="this.remove()">
+                {{ end }}
+
+                {{ if $hasBoth }}
+                <button type="button" id="detail-layout-toggle"
+                        class="absolute bottom-2 left-2 w-7 h-7 rounded-lg bg-black/60 hover:bg-black/80 backdrop-blur border border-white/10 text-white flex items-center justify-center opacity-0 group-hover/poster:opacity-100 transition-opacity duration-200 z-10 cursor-pointer"
+                        title="Toggle aspect ratio">
+                    <svg class="vertical-icon w-4 h-4 {{ if eq $layout "horizontal" }}hidden{{ end }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="6" y="3" width="12" height="18" rx="2" />
+                    </svg>
+                    <svg class="horizontal-icon w-4 h-4 {{ if ne $layout "horizontal" }}hidden{{ end }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="6" width="18" height="12" rx="2" />
+                    </svg>
+                </button>
                 {{ end }}
             </div>
             <div class="flex-1 min-w-0">

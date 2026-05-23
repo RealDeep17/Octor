@@ -1177,6 +1177,9 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                 name: rawItem.name || rawItem.title || '',
                 year: rawItem.year,
                 poster: rawItem.poster || `/lib/${type}/poster/${videoId}/500.jpg`,
+                posterHorizontal: rawItem.posterHorizontal || rawItem.poster_horizontal_url || `/lib/${type}/poster-h/${videoId}/480.jpg`,
+                hasPoster: rawItem.hasPoster !== undefined ? rawItem.hasPoster : (!!rawItem.poster || !!rawItem.poster_url),
+                hasPosterHorizontal: rawItem.hasPosterHorizontal !== undefined ? rawItem.hasPosterHorizontal : (!!rawItem.posterHorizontal || !!rawItem.poster_horizontal_url),
                 imdbRating: rawItem.imdbRating != null ? rawItem.imdbRating : (rawItem.rating || undefined),
             };
             dispatch({ type: 'WATCHLIST_ADD', item });

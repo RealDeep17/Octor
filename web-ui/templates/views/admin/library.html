@@ -88,13 +88,25 @@
         {{ end }}
       </div>
       {{ else }}
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 grid-flow-row-dense gap-4">
         {{ range .Data.Items }}
-        <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="admin-library-item group flex">
-          <div class="w-card-frame">
-            <figure class="aspect-[2/3] overflow-hidden relative">
-              {{ if .Content | hasPoster }}
-                <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" src="{{ .Content | getCachedPoster240 }}" alt="{{ .Content | getTitle }}{{ if .Content | hasYear }} ({{ .Content | getYear }}){{ end }}" />
+        <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2">
+          <div class="w-card-frame w-full">
+            <input type="checkbox" id="toggle-{{ .ResourceID }}" class="peer hidden"
+                   {{ if and (not (.Content | hasPoster)) (.Content | hasPosterHorizontal) }}checked{{ end }}
+                   {{ if not (and (.Content | hasPoster) (.Content | hasPosterHorizontal)) }}disabled{{ end }} />
+            <figure class="aspect-[2/3] peer-checked:aspect-[3/2] overflow-hidden relative transition-all duration-300 peer-checked:[&_.vertical-img]:hidden peer-checked:[&_.horizontal-img]:block">
+              {{ if or (.Content | hasPoster) (.Content | hasPosterHorizontal) }}
+                {{ if .Content | hasPoster }}
+                  <img class="vertical-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" src="{{ .Content | getCachedPoster240 }}" alt="{{ .Content | getTitle }}{{ if .Content | hasYear }} ({{ .Content | getYear }}){{ end }}" />
+                {{ end }}
+                {{ if .Content | hasPosterHorizontal }}
+                  <img class="horizontal-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 {{ if .Content | hasPoster }}hidden{{ end }}"
+                       src="{{ .Content | getCachedPosterHorizontal480 }}"
+                       srcset="{{ .Content | getCachedPosterHorizontal480 }} 480w, {{ .Content | getCachedPosterHorizontal720 }} 720w"
+                       sizes="(max-width: 640px) 480px, 720px"
+                       alt="{{ .Content | getTitle }}{{ if .Content | hasYear }} ({{ .Content | getYear }}){{ end }}" />
+                {{ end }}
               {{ else }}
                 <div class="w-full h-full bg-gradient-to-br from-o-purple/20 via-o-primary/10 to-o-cyan/15 text-o-purpleL/60 flex items-center justify-center">
                   <div class="text-center font-bold text-lg p-3 line-clamp-3 drop-shadow-sm">{{ .Content | getTitle }}</div>
@@ -113,6 +125,19 @@
                       </svg>
                   </button>
               </form>
+              {{/* Layout toggle (bottom-left) */}}
+              {{ if and (.Content | hasPoster) (.Content | hasPosterHorizontal) }}
+              <button type="button" class="w-card-badge-ghost bottom-2 left-2 cursor-pointer hover:text-o-primary !opacity-100 z-10 peer-checked:[&_.vertical-icon]:hidden peer-checked:[&_.horizontal-icon]:block"
+                      title="Toggle aspect ratio"
+                      onclick="event.preventDefault(); event.stopPropagation(); const cb = document.getElementById('toggle-{{ .ResourceID }}'); if (cb) cb.checked = !cb.checked;">
+                  <svg class="vertical-icon w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="6" y="3" width="12" height="18" rx="2" />
+                  </svg>
+                  <svg class="horizontal-icon hidden w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="6" width="18" height="12" rx="2" />
+                  </svg>
+              </button>
+              {{ end }}
             </figure>
             <div class="p-2.5 flex flex-col flex-1">
               <h3 class="w-card-title text-sm group-hover:text-o-primaryL">{{ .Content | getTitle }}</h3>

@@ -33,7 +33,10 @@ func (s *Handler) bindArgs(c *gin.Context) (*PostArgs, error) {
 	instruction, _ := c.GetPostForm("instruction")
 	query, _ := c.GetPostForm("resource")
 	if query == "" && strings.HasPrefix(c.Request.URL.Path, "/magnet") {
-		query = strings.TrimPrefix(c.Request.URL.Path, "/") + c.Request.URL.RawQuery
+		query = strings.TrimPrefix(c.Request.URL.Path, "/")
+		if c.Request.URL.RawQuery != "" {
+			query += "?" + c.Request.URL.RawQuery
+		}
 	}
 	if query != "" {
 		sha1 := sv.SHA1R.Find([]byte(query))
@@ -79,6 +82,7 @@ type PostData struct {
 	Instruction      string
 	Tool             *common.Tool
 	ContinueWatching []*models.WatchHistory
+	Addons           interface{}
 }
 
 func (s *Handler) post(c *gin.Context) {

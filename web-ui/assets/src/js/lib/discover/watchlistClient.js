@@ -27,6 +27,9 @@ function adaptItem(row) {
         name: row.title,
         year: row.year || undefined,
         poster: row.poster_url || `/lib/${row.type}/poster/${row.video_id}/500.jpg`,
+        posterHorizontal: row.poster_horizontal_url || `/lib/${row.type}/poster-h/${row.video_id}/480.jpg`,
+        hasPoster: !!row.poster_url,
+        hasPosterHorizontal: !!row.poster_horizontal_url,
         imdbRating: row.rating != null ? row.rating : undefined,
     };
 }

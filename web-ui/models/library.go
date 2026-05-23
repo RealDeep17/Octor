@@ -372,6 +372,29 @@ func GetLibraryMovieList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort Sor
 		return nil, errors.Wrap(err, "failed to fetch movie list")
 	}
 
+	if len(list) > 0 {
+		var videoIDs []string
+		for _, m := range list {
+			if m.MovieMetadata != nil && m.MovieMetadata.VideoID != "" {
+				videoIDs = append(videoIDs, m.MovieMetadata.VideoID)
+			}
+		}
+		if len(videoIDs) > 0 {
+			statusMap, err := GetMovieStatusMap(ctx, db, uID, videoIDs)
+			if err == nil {
+				for _, m := range list {
+					if m.MovieMetadata != nil {
+						if st, ok := statusMap[m.MovieMetadata.VideoID]; ok {
+							m.UserWatched = st.Watched
+							m.UserRating = st.Rating
+							m.UserPosterLayout = st.PosterLayout
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return list, nil
 }
 
@@ -417,6 +440,29 @@ func GetLibrarySeriesList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort So
 	err := query.Select()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch series list")
+	}
+
+	if len(list) > 0 {
+		var videoIDs []string
+		for _, s := range list {
+			if s.SeriesMetadata != nil && s.SeriesMetadata.VideoID != "" {
+				videoIDs = append(videoIDs, s.SeriesMetadata.VideoID)
+			}
+		}
+		if len(videoIDs) > 0 {
+			statusMap, err := GetSeriesStatusMap(ctx, db, uID, videoIDs)
+			if err == nil {
+				for _, s := range list {
+					if s.SeriesMetadata != nil {
+						if st, ok := statusMap[s.SeriesMetadata.VideoID]; ok {
+							s.UserWatched = st.Watched
+							s.UserRating = st.Rating
+							s.UserPosterLayout = st.PosterLayout
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return list, nil

@@ -45,13 +45,23 @@ func NewOmdbMetadata(info *om.Info) *OmdbMetadata {
 }
 
 func (s *OmdbMetadata) MakeVideoMetadata() *models.VideoMetadata {
+	posterURL := s.GetPosterURL()
+	var posterHorizontalURL string
+	if strings.Contains(posterURL, "theporndb.net") {
+		// Extract raw original background image from CDN without signature restrictions
+		idx := strings.Index(posterURL, "/scene/")
+		if idx != -1 {
+			posterHorizontalURL = "https://cdn.theporndb.net" + posterURL[idx:]
+		}
+	}
 	return &models.VideoMetadata{
-		VideoID:   s.GetImdbID(),
-		Title:     s.GetTitle(),
-		Year:      s.GetYear(),
-		Plot:      s.GetPlot(),
-		PosterURL: s.GetPosterURL(),
-		Rating:    s.GetImdbRating(),
+		VideoID:             s.GetImdbID(),
+		Title:               s.GetTitle(),
+		Year:                s.GetYear(),
+		Plot:                s.GetPlot(),
+		PosterURL:           posterURL,
+		PosterHorizontalURL: posterHorizontalURL,
+		Rating:              s.GetImdbRating(),
 	}
 }
 

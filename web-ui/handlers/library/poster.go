@@ -3,6 +3,7 @@ package library
 import (
 	"bytes"
 	"context"
+	"time"
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
@@ -43,13 +44,14 @@ const (
 var errPosterNotFound = errors.New("poster not found")
 
 type PosterArgs struct {
-	t      models.ContentType
-	imdbID string
-	width  int
-	format PosterFormat
+	t          models.ContentType
+	imdbID     string
+	width      int
+	format     PosterFormat
+	horizontal bool
 }
 
-func (s *Handler) bindPosterArgs(c *gin.Context) (*PosterArgs, error) {
+func (s *Handler) bindPosterArgs(c *gin.Context, horizontal bool) (*PosterArgs, error) {
 	t := models.ContentType(c.Param("type"))
 	if t != models.ContentTypeSeries && t != models.ContentTypeMovie {
 		return nil, errors.Errorf("wrong video type %v", t)
@@ -68,16 +70,25 @@ func (s *Handler) bindPosterArgs(c *gin.Context) (*PosterArgs, error) {
 		return nil, errors.Errorf("wrong format %v", f)
 	}
 	return &PosterArgs{
-		t:      t,
-		imdbID: c.Param("imdb_id"),
-		width:  width,
-		format: f,
+		t:          t,
+		imdbID:     c.Param("imdb_id"),
+		width:      width,
+		format:     f,
+		horizontal: horizontal,
 	}, nil
 }
 
 func (s *Handler) poster(c *gin.Context) {
+	s.handlePoster(c, false)
+}
 
-	pa, err := s.bindPosterArgs(c)
+func (s *Handler) posterHorizontal(c *gin.Context) {
+	s.handlePoster(c, true)
+}
+
+func (s *Handler) handlePoster(c *gin.Context, horizontal bool) {
+
+	pa, err := s.bindPosterArgs(c, horizontal)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusBadRequest, errors.Wrap(err, "failed to bind poster args"))
 		return
@@ -128,11 +139,35 @@ func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterA
 	if err != nil {
 		return nil, err
 	}
-	if md == nil || md.PosterURL == "" {
+	if md == nil {
 		return nil, errors.Wrapf(errPosterNotFound, "%s %s", args.t, args.imdbID)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", md.PosterURL, nil)
+	var posterURL string
+	if args.horizontal {
+		posterURL = md.PosterHorizontalURL
+		if posterURL == "" {
+			posterURL = md.PosterURL
+		}
+		if strings.Contains(posterURL, "theporndb.net") {
+			// Extract raw original background image from CDN without signature restrictions
+			idx := strings.Index(posterURL, "/scene/")
+			if idx != -1 {
+				posterURL = "https://cdn.theporndb.net" + posterURL[idx:]
+			}
+		}
+	} else {
+		posterURL = md.PosterURL
+		if posterURL == "" {
+			posterURL = md.PosterHorizontalURL
+		}
+	}
+
+	if posterURL == "" {
+		return nil, errors.Wrapf(errPosterNotFound, "%s %s", args.t, args.imdbID)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", posterURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +185,7 @@ func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterA
 		return nil, err
 	}
 
-	resized := imaging.Resize(srcImg, args.width, 0, imaging.Lanczos)
+	resized := imaging.Resize(srcImg, args.width, 0, imaging.Linear)
 
 	return resized, nil
 }
@@ -164,7 +199,10 @@ func (s *Handler) getResizedJPEGPosterWithCache(ctx context.Context, db *pg.DB, 
 		return s.getResizedJPEGPoster(ctx, db, args)
 	}
 	cl := s3Cl.Get()
-	b, err := s.getPosterFromCache(ctx, cl, args)
+	// Create a timeout context for the S3 cache check so we don't block the request if S3 is slow/hanging
+	cacheCtx, cacheCancel := context.WithTimeout(ctx, 1*time.Second)
+	b, err := s.getPosterFromCache(cacheCtx, cl, args)
+	cacheCancel()
 	if err != nil {
 		// Cache read failure is non-fatal: log and fall through to a
 		// direct fetch so the poster still renders.
@@ -172,13 +210,20 @@ func (s *Handler) getResizedJPEGPosterWithCache(ctx context.Context, db *pg.DB, 
 	} else if b != nil {
 		return b, nil
 	}
-	b, err = s.getResizedJPEGPoster(ctx, db, args)
+
+	// Create a detached context for downloading, resizing, and caching
+	// so it completes in the background and writes to S3 even if the client
+	// context gets canceled (e.g. on quick user refresh / navigate away).
+	detachedCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	b, err = s.getResizedJPEGPoster(detachedCtx, db, args)
 	if err != nil {
 		return nil, err
 	}
 	// Cache write failure is also non-fatal: the image was fetched
 	// successfully, so serve it and just skip caching this time.
-	if err = s.putPosterToCache(ctx, cl, args, b); err != nil {
+	if err = s.putPosterToCache(detachedCtx, cl, args, b); err != nil {
 		log.WithError(err).Warn("poster: S3 cache put failed, serving uncached")
 	}
 	return b, nil
@@ -204,17 +249,36 @@ func (s *Handler) getPosterMetadata(ctx context.Context, db *pg.DB, t models.Con
 	// and we can return it directly. This keeps the served poster from the
 	// same source that produced the video_id (an invariant — see migration
 	// 51 and the Kinopoisk Unofficial mapper for the historical reason).
+	var dbMd *models.VideoMetadata
 	switch t {
 	case models.ContentTypeMovie:
 		mm, mmErr := models.GetMovieMetadataByVideoID(ctx, db, videoID)
-		if mmErr == nil && mm != nil && mm.VideoMetadata != nil && mm.PosterURL != "" {
-			return mm.VideoMetadata, nil
+		if mmErr == nil && mm != nil && mm.VideoMetadata != nil && (mm.PosterURL != "" || mm.PosterHorizontalURL != "") {
+			dbMd = mm.VideoMetadata
 		}
 	case models.ContentTypeSeries:
 		sm, smErr := models.GetSeriesMetadataByVideoID(ctx, db, videoID)
-		if smErr == nil && sm != nil && sm.VideoMetadata != nil && sm.PosterURL != "" {
-			return sm.VideoMetadata, nil
+		if smErr == nil && sm != nil && sm.VideoMetadata != nil && (sm.PosterURL != "" || sm.PosterHorizontalURL != "") {
+			dbMd = sm.VideoMetadata
 		}
+	}
+
+	// If we found database metadata, but it is missing the horizontal poster url,
+	// try to look it up in the mapper-specific caches (like tmdb.info) which might
+	// contain the backdrop_path. This acts as a graceful fallback for previously
+	// enriched items before migration 55.
+	if dbMd != nil {
+		if dbMd.PosterHorizontalURL != "" {
+			return dbMd, nil
+		}
+		if s.enricher != nil {
+			fallbackMd, err := s.enricher.LookupByVideoID(ctx, videoID, t)
+			if err == nil && fallbackMd != nil && fallbackMd.PosterHorizontalURL != "" {
+				dbMd.PosterHorizontalURL = fallbackMd.PosterHorizontalURL
+				return dbMd, nil
+			}
+		}
+		return dbMd, nil
 	}
 
 	// Fallback: AI/discover writes only into mapper-specific caches
@@ -222,7 +286,7 @@ func (s *Handler) getPosterMetadata(ctx context.Context, db *pg.DB, t models.Con
 	// movie_metadata. The mapper chain resolves those.
 	if s.enricher != nil {
 		md, err = s.enricher.LookupByVideoID(ctx, videoID, t)
-		if err == nil && md != nil && md.PosterURL != "" {
+		if err == nil && md != nil && (md.PosterURL != "" || md.PosterHorizontalURL != "") {
 			return md, nil
 		}
 	}
@@ -230,6 +294,9 @@ func (s *Handler) getPosterMetadata(ctx context.Context, db *pg.DB, t models.Con
 }
 
 func (s *PosterArgs) Key() string {
+	if s.horizontal {
+		return fmt.Sprintf("horizontal/%v/%v/%v.%v", s.t, s.imdbID, s.width, s.format)
+	}
 	return fmt.Sprintf("%v/%v/%v.%v", s.t, s.imdbID, s.width, s.format)
 }
 

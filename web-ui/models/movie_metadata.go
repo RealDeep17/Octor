@@ -49,6 +49,7 @@ func UpsertMovieMetadata(
 			year = EXCLUDED.year,
 			plot = EXCLUDED.plot,
 			poster_url = EXCLUDED.poster_url,
+			poster_horizontal_url = EXCLUDED.poster_horizontal_url,
 			rating = EXCLUDED.rating
 		`).
 		Returning("movie_metadata_id").

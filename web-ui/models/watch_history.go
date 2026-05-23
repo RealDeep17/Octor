@@ -27,10 +27,12 @@ type WatchHistory struct {
 	Torrent *TorrentResource `pg:"rel:has-one,fk:resource_id"`
 
 	// Enriched fields (not stored in DB)
-	Title       string      `pg:"-"`
-	PosterURL   string      `pg:"-"`
-	VideoID     string      `pg:"-"`
-	ContentType ContentType `pg:"-"`
+	Title               string      `pg:"-"`
+	PosterURL           string      `pg:"-"`
+	PosterHorizontalURL string      `pg:"-"`
+	VideoID             string      `pg:"-"`
+	ContentType         ContentType `pg:"-"`
+	PosterLayout        string      `pg:"-"`
 }
 
 // Progress returns watch progress as percentage (0-100).
@@ -269,11 +271,12 @@ func GetRecentlyWatched(ctx context.Context, db *pg.DB, userID uuid.UUID, limit 
 }
 
 type enrichedMeta struct {
-	ResourceID  string      `pg:"resource_id"`
-	Title       string      `pg:"title"`
-	PosterURL   string      `pg:"poster_url"`
-	VideoID     string      `pg:"video_id"`
-	ContentType ContentType `pg:"-"`
+	ResourceID          string      `pg:"resource_id"`
+	Title               string      `pg:"title"`
+	PosterURL           string      `pg:"poster_url"`
+	PosterHorizontalURL string      `pg:"poster_horizontal_url"`
+	VideoID             string      `pg:"video_id"`
+	ContentType         ContentType `pg:"-"`
 }
 
 // enrichWatchHistoryParallel fills Title and PosterURL from movie/series data,
@@ -289,6 +292,7 @@ func enrichWatchHistoryParallel(ctx context.Context, db *pg.DB, list []*WatchHis
 			ColumnExpr("movie.resource_id").
 			ColumnExpr("COALESCE(mmd.title, movie.title) AS title").
 			ColumnExpr("mmd.poster_url").
+			ColumnExpr("mmd.poster_horizontal_url").
 			ColumnExpr("mmd.video_id").
 			Join("LEFT JOIN movie_metadata AS mmd ON mmd.movie_metadata_id = movie.movie_metadata_id").
 			Where("movie.resource_id IN (?)", pg.In(resourceIDs)).
@@ -300,6 +304,7 @@ func enrichWatchHistoryParallel(ctx context.Context, db *pg.DB, list []*WatchHis
 			ColumnExpr("series.resource_id").
 			ColumnExpr("COALESCE(smd.title, series.title) AS title").
 			ColumnExpr("smd.poster_url").
+			ColumnExpr("smd.poster_horizontal_url").
 			ColumnExpr("smd.video_id").
 			Join("LEFT JOIN series_metadata AS smd ON smd.series_metadata_id = series.series_metadata_id").
 			Where("series.resource_id IN (?)", pg.In(resourceIDs)).
@@ -328,15 +333,13 @@ func enrichWatchHistoryParallel(ctx context.Context, db *pg.DB, list []*WatchHis
 			if m.PosterURL != "" && m.VideoID != "" {
 				wh.PosterURL = fmt.Sprintf("/lib/%s/poster/%s/240.jpg", m.ContentType, m.VideoID)
 			}
+			if m.PosterHorizontalURL != "" && m.VideoID != "" {
+				wh.PosterHorizontalURL = fmt.Sprintf("/lib/%s/poster-h/%s/480.jpg", m.ContentType, m.VideoID)
+			}
 		}
 	}
 }
 
-// filterOutFullyWatched removes items from the list whose corresponding
-// movie/series has been marked as fully watched in user_video_status (either
-// manually by the user or automatically after completing all episodes). The
-// user declared the work finished — it should not appear in "continue
-// watching" even if individual files still have sub-90% progress.
 func filterOutFullyWatched(ctx context.Context, db *pg.DB, list []*WatchHistory, userID uuid.UUID) []*WatchHistory {
 	var movieIDs, seriesIDs []string
 	for _, wh := range list {
@@ -353,12 +356,15 @@ func filterOutFullyWatched(ctx context.Context, db *pg.DB, list []*WatchHistory,
 
 	watchedMovies := map[string]bool{}
 	watchedSeries := map[string]bool{}
+	movieStatuses := map[string]*MovieStatus{}
+	seriesStatuses := map[string]*SeriesStatus{}
 
 	g, gctx := errgroup.WithContext(ctx)
 
 	if len(movieIDs) > 0 {
 		g.Go(func() error {
 			if m, err := GetMovieStatusMap(gctx, db, userID, movieIDs); err == nil {
+				movieStatuses = m
 				for vid, st := range m {
 					if st.Watched {
 						watchedMovies[vid] = true
@@ -371,6 +377,7 @@ func filterOutFullyWatched(ctx context.Context, db *pg.DB, list []*WatchHistory,
 	if len(seriesIDs) > 0 {
 		g.Go(func() error {
 			if m, err := GetSeriesStatusMap(gctx, db, userID, seriesIDs); err == nil {
+				seriesStatuses = m
 				for vid, st := range m {
 					if st.Watched {
 						watchedSeries[vid] = true
@@ -383,17 +390,24 @@ func filterOutFullyWatched(ctx context.Context, db *pg.DB, list []*WatchHistory,
 
 	_ = g.Wait()
 
-	if len(watchedMovies) == 0 && len(watchedSeries) == 0 {
-		return list
-	}
 	filtered := list[:0]
 	for _, wh := range list {
 		if wh.VideoID != "" {
-			if wh.ContentType == ContentTypeMovie && watchedMovies[wh.VideoID] {
-				continue
+			if wh.ContentType == ContentTypeMovie {
+				if watchedMovies[wh.VideoID] {
+					continue
+				}
+				if st, ok := movieStatuses[wh.VideoID]; ok {
+					wh.PosterLayout = st.PosterLayout
+				}
 			}
-			if wh.ContentType == ContentTypeSeries && watchedSeries[wh.VideoID] {
-				continue
+			if wh.ContentType == ContentTypeSeries {
+				if watchedSeries[wh.VideoID] {
+					continue
+				}
+				if st, ok := seriesStatuses[wh.VideoID]; ok {
+					wh.PosterLayout = st.PosterLayout
+				}
 			}
 		}
 		filtered = append(filtered, wh)

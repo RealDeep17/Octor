@@ -207,6 +207,7 @@ type User struct {
 	Expired       bool
 	IsNew         bool
 	Tier          string
+	Skin          string
 }
 
 func (s *User) HasAuth() bool {
@@ -221,6 +222,7 @@ func makeUserFromContext(c *gin.Context) *User {
 		u.ID = su.UserID
 		u.Email = su.Email
 		u.Tier = su.Tier
+		u.Skin = su.Skin
 	}
 	inc := c.Request.Context().Value(IsNewContext{})
 	isNew, ok := inc.(bool)

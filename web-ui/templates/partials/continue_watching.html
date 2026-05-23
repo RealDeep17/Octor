@@ -21,11 +21,24 @@
         <!-- Card Ribbon -->
         <div class="flex gap-4 overflow-x-auto pb-4 scrollbar-none">
             {{ range .Data }}
-            <a href="{{ langPath $.Ctx.Lang (printf "/%s" .ResourceID) }}?file={{ .Path }}#action=stream" data-async-target="main" data-umami-event="continue-watching-click" class="shrink-0 w-[140px] group cursor-pointer relative">
-                <div class="relative aspect-[2/3] rounded-xl overflow-hidden border border-o-line group-hover:border-o-primary/30 group-hover:shadow-[0_0_20px_rgba(var(--o-glow-rgb),0.1)] transition-all duration-300">
-                    {{ if .PosterURL }}
-                    <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                         src="{{ .PosterURL }}" alt="{{ .DisplayName }}" loading="lazy" />
+            {{ $isHorizontal := and .PosterHorizontalURL (ne .PosterLayout "vertical") }}
+            <a href="{{ langPath $.Ctx.Lang (printf "/%s" .ResourceID) }}?file={{ .Path }}#action=stream" data-async-target="main" data-umami-event="continue-watching-click" class="shrink-0 group cursor-pointer relative transition-all duration-300 {{ if $isHorizontal }}w-[315px]{{ else }}w-[140px]{{ end }}">
+                <input type="checkbox" id="toggle-cw-{{ .ResourceID }}" 
+                       class="layout-toggle-checkbox peer hidden" 
+                       data-video-type="{{ .ContentType }}"
+                       data-video-id="{{ .VideoID }}"
+                       {{ if $isHorizontal }}checked{{ end }} 
+                       {{ if not (and .PosterURL .PosterHorizontalURL) }}disabled{{ end }} />
+                <div class="relative aspect-[2/3] peer-checked:aspect-[3/2] rounded-xl overflow-hidden border border-o-line group-hover:border-o-primary/30 group-hover:shadow-[0_0_20px_rgba(var(--o-glow-rgb),0.1)] transition-all duration-300 peer-checked:[&_.vertical-img]:hidden peer-checked:[&_.horizontal-img]:block peer-checked:[&_.vertical-icon]:hidden peer-checked:[&_.horizontal-icon]:block">
+                    {{ if or .PosterURL .PosterHorizontalURL }}
+                        {{ if .PosterURL }}
+                        <img class="vertical-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 {{ if $isHorizontal }}hidden{{ end }}"
+                             src="{{ .PosterURL }}" alt="{{ .DisplayName }}" loading="lazy" />
+                        {{ end }}
+                        {{ if .PosterHorizontalURL }}
+                        <img class="horizontal-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 {{ if not $isHorizontal }}hidden{{ end }}"
+                             src="{{ .PosterHorizontalURL }}" alt="{{ .DisplayName }}" loading="lazy" />
+                        {{ end }}
                     {{ else }}
                     <div class="w-full h-full bg-gradient-to-br from-o-purple/20 via-o-primary/10 to-o-cyan/15 flex items-center justify-center">
                         <div class="text-center font-bold text-sm p-2 text-o-purpleL/60 line-clamp-3">{{ .DisplayName }}</div>
@@ -57,5 +70,31 @@
         </div>
     </div>
 </div>
+<script>
+(function() {
+    const hasAuth = {{ if $.Ctx.User | hasAuth }}true{{ else }}false{{ end }};
+    document.querySelectorAll('#continue-watching-ribbon .layout-toggle-checkbox').forEach(cb => {
+        const type = cb.getAttribute('data-video-type');
+        const id = cb.getAttribute('data-video-id');
+        if (type && id) {
+            if (hasAuth) {
+                // Sync localStorage with DB preference which is already rendered
+                localStorage.setItem('octor-layout-' + type + '-' + id, cb.checked ? 'horizontal' : 'vertical');
+            } else {
+                const local = localStorage.getItem('octor-layout-' + type + '-' + id);
+                if (local === 'horizontal') {
+                    cb.checked = true;
+                    cb.parentElement.classList.remove('w-[140px]');
+                    cb.parentElement.classList.add('w-[315px]');
+                } else if (local === 'vertical') {
+                    cb.checked = false;
+                    cb.parentElement.classList.remove('w-[315px]');
+                    cb.parentElement.classList.add('w-[140px]');
+                }
+            }
+        }
+    });
+})();
+</script>
 {{ end }}
 {{ end }}

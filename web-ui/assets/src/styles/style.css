@@ -239,7 +239,7 @@
 
 /* ===== Component Primitives ===== */
 
-.o-card-frame {
+.o-card-frame, .w-card-frame {
   background-color: var(--o-card);
   border: 1px solid var(--o-line);
   border-radius: 0.75rem;
@@ -251,13 +251,16 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   container-type: inline-size;
 }
-.o-card-frame:hover {
+.o-card-frame:hover, .w-card-frame:hover {
   border-color: var(--o-primary);
   transform: translateY(-4px);
   box-shadow: 0 10px 30px -10px rgba(var(--o-glow-rgb), 0.3);
 }
+.w-card-frame.is-watched {
+  opacity: 0.7;
+}
 
-.o-card-title {
+.o-card-title, .w-card-title {
   font-weight: 600;
   font-size: 0.875rem;
   line-height: 1.25rem;
@@ -267,8 +270,74 @@
   overflow: hidden;
   transition: color 0.15s;
 }
-.group:hover .o-card-title {
+.group:hover .o-card-title, .group:hover .w-card-title {
   color: var(--o-primary-l);
+}
+
+/* Active overlay badge on a poster — has text label. */
+.w-card-badge {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 9999px;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  transition: background-color 0.15s, color 0.15s;
+}
+.w-card-badge:hover {
+  background-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Ghost overlay — icon-only, hover-revealed on desktop, faded on touch. */
+.w-card-badge-ghost {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  color: var(--o-muted);
+  opacity: 0;
+  transition: background-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.group:hover .w-card-badge-ghost {
+  opacity: 1;
+}
+.w-card-badge-ghost:hover {
+  background-color: rgba(0, 0, 0, 0.9);
+}
+@media (hover: none) {
+  .w-card-badge-ghost {
+    opacity: 0.5;
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+}
+
+/* Container-query responsive: hide badge text labels and show compact
+   stars when the card is narrower than 210px. */
+@container (max-width: 209px) {
+  .w-card-badge-label {
+    display: none;
+  }
+  .w-card-badge {
+    padding: 0.375rem;
+  }
+  .w-card-stars-full {
+    display: none;
+  }
+}
+@container (min-width: 210px) {
+  .w-card-stars-compact {
+    display: none;
+  }
 }
 
 /* Buttons with high-contrast content logic */

@@ -30,12 +30,14 @@ func RegisterHandler(r *gin.Engine, svc *uvs.Service) {
 	gr.POST("/movie/:video_id/unmark", h.unmarkMovie)
 	gr.POST("/movie/:video_id/rate", h.rateMovie)
 	gr.POST("/movie/:video_id/unrate", h.unrateMovie)
+	gr.POST("/movie/:video_id/layout", h.setMoviePosterLayout)
 
 	// Series (whole series watched)
 	gr.POST("/series/:video_id/mark", h.markSeries)
 	gr.POST("/series/:video_id/unmark", h.unmarkSeries)
 	gr.POST("/series/:video_id/rate", h.rateSeries)
 	gr.POST("/series/:video_id/unrate", h.unrateSeries)
+	gr.POST("/series/:video_id/layout", h.setSeriesPosterLayout)
 
 	// Individual episodes
 	gr.POST("/series/:video_id/episode/:season/:episode/mark", h.markEpisode)
@@ -53,8 +55,9 @@ type userStatusRequest struct {
 }
 
 type userStatusItem struct {
-	Watched bool  `json:"watched"`
-	Rating  int16 `json:"rating,omitempty"`
+	Watched bool   `json:"watched"`
+	Rating  int16  `json:"rating,omitempty"`
+	Layout  string `json:"layout,omitempty"`
 }
 
 type userStatusResponse struct {
@@ -88,6 +91,7 @@ func (h *Handler) filterUserStatus(c *gin.Context) {
 		resp.Statuses[vid] = &userStatusItem{
 			Watched: st.Watched,
 			Rating:  st.Rating,
+			Layout:  st.Layout,
 		}
 	}
 	c.JSON(http.StatusOK, resp)
@@ -354,4 +358,54 @@ func parseSeasonEpisode(c *gin.Context) (int16, int16, error) {
 		return 0, 0, errors.New("invalid episode")
 	}
 	return int16(s), int16(e), nil
+}
+
+type layoutRequest struct {
+	Layout string `json:"layout" form:"layout" binding:"required"`
+}
+
+func (h *Handler) setMoviePosterLayout(c *gin.Context) {
+	user := auth.GetUserFromContext(c)
+	videoID := c.Param("video_id")
+	if videoID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "video_id is required"})
+		return
+	}
+	var req layoutRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if user == nil || !user.HasAuth() {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	if err := h.svc.SetMoviePosterLayout(c.Request.Context(), user.ID, videoID, req.Layout); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func (h *Handler) setSeriesPosterLayout(c *gin.Context) {
+	user := auth.GetUserFromContext(c)
+	videoID := c.Param("video_id")
+	if videoID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "video_id is required"})
+		return
+	}
+	var req layoutRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if user == nil || !user.HasAuth() {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	if err := h.svc.SetSeriesPosterLayout(c.Request.Context(), user.ID, videoID, req.Layout); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }

@@ -65,6 +65,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 		AllowMethods: []string{"GET"},
 	}))
 	plg.GET("/:type/poster/:imdb_id/:file", h.poster)
+	plg.GET("/:type/poster-h/:imdb_id/:file", h.posterHorizontal)
 	plg.GET("/episode/still/:video_id/:season/:episode/:file", h.still)
 	lg.POST("/add", h.add)
 	lg.POST("/remove", h.remove)

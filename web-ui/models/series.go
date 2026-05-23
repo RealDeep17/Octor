@@ -20,8 +20,9 @@ type Series struct {
 	UpdatedAt        time.Time  `pg:"updated_at,default:now()"`
 
 	// Transient: populated by handlers from series_status for UI badges.
-	UserWatched bool   `pg:"-"`
-	UserRating  *int16 `pg:"-"`
+	UserWatched      bool   `pg:"-"`
+	UserRating       *int16 `pg:"-"`
+	UserPosterLayout string `pg:"-"`
 
 	Episodes       []*Episode      `pg:"rel:has-many,fk:series_id"`
 	MediaInfo      *MediaInfo      `pg:"rel:has-one,fk:resource_id"`

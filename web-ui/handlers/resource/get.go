@@ -196,16 +196,22 @@ func (s *Handler) prepareGetData(ctx context.Context, args *GetArgs) (*GetData, 
 			// episodes should still appear as watched in the file list here.
 			if d.Movie != nil && d.Movie.MovieMetadata != nil && d.Movie.MovieMetadata.VideoID != "" {
 				d.MovieStatus, _ = models.GetMovieStatus(ctx, db, args.User.ID, d.Movie.MovieMetadata.VideoID)
-				if d.MovieStatus != nil && d.MovieStatus.Watched && d.Movie.Path != nil {
-					if d.WatchedPaths == nil {
-						d.WatchedPaths = map[string]bool{}
+				if d.MovieStatus != nil {
+					d.Movie.UserPosterLayout = d.MovieStatus.PosterLayout
+					if d.MovieStatus.Watched && d.Movie.Path != nil {
+						if d.WatchedPaths == nil {
+							d.WatchedPaths = map[string]bool{}
+						}
+						d.WatchedPaths[*d.Movie.Path] = true
 					}
-					d.WatchedPaths[*d.Movie.Path] = true
 				}
 			}
 			if d.Series != nil && d.Series.SeriesMetadata != nil && d.Series.SeriesMetadata.VideoID != "" {
 				videoID := d.Series.SeriesMetadata.VideoID
 				d.SeriesStatus, _ = models.GetSeriesStatus(ctx, db, args.User.ID, videoID)
+				if d.SeriesStatus != nil {
+					d.Series.UserPosterLayout = d.SeriesStatus.PosterLayout
+				}
 				seriesWatched := d.SeriesStatus != nil && d.SeriesStatus.Watched
 
 				epMap, _ := models.GetEpisodeStatusMapForSeries(ctx, db, args.User.ID, videoID)

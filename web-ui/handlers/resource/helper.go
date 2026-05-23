@@ -249,6 +249,62 @@ func (s *Helper) GetEnrichedPosterURL(gd *GetData) string {
 	return fmt.Sprintf("/lib/%s/poster/%s/480.jpg", ct, md.VideoID)
 }
 
+func (s *Helper) HasEnrichedPosterHorizontal(gd *GetData) bool {
+	md := s.getMetadata(gd)
+	if md == nil {
+		return false
+	}
+	return md.PosterHorizontalURL != "" || strings.Contains(md.PosterURL, "theporndb.net")
+}
+
+func (s *Helper) GetEnrichedPosterHorizontalURL(gd *GetData) string {
+	md := s.getMetadata(gd)
+	if md == nil || md.VideoID == "" {
+		return ""
+	}
+	ct := "movie"
+	if gd.Series != nil {
+		ct = "series"
+	}
+	return fmt.Sprintf("/lib/%s/poster-h/%s/720.jpg", ct, md.VideoID)
+}
+
+func (s *Helper) GetEnrichedPosterHorizontal480URL(gd *GetData) string {
+	md := s.getMetadata(gd)
+	if md == nil || md.VideoID == "" {
+		return ""
+	}
+	ct := "movie"
+	if gd.Series != nil {
+		ct = "series"
+	}
+	return fmt.Sprintf("/lib/%s/poster-h/%s/480.jpg", ct, md.VideoID)
+}
+
+func (s *Helper) GetEnrichedPosterLayout(gd *GetData) string {
+	if !s.HasEnrichedPosterHorizontal(gd) {
+		return "vertical"
+	}
+	var layout string
+	if gd.Movie != nil {
+		layout = gd.Movie.UserPosterLayout
+	} else if gd.Series != nil {
+		layout = gd.Series.UserPosterLayout
+	}
+	if layout != "" {
+		return layout
+	}
+	return "vertical"
+}
+
+func (s *Helper) GetEnrichedVideoID(gd *GetData) string {
+	md := s.getMetadata(gd)
+	if md == nil {
+		return ""
+	}
+	return md.VideoID
+}
+
 func (s *Helper) IsEnrichedMovie(gd *GetData) bool {
 	return gd.Movie != nil && gd.Movie.GetMetadata() != nil
 }

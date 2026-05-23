@@ -52,6 +52,11 @@ func (s *TMDB) makeVideoMetadata(info *tm.Info) *models.VideoMetadata {
 		posterURL = s.api.PosterURL(pp, "w500")
 	}
 
+	var posterHorizontalURL string
+	if bp, ok := info.Metadata["backdrop_path"].(string); ok && bp != "" {
+		posterHorizontalURL = s.api.PosterURL(bp, "w780")
+	}
+
 	var plot string
 	if ov, ok := info.Metadata["overview"].(string); ok {
 		plot = ov
@@ -65,12 +70,13 @@ func (s *TMDB) makeVideoMetadata(info *tm.Info) *models.VideoMetadata {
 	videoID := s.resolveVideoID(info)
 
 	return &models.VideoMetadata{
-		VideoID:   videoID,
-		Title:     info.Title,
-		Year:      info.Year,
-		Plot:      plot,
-		PosterURL: posterURL,
-		Rating:    rating,
+		VideoID:             videoID,
+		Title:               info.Title,
+		Year:                info.Year,
+		Plot:                plot,
+		PosterURL:           posterURL,
+		PosterHorizontalURL: posterHorizontalURL,
+		Rating:              rating,
 	}
 }
 

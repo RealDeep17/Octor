@@ -58,6 +58,17 @@ func (s *VideoContentHelper) GetOriginalPoster(m models.VideoContentWithMetadata
 	return ""
 }
 
+func (s *VideoContentHelper) HasPosterHorizontal(m models.VideoContentWithMetadata) bool {
+	return s.GetOriginalPosterHorizontal(m) != ""
+}
+
+func (s *VideoContentHelper) GetOriginalPosterHorizontal(m models.VideoContentWithMetadata) string {
+	if m.GetMetadata() != nil {
+		return m.GetMetadata().PosterHorizontalURL
+	}
+	return ""
+}
+
 func (s *VideoContentHelper) HasVideoID(m models.VideoContentWithMetadata) bool {
 	return m.GetMetadata() != nil && m.GetMetadata().VideoID != ""
 }
@@ -75,6 +86,18 @@ func (s *VideoContentHelper) GetVideoType(m models.VideoContentWithMetadata) str
 
 func (s *VideoContentHelper) GetCachedPoster240(m models.VideoContentWithMetadata) string {
 	return fmt.Sprintf("/lib/%v/poster/%v/240.jpg", m.GetContentType(), m.GetMetadata().VideoID)
+}
+
+func (s *VideoContentHelper) GetCachedPosterHorizontal500(m models.VideoContentWithMetadata) string {
+	return fmt.Sprintf("/lib/%v/poster-h/%v/500.jpg", m.GetContentType(), m.GetMetadata().VideoID)
+}
+
+func (s *VideoContentHelper) GetCachedPosterHorizontal480(m models.VideoContentWithMetadata) string {
+	return fmt.Sprintf("/lib/%v/poster-h/%v/480.jpg", m.GetContentType(), m.GetMetadata().VideoID)
+}
+
+func (s *VideoContentHelper) GetCachedPosterHorizontal720(m models.VideoContentWithMetadata) string {
+	return fmt.Sprintf("/lib/%v/poster-h/%v/720.jpg", m.GetContentType(), m.GetMetadata().VideoID)
 }
 
 func (s *VideoContentHelper) HasEpisodeStill(ep *models.Episode) bool {

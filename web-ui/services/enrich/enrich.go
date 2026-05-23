@@ -469,7 +469,7 @@ func (s *Enricher) LookupByVideoID(ctx context.Context, videoID string, ct model
 			log.WithError(err).WithField("mapper", m.GetName()).WithField("video_id", videoID).Warn("direct lookup failed")
 			continue
 		}
-		if md != nil && md.PosterURL != "" {
+		if md != nil && (md.PosterURL != "" || md.PosterHorizontalURL != "") {
 			return md, nil
 		}
 	}
@@ -832,7 +832,7 @@ func (s *Enricher) tryUpgrade(ctx context.Context, md *models.VideoMetadata, t m
 			log.WithError(err).WithField("mapper", s.mappers[j].GetName()).WithField("video_id", md.VideoID).Warn("upgrade lookup failed")
 			continue
 		}
-		if up != nil && up.PosterURL != "" {
+		if up != nil && (up.PosterURL != "" || up.PosterHorizontalURL != "") {
 			log.Infof("upgraded metadata for %v via mapper %q", md.VideoID, s.mappers[j].GetName())
 			return up
 		}

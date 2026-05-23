@@ -200,6 +200,7 @@ func (s *Service) UnrateSeries(ctx context.Context, userID uuid.UUID, videoID st
 type UserStatus struct {
 	Watched bool
 	Rating  int16 // 0 = unrated
+	Layout  string
 }
 
 // FilterUserStatus returns watched and rating state for the given IMDB ids
@@ -215,7 +216,7 @@ func (s *Service) FilterUserStatus(ctx context.Context, userID uuid.UUID, videoI
 		return nil, err
 	}
 	for vid, st := range movies {
-		us := &UserStatus{Watched: st.Watched}
+		us := &UserStatus{Watched: st.Watched, Layout: st.PosterLayout}
 		if st.Rating != nil {
 			us.Rating = *st.Rating
 		}
@@ -226,13 +227,27 @@ func (s *Service) FilterUserStatus(ctx context.Context, userID uuid.UUID, videoI
 		return nil, err
 	}
 	for vid, st := range series {
-		us := &UserStatus{Watched: st.Watched}
+		us := &UserStatus{Watched: st.Watched, Layout: st.PosterLayout}
 		if st.Rating != nil {
 			us.Rating = *st.Rating
 		}
 		result[vid] = us
 	}
 	return result, nil
+}
+
+func (s *Service) SetMoviePosterLayout(ctx context.Context, userID uuid.UUID, videoID string, layout string) error {
+	if videoID == "" {
+		return errors.New("videoID is required")
+	}
+	return s.store.UpsertMoviePosterLayout(ctx, userID, videoID, layout)
+}
+
+func (s *Service) SetSeriesPosterLayout(ctx context.Context, userID uuid.UUID, videoID string, layout string) error {
+	if videoID == "" {
+		return errors.New("videoID is required")
+	}
+	return s.store.UpsertSeriesPosterLayout(ctx, userID, videoID, layout)
 }
 
 // checkAndMarkSeriesComplete inspects the per-episode watched count for a
