@@ -88,7 +88,7 @@ def save_settings(settings):
 # ── Filename cleaning / parsing ────────────────────────────────────────────────
 # namer's cleanup regexes — strip codec/quality junk before fuzzy matching
 _RE_CLEANUP = [
-    re.compile(r'(?i)\b(XXX|1080p|720p|2160p|4[Kk]|WEB[-. ]?DL|WEBRip|HDRip|BluRay|x264|x265|H\.?264|H\.?265|MP4|WRB|XC|SPLIT[-. ]?SCENES?|BTS|mkv|mp4|avi|wmv|mov)\b'),
+    re.compile(r'(?i)\b(XXX|1080p|720p|2160p|4[Kk]|WEB[-. ]?DL|WEBRip|HDRip|BluRay|x264|x265|H\.?264|H\.?265|MP4|WRB|XC|SPLIT[-. ]?SCENES?|BTS|mkv|mp4|avi|wmv|mov|rq)\b'),
     re.compile(r'(?i)\b(PROPER|REPACK|READNFO|INTERNAL|LIMITED)\b'),
     re.compile(r'\[.*?\]'),
     re.compile(r'\(.*?\)'),
@@ -108,7 +108,7 @@ def name_cleaner(name: str) -> str:
 # indicate adult content when found in a torrent title.
 # Rule: only include names that CANNOT appear in mainstream movie/show titles.
 _NSFW_STUDIOS = {
-    "18eighteen", "2chickssametime", "40somethingmag", "50plusmilfs", "60plusmilfs", "8thstreetlatinas", "adamevepictures", "adulttime",
+    "analangels", "anal-angels", "pornpros", "18eighteen", "2chickssametime", "40somethingmag", "50plusmilfs", "60plusmilfs", "8thstreetlatinas", "adamevepictures", "adulttime",
     "alsscan", "americandaydreams", "amourbabes", "analintroductions", "analmom", "assparade", "babes", "babygotboobs", "badoinkvr", "bellesafilms",
     "bamvisions", "bangbros", "bangbus", "bangcasting", "bangpov", "bffs", "bifuckkink", "bigbuttslikeitbig",
     "bignaturals", "bigtitsatschool", "bigtitsatwork", "bigtitsboss", "bigtitsinsports", "bigtitsinuniform", "bigtitsroundasses", "bigwetbutts",
@@ -399,6 +399,14 @@ def extract_jav_code(title: str) -> Optional[str]:
     if m:
         prefix = m.group(1).upper()
         number = m.group(2)
+        
+        # Check if the number is part of a date (e.g. YY-MM-DD or YYYY-MM-DD)
+        remaining = stem[m.start(2):]
+        if re.match(r'^\d{2,4}[-._]\d{2}[-._]\d{2}', remaining):
+            return None
+
+        if prefix.lower() == "vr" and number in ("180", "360"):
+            return None
         if prefix.lower() in _NOT_JAV_PREFIXES:
             return None
         # Reject if the prefix is a known western adult studio
@@ -406,6 +414,9 @@ def extract_jav_code(title: str) -> Optional[str]:
             return None
         # Reject if the whole stem is just the "code" and it looks like a season tag
         if re.match(r'^S\d{1,2}$', prefix, re.I):
+            return None
+        # Reject if the number looks like a year (e.g. 1980-2035)
+        if len(number) == 4 and 1980 <= int(number) <= 2035:
             return None
         return f"{prefix}-{number.zfill(3)}"
     return None
@@ -526,25 +537,82 @@ def score_result(parsed: dict, scene: dict) -> float:
             if matched:
                 score += 100  # Network/parent match fallback
             else:
-                score -= 150  # Explicit site mismatch penalty
+                # SKIP penalty if either site is a generic platform
+                _GENERIC_PLATFORMS = {"onlyfans", "fansly", "manyvids", "fansdb", "patreon", "fans"}
+                scene_site_clean = re.sub(r'[^a-z0-9]', '', unidecode(scene.get("site") or "").lower())
+                is_platform = (parsed_site in _GENERIC_PLATFORMS) or (scene_site_clean in _GENERIC_PLATFORMS)
+                if not is_platform:
+                    score -= 150  # Explicit site mismatch penalty
     else:
         # No site info in filename — don't penalise
         score += 50
 
-    # Date match
-    if parsed.get("date") and scene.get("date"):
-        if parsed["date"] == scene["date"][:10]:
-            score += 100
-    elif not parsed.get("date"):
+    # Date match / mismatch
+    if parsed.get("date"):
+        if scene.get("date"):
+            try:
+                p_date_str = parsed["date"]
+                s_date_str = scene["date"][:10]
+                from datetime import datetime
+                p_date = datetime.strptime(p_date_str, "%Y-%m-%d").date()
+                s_date = datetime.strptime(s_date_str, "%Y-%m-%d").date()
+                diff_days = abs((p_date - s_date).days)
+                if diff_days <= 1:
+                    score += 100
+                elif diff_days <= 2:
+                    score += 50
+                else:
+                    # If title fuzzy match is very high, and it's not performer-only, reduce date mismatch penalty
+                    t_score = fuzzy_score(parsed.get("name"), scene.get("title"))
+                    is_only_performer = False
+                    if parsed.get("name"):
+                        for p in scene.get("performers") or []:
+                            p_name = p.get("name") or (p.get("performer") or {}).get("name")
+                            if p_name:
+                                if fuzzy_score(parsed["name"], p_name) >= 90.0:
+                                    is_only_performer = True
+                                    break
+                    if t_score >= 85.0 and not is_only_performer:
+                        score -= 50  # Minor penalty for date mismatch when title is a strong match
+                    else:
+                        score -= 300  # Hard penalty for date mismatch of > 2 days
+            except Exception:
+                if parsed["date"] == scene["date"][:10]:
+                    score += 100
+                else:
+                    t_score = fuzzy_score(parsed.get("name"), scene.get("title"))
+                    is_only_performer = False
+                    if parsed.get("name"):
+                        for p in scene.get("performers") or []:
+                            p_name = p.get("name") or (p.get("performer") or {}).get("name")
+                            if p_name:
+                                if fuzzy_score(parsed["name"], p_name) >= 90.0:
+                                    is_only_performer = True
+                                    break
+                    if t_score >= 85.0 and not is_only_performer:
+                        score -= 50
+                    else:
+                        score -= 300
+        else:
+            # Filename has a date but database scene does not — do not penalise, but no boost
+            pass
+    else:
         score += 50  # no date info — don't penalise
 
     # Performer match boost
     perf_match = False
     raw_title = parsed.get("raw", "").lower()
+    parsed_site_clean = re.sub(r'[^a-z0-9]', '', unidecode(parsed.get("site") or "").lower()) if parsed.get("site") else ""
+    
     for p in scene.get("performers") or []:
         name = p.get("name") or (p.get("performer") or {}).get("name")
         if name:
             name_lower = name.lower()
+            # If the performer name is the same as the parsed site (e.g. Jules Jordan), skip it for performer boost
+            perf_clean = re.sub(r'[^a-z0-9]', '', unidecode(name_lower).lower())
+            if parsed_site_clean and (parsed_site_clean == perf_clean or perf_clean in parsed_site_clean or parsed_site_clean in perf_clean):
+                continue
+                
             if name_lower in raw_title:
                 perf_match = True
                 break
@@ -557,17 +625,43 @@ def score_result(parsed: dict, scene: dict) -> float:
     if perf_match:
         score += 150
 
-    # Name fuzzy match against scene title + performer names
-    if parsed.get("name"):
-        candidates = []
-        if scene.get("title"):
-            candidates.append(scene["title"])
+    # Name fuzzy match against scene title only
+    if parsed.get("name") and scene.get("title"):
+        title_lower = scene["title"].lower()
+        
+        # Check if the scene title is just a performer's name
+        is_perf_title = False
         for p in scene.get("performers") or []:
-            name = p.get("name") or (p.get("performer") or {}).get("name")
-            if name:
-                candidates.append(name)
+            p_name = p.get("name") or (p.get("performer") or {}).get("name")
+            if p_name and p_name.lower() == title_lower:
+                is_perf_title = True
+                break
+                
+        if is_perf_title:
+            # Check if query has extra words not in the performer name
+            q_words = set(re.findall(r'[a-z0-9]+', parsed["name"].lower()))
+            t_words = set(re.findall(r'[a-z0-9]+', title_lower))
+            extra_words = q_words - t_words - {"ly", "rq", "mp4", "mkv", "avi", "wmv", "ts"}
+            if len(extra_words) >= 2:
+                score -= 150.0  # Apply strong penalty since filename has a scene title but candidate is a performer profile
 
-        name_score = best_candidate_score(parsed["name"], candidates)
+        # Check for unmatched scene title words (extra words in query that are not in candidate title nor performers)
+        if parsed.get("name") and scene.get("title"):
+            q_words = set(re.findall(r'[a-z0-9]{3,}', parsed["name"].lower()))
+            t_words = set(re.findall(r'[a-z0-9]{3,}', scene["title"].lower()))
+            p_words = set()
+            for p in scene.get("performers") or []:
+                name = p.get("name") or (p.get("performer") or {}).get("name")
+                if name:
+                    p_words.update(re.findall(r'[a-z0-9]{3,}', name.lower()))
+            
+            # Common stop words to ignore
+            stop_words = {"the", "and", "for", "with", "you", "your", "that", "this", "from", "her", "him", "she", "his", "out", "our", "all", "its", "under"}
+            extra_words = q_words - t_words - p_words - stop_words
+            if len(extra_words) >= 2:
+                score -= 350.0  # Apply strong penalty for unmatched scene title words
+
+        name_score = fuzzy_score(parsed["name"], scene["title"])
         score += name_score
 
     return score
@@ -809,7 +903,7 @@ def adult_enrichment_lookup(title: str) -> Optional[dict]:
         log(f"Perfect structured match found: '{best[0].get('title')}' score={best[1]:.1f}")
         return _to_omdb(best[0])
 
-    # Pass 6: Fallback searches with smart terms (TPDB raw, TPDB structured by site, StashDB)
+    # Pass 6: Fallback TPDB searches with smart terms (TPDB raw, TPDB structured by site)
     clean = name_cleaner(title)
     search_terms = get_search_terms(name or clean)
     for term in search_terms:
@@ -832,24 +926,32 @@ def adult_enrichment_lookup(title: str) -> Optional[dict]:
                 seen_ids.add(rid)
                 all_candidates.append(r)
 
-        # StashDB fallback
+    # Evaluate TPDB candidates first
+    best = _pick_best(parsed, all_candidates)
+    if best and best[1] >= MATCH_THRESHOLD:
+        scene, score = best
+        log(f"Best TPDB match: '{scene.get('title')}' score={score:.1f}")
+        return _to_omdb(scene)
+
+    # Only if TPDB matches are below threshold, try StashDB fallback
+    log("No high-confidence TPDB match found, falling back to StashDB")
+    stash_candidates: List[dict] = []
+    stash_seen_ids: set = set()
+    for term in search_terms:
         stash_results = stashdb_search(term)
         for r in stash_results:
             rid = r.get("id")
-            if rid and rid not in seen_ids:
-                seen_ids.add(rid)
-                all_candidates.append(r)
+            if rid and rid not in stash_seen_ids:
+                stash_seen_ids.add(rid)
+                stash_candidates.append(r)
 
-    if not all_candidates:
+    best_stash = _pick_best(parsed, stash_candidates)
+    if not best_stash:
         log(f"No candidates found for '{title}'")
         return None
 
-    best = _pick_best(parsed, all_candidates)
-    if not best:
-        return None
-
-    scene, score = best
-    log(f"Best match: '{scene.get('title')}' score={score:.1f} source={scene.get('_source')}")
+    scene, score = best_stash
+    log(f"Best StashDB match: '{scene.get('title')}' score={score:.1f}")
 
     if score < MATCH_THRESHOLD:
         log(f"Score {score:.1f} below threshold {MATCH_THRESHOLD} — rejected")
@@ -861,17 +963,28 @@ def _pick_best(parsed: dict, candidates: List[dict]) -> Optional[Tuple[dict, flo
     if not candidates:
         return None
     scored = []
+    q_name = parsed.get("name") or ""
     for c in candidates:
         score = score_result(parsed, c)
-        scored.append((c, score))
+        
+        # Calculate a tie-breaker score based on overall string similarity of the title
+        c_title = c.get("title") or ""
+        tie_breaker = fuzzy_score(q_name, c_title)
+        if q_name and c_title:
+            try:
+                tie_breaker += fuzz.ratio(q_name.lower(), c_title.lower()) * 0.1
+            except Exception:
+                pass
+                
+        scored.append((c, score, tie_breaker))
         perf_names = []
         for p in c.get("performers") or []:
             name = p.get("name") or (p.get("performer") or {}).get("name")
             if name:
                 perf_names.append(name)
-        log(f"Candidate: '{c.get('title')}' site='{c.get('site')}' date='{c.get('date')}' score={score:.1f} performers={perf_names}")
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return scored[0]
+        log(f"Candidate: '{c.get('title')}' site='{c.get('site')}' date='{c.get('date')}' score={score:.1f} tie_breaker={tie_breaker:.1f} performers={perf_names}")
+    scored.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    return scored[0][0], scored[0][1]
 
 # ── Convert scene to OMDB-compatible response ─────────────────────────────────
 def _year_from_date(value: Any) -> str:
@@ -931,6 +1044,79 @@ def _to_omdb(scene: dict) -> dict:
         "Response":   "True",
     }
 
+
+_STASHDB_FIND_SCENE_QUERY = """
+query ($id: ID!) {
+  findScene(id: $id) {
+    id title details release_date duration
+    studio { name }
+    performers { performer { name } as }
+    tags { name }
+    images { url width height }
+    urls { url site { name } }
+  }
+}
+"""
+
+def stashdb_lookup_by_id(scene_id: str) -> Optional[dict]:
+    log(f"StashDB lookup by ID: {scene_id}")
+    if not STASHDB_API_KEY or not scene_id:
+        return None
+    headers = {"Content-Type": "application/json", "Apikey": STASHDB_API_KEY}
+    try:
+        r = requests.post(
+            STASHDB_ENDPOINT,
+            headers=headers,
+            json={"query": _STASHDB_FIND_SCENE_QUERY, "variables": {"id": scene_id}},
+            timeout=5,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if data.get("errors"):
+            log(f"StashDB find errors: {data['errors']}")
+            return None
+        scene = (data.get("data") or {}).get("findScene")
+        if scene:
+            return _normalise_stashdb(scene)
+    except Exception as e:
+        log(f"StashDB ID lookup failed: {e}")
+    return None
+
+def tpdb_lookup_by_id(scene_id: str) -> Optional[dict]:
+    url = f"{TPDB_BASE}/scenes/{scene_id}"
+    log(f"TPDB ID lookup: {url}")
+    try:
+        r = requests.get(url, headers=_TPDB_HEADERS(), timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            item = data.get("data") if isinstance(data, dict) else None
+            if not item and isinstance(data, dict):
+                item = data
+            if item:
+                return _normalise_tpdb(item)
+    except Exception as e:
+        log(f"TPDB ID lookup failed: {e}")
+    return None
+
+def tpdb_jav_lookup_by_id(scene_id: str) -> Optional[dict]:
+    url = f"{TPDB_BASE}/scenes/{scene_id}"
+    log(f"TPDB JAV ID lookup: {url}")
+    try:
+        r = requests.get(url, headers=_TPDB_HEADERS(), timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            item = data.get("data") if isinstance(data, dict) else None
+            if not item and isinstance(data, dict):
+                item = data
+            if item:
+                res = _normalise_tpdb(item)
+                res["_source"] = "tpdb_jav"
+                return res
+    except Exception as e:
+        log(f"TPDB JAV ID lookup failed: {e}")
+    return None
+
+
 # ── FastAPI endpoints ─────────────────────────────────────────────────────────
 #
 # NOTE: This sidecar sits in the OMDB slot of the enricher chain:
@@ -964,6 +1150,40 @@ def metadata_proxy(
     if cached is not None:
         log(f"Cache hit for {cache_key!r}")
         return cached
+
+    # ── Native ID Lookup Path ───────────────────────────────────────────────────
+    if i and sidecar_enabled:
+        normalized_id = i
+        if normalized_id.startswith("tpdb="):
+            normalized_id = "tpdb:" + normalized_id[5:]
+        elif normalized_id.startswith("tpdb_jav="):
+            normalized_id = "tpdb_jav:" + normalized_id[9:]
+        elif normalized_id.startswith("stash="):
+            normalized_id = "stash:" + normalized_id[6:]
+
+        if normalized_id.startswith("tpdb:"):
+            scene_id = normalized_id[5:]
+            result = tpdb_lookup_by_id(scene_id)
+            if result:
+                resp = _to_omdb(result)
+                _cache_set(cache_key, resp)
+                return resp
+        elif normalized_id.startswith("tpdb_jav:"):
+            scene_id = normalized_id[9:]
+            result = tpdb_jav_lookup_by_id(scene_id)
+            if not result:
+                result = tpdb_jav_lookup(scene_id)
+            if result:
+                resp = _to_omdb(result)
+                _cache_set(cache_key, resp)
+                return resp
+        elif normalized_id.startswith("stash:"):
+            scene_id = normalized_id[6:]
+            result = stashdb_lookup_by_id(scene_id)
+            if result:
+                resp = _to_omdb(result)
+                _cache_set(cache_key, resp)
+                return resp
 
     # ── Path 1: JAV code ────────────────────────────────────────────────────────
     jav_code = extract_jav_code(t) if t else None

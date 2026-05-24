@@ -116,25 +116,73 @@ test_titles = [
     "Blacked.24.05.13.Sarah.Illustrates.Naughty.Wife.Sarah.Sneaks.In.A.Secret.BBC.Workout.XXX.720p.HEVC.x265.PRT[XvX]",
     "OnlyFans.2023.Anna.Ralphs.Pussy.Creampie.PPV.XXX.1080p.HEVC.x265.PRT[XvX]",
     "NewSensations.23.06.06.Octavia.Red.XXX.1080p.HEVC.x265.PRT[XvX]",
+    
+    # ── Image 5 (mismatch testing / new stress test names) ────────────────────
+    "RealityKings - Carolina Guerrero - Sneaky Roommate Steals Boyfriend (08.05.2026) rq.mp4",
+    "FamilyTherapyXXX - Ashley Alexander - Natural (29.04.2026) rq.mp4",
+    "Tushy - Melanie Marie - Pull Chapter 3 Pinned (17.05.2026) rq.mp4",
+    "MySistersHotFriend - Ivy Mayhem (07.05.2026) rq.mp4",
+    "Brazzers - Anissa Kate, Siri Dahl - The Rizz Chronicles My Stepmom's BFF (09.05.2026) rq.mp4",
+    "FillUpMyMom - Cherry Kiss - Is a Cool Stepmom (25.04.2026) rq.mp4",
+    "Cum4K - Autumn Falls - Creeping Stepdaughter Creamed rq.mp4",
+    "MomWantsToBreed - Bunny Madison - Stepmom And I Celebrate Manuary (16.05.2026) rq.mp4",
+    "NFBusty - Amalia Davis - He Knows How To Take Care Of Me (15.05.2026) rq.mp4",
+    "Brazzers - Angela White - Two For Her Pleasure (29.04.2026) rq.mp4",
+    "Fansly - Jessie Rogers - Fucking My Cheating Exs Bestfriend rq.mp4",
+    "Horny Amateur Girlfriend With Beautiful Natural Tits Cheats On Boyfriend [MP4-1080p]",
+    "JulesJordan - Valentina Nappi - Soaking Wet rq.mp4",
+    "TushyRaw - Dolly Orchid - Pretty lil Snack Has Her Tiny Ass Stretched Out (26.04.2026) rq.mp4",
+    "Tushy - Ariana Van X - Natural Beautys Tight Ass Gets Filled In Tushy Debut (03.05.2026) rq.mp4",
+    "WowGirls 22 01 31 Eva Elfie And Kate Rich Double Flame XXX 480p MP4-XXX [XC]",
+    "BlackedRaw - Agatha Vega, Ella Hughes - Knockout Babes Fuck Two Cops On Duty (16.05.2026) rq.mp4",
+    "SisSwap - Lulu Chu, Penelope Woods (17.05.2026) rq.mp4",
+    "Blacked - Cecelia Taylor - Married Blonde Ditches Hubby For BBC (08.05.2026) rq.mp4",
+    "Vixen - Kate Dalia - Hot Divorcee Gets A Fuck Shes Been Missing (17.05.2026) rq.mp4",
+    "NewSensations 26 05 09 Koda Monroe XXX 1080p MP4-WRB [XC]",
+    "NuruMassage - Ellie Nova - Hubby's Risky Rendezvous (23.02.2026) rq.mp4",
+    "Julia Fit - Anal Chronicles: Her Ass Sucked a Dick [MP4-1080p]",
+    "SingleMoms - Bunny Madison (05.05.2026) rq.mp4",
+    "Blacked - Lucy Mochi - Petite Cheater Gets Stretched To Her Limit (18.05.2026) rq.mp4",
+    "CzechBoobs 26 05 11 Amber Bloom XXX 1080p MP4-WRB [XC]",
+    "FamilySwap - Amirah Adara, Isabella Jules - My Swap Family Is Closer Than Ever (21.05.2026) rq.mp4",
+    "Freeze - Veronica Leal - Magic Dart (15.05.2026) rq.mp4",
 ]
 
 # ── Stats tracking ────────────────────────────────────────────────────────────
+import concurrent.futures
+
+# Suppress debug log spam during concurrent execution to prevent terminal interleaving
+main.log = lambda msg: None
+
+def test_single_title(title: str):
+    parsed = main.parse_adult_filename(title)
+    res = main.adult_enrichment_lookup(title)
+    return {
+        "title": title,
+        "parsed": parsed,
+        "result": res
+    }
+
 passed = []
 failed = []
 
 print(f"\n{'='*80}")
-print(f"  STRESS TEST: {len(test_titles)} torrent names")
+print(f"  STRESS TEST: {len(test_titles)} torrent names (PARALLEL MODE)")
 print(f"{'='*80}\n")
 
-for i, title in enumerate(test_titles, 1):
+# Run up to 100 parallel lookups
+with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+    results = list(executor.map(test_single_title, test_titles))
+
+for i, r in enumerate(results, 1):
+    title = r["title"]
+    parsed = r["parsed"]
+    res = r["result"]
+
     print(f"\n[{i:02d}/{len(test_titles)}] {title[:80]}{'...' if len(title)>80 else ''}")
     print(f"  {'─'*60}")
+    print(f"  Parsed → site={parsed.get('site')!r}  date={parsed.get('date')!r}  name={repr(parsed.get('name')):.40s}")
 
-    # Show what the parser extracts
-    parsed = main.parse_adult_filename(title)
-    print(f"  Parsed → site={parsed.get('site')!r}  date={parsed.get('date')!r}  name={parsed.get('name')!r!s:.40s}")
-
-    res = main.adult_enrichment_lookup(title)
     if res:
         matched_title = res.get('Title', 'N/A')
         year = res.get('Year', 'N/A')
@@ -157,3 +205,4 @@ if passed:
     print(f"\n  ── PASSED ({len(passed)}) ──────────────────────────────────────")
     for orig, matched in passed:
         print(f"  ✓ {orig[:55]:<55} → {matched}")
+

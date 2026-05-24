@@ -62,7 +62,10 @@ func (s *OmdbMetadata) MakeVideoMetadata() *models.VideoMetadata {
 			sceneSuffix = strings.ReplaceAll(sceneSuffix, "%2f", "/")
 			posterHorizontalURL = "https://cdn.theporndb.net" + sceneSuffix
 		}
-	} else if strings.Contains(posterURL, "stashdb.org") || strings.HasPrefix(s.GetImdbID(), "stash:") || strings.HasPrefix(s.GetImdbID(), "tpdb:") {
+	} else if strings.Contains(posterURL, "stashdb.org") ||
+		strings.HasPrefix(s.GetImdbID(), "stash:") || strings.HasPrefix(s.GetImdbID(), "stash=") ||
+		strings.HasPrefix(s.GetImdbID(), "tpdb:") || strings.HasPrefix(s.GetImdbID(), "tpdb=") ||
+		strings.HasPrefix(s.GetImdbID(), "tpdb_jav:") || strings.HasPrefix(s.GetImdbID(), "tpdb_jav=") {
 		posterHorizontalURL = posterURL
 	}
 	return &models.VideoMetadata{
@@ -171,7 +174,14 @@ func (s *OMDB) Map(ctx context.Context, m *models.VideoContent, mt models.Conten
 }
 
 func (s *OMDB) MapByID(ctx context.Context, videoID string, ct models.ContentType, force bool) (*models.VideoMetadata, error) {
-	if !strings.HasPrefix(videoID, "tt") && !strings.HasPrefix(videoID, "tpdb:") && !strings.HasPrefix(videoID, "stash:") {
+	if strings.HasPrefix(videoID, "tpdb=") {
+		videoID = "tpdb:" + strings.TrimPrefix(videoID, "tpdb=")
+	} else if strings.HasPrefix(videoID, "tpdb_jav=") {
+		videoID = "tpdb_jav:" + strings.TrimPrefix(videoID, "tpdb_jav=")
+	} else if strings.HasPrefix(videoID, "stash=") {
+		videoID = "stash:" + strings.TrimPrefix(videoID, "stash=")
+	}
+	if !strings.HasPrefix(videoID, "tt") && !strings.HasPrefix(videoID, "tpdb:") && !strings.HasPrefix(videoID, "tpdb_jav:") && !strings.HasPrefix(videoID, "stash:") {
 		return nil, nil
 	}
 	db := s.pg.Get()
