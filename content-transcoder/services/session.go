@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	sessionSegDuration = 4
+	sessionSegDuration = 6
 	// seekQuantum defines the granularity of seek positions. Seek times are
 	// rounded down to the nearest multiple of this value. This ensures that
 	// viewers seeking to nearby positions share the same TranscodeRun (same

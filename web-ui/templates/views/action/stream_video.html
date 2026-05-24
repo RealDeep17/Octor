@@ -3,7 +3,7 @@
 <div class="relative">
     <video class="player"
            crossorigin="anonymous"
-           preload="{{ .ExportTag.Preload }}"
+           preload="auto"
            data-resource-id="{{ .VideoStreamUserData.ResourceID }}"
            data-path="{{ .Item.PathStr }}"
            {{ if .ExternalData.Poster }}poster="{{ .ExternalData.Poster }}"
@@ -19,7 +19,6 @@
            {{ if .Settings | hasControls }}controls{{ end }}
            {{ if .Settings.Width }}width="{{ .Settings.Width }}"{{ end }}
            {{ if .Settings.Height }}height="{{ .Settings.Height }}"{{ end }}
-           autoplay
            playsinline
            data-settings="{{ .Settings | json }}">
         {{ range .ExportTag.Sources }}

@@ -219,7 +219,7 @@ func (h *HLSStream) GetFFmpegParams(out string) []string {
 	params := []string{
 		"-map", fmt.Sprintf("0:%v:%v", h.st, h.index),
 		"-f", "segment",
-		"-segment_time", "4",
+		"-segment_time", "6",
 		"-segment_list_type", "hls",
 		"-segment_list", h.GetPlaylistPath(out),
 		"-muxdelay", "0",

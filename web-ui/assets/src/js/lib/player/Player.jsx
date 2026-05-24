@@ -367,6 +367,9 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
         if (!resumeReady) return;
         if (resumePosition && resumePosition > 0) {
             setShowResumePrompt(true);
+        } else {
+            // No resume position, start playing.
+            videoRef.current?.play().catch(() => { });
         }
     }, [resumeReady]);
 
@@ -380,6 +383,7 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
         } else {
             video.currentTime = resumePosition;
         }
+        video.play().catch(() => { });
         // Save resumed position immediately
         const dur = duration > 0 ? duration : (video.duration || 0);
         if (dur > 0) forceSendPosition(resumePosition, dur);
@@ -391,6 +395,7 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
         const video = videoRef.current;
         const dur = duration > 0 ? duration : (video?.duration || 0);
         if (dur > 0) forceSendPosition(0, dur);
+        video?.play().catch(() => { });
     }, [duration, forceSendPosition]);
 
     // Chromecast integration — mount into controls bar via ref

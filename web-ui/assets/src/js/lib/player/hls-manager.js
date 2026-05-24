@@ -14,9 +14,10 @@ const HLS_CONFIG = {
     levelLoadingMaxRetryTimeout: 1000 * 10,
     fragLoadingMaxRetry: 100,
     fragLoadingMaxRetryTimeout: 1000 * 10,
-    maxBufferLength: 60,
-    maxBufferSize: 256 * 1000 * 1000,
-    maxMaxBufferLength: 300,
+    maxBufferLength: 300,
+    maxBufferSize: 512 * 1000 * 1000,
+    maxMaxBufferLength: 600,
+    backBufferLength: 90,
 };
 
 /**
@@ -101,7 +102,7 @@ function setupHlsEvents(hls) {
         } else {
             console.warn('HLS non-fatal error:', data.type, data.details);
             if (data.type === Hls.ErrorTypes.MEDIA_ERROR && data.details === 'bufferStalledError') {
-                setTimeout(() => hls.startLoad(), 5000);
+                setTimeout(() => hls.startLoad(), 1000);
             }
         }
     });

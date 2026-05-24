@@ -71,6 +71,9 @@ func ClassifyError(err error) string {
 	case strings.Contains(msg, "failed to validate"):
 		return "error.validation_failed"
 
+	case strings.Contains(msg, "hls_buffering_timeout"):
+		return "error.hls_timeout"
+
 	default:
 		return "error.generic"
 	}

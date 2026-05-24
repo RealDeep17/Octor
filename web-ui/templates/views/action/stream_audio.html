@@ -2,7 +2,7 @@
 {{ with .Data }}
 <audio class="player"
        crossorigin="anonymous"
-       preload="{{ .ExportTag.Preload }}"
+       preload="auto"
        data-resource-id="{{ .VideoStreamUserData.ResourceID }}"
        data-path="{{ .Item.PathStr }}"
        {{ if .TranscoderSession }}data-duration="{{ .TranscoderSession.Duration }}"
@@ -14,8 +14,8 @@
        {{ if .DirectFallbackType }}data-direct-fallback-type="{{ .DirectFallbackType }}"{{ end }}
        {{ if .GraceDurationSec }}data-grace-duration-sec="{{ .GraceDurationSec }}"{{ end }}
        controls
-       autoplay
        data-settings="{{ .Settings | json }}">
+
     {{ range .ExportTag.Sources }}
     <source src="{{ .Src }}" type="{{ .Type }}">
     {{ end }}

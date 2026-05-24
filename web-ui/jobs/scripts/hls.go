@@ -145,7 +145,11 @@ func (s *ActionScript) bufferSessionHLS(ctx context.Context, j *job.Job, streamU
 	for {
 		select {
 		case <-bufferCtx.Done():
-			return nil, errors.Wrap(bufferCtx.Err(), "session buffer timeout exceeded")
+			err := bufferCtx.Err()
+			if errors.Is(err, context.DeadlineExceeded) {
+				return nil, errors.New("hls_buffering_timeout")
+			}
+			return nil, err
 		default:
 		}
 
@@ -178,7 +182,11 @@ func (s *ActionScript) bufferSessionHLS(ctx context.Context, j *job.Job, streamU
 		select {
 		case <-time.After(2 * time.Second):
 		case <-bufferCtx.Done():
-			return nil, errors.Wrap(bufferCtx.Err(), "session buffer timeout exceeded")
+			err := bufferCtx.Err()
+			if errors.Is(err, context.DeadlineExceeded) {
+				return nil, errors.New("hls_buffering_timeout")
+			}
+			return nil, err
 		}
 	}
 

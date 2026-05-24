@@ -69,6 +69,7 @@ type Job struct {
 	main           bool
 	purge          bool
 	errorFormatter ErrorFormatter
+	noCache        bool
 }
 
 type LogItemLevel string
@@ -297,6 +298,11 @@ func (s *Job) formatError(err error) string {
 	return makeErrorMessage(err)
 }
 
+func (s *Job) SetNoCache() *Job {
+	s.noCache = true
+	return s
+}
+
 func (s *Job) Error(err error) error {
 	log.WithError(err).Error("got job error")
 	_ = s.log(LogItem{
@@ -444,10 +450,10 @@ func (s *Jobs) Enqueue(ctx context.Context, cancel context.CancelFunc, id string
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	if existing, ok := s.jobs[id]; ok && !purge {
-		if !existing.HasError() {
+		if !existing.HasError() && !existing.noCache {
 			return existing
 		}
-		log.WithField("ID", id).Info("restarting errored job")
+		log.WithField("ID", id).Info("restarting errored or no-cache job")
 		purge = true
 	}
 	var formatter ErrorFormatter
@@ -464,11 +470,13 @@ func (s *Jobs) Enqueue(ctx context.Context, cancel context.CancelFunc, id string
 		defer s.mux.Unlock()
 		// Only cleanup if this job is still the current one (not replaced by a restart)
 		if current, ok := s.jobs[id]; ok && current == j {
-			if err != nil {
+			if err != nil || j.noCache {
 				dCtx, dCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer dCancel()
 				_ = s.storage.Drop(dCtx, s.queue, id)
-				log.WithError(err).Error("got job error")
+				if err != nil {
+					log.WithError(err).Error("got job error")
+				}
 			}
 			delete(s.jobs, id)
 		}

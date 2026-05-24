@@ -512,6 +512,10 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 			mp, probeErr = s.api.GetMediaProbe(mpCtx, mpItem.URL)
 		}
 	}
+	if probeErr != nil && errors.Is(errors.Cause(probeErr), context.Canceled) {
+		j.SetNoCache()
+		return probeErr
+	}
 	directPlayFallback = false
 	if probeErr != nil {
 		if se.Meta.Transcode {
@@ -587,6 +591,10 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 	if se.Meta.Transcode && !directPlayFallback && (exportResponse.Source.MediaFormat == ra.Video || exportResponse.Source.MediaFormat == ra.Audio) {
 		result, serr := s.bufferSessionHLS(ctx, j, sessionStreamURL, 30*time.Second)
 		if serr != nil {
+			if errors.Is(errors.Cause(serr), context.Canceled) {
+				j.SetNoCache()
+				return serr
+			}
 			log.WithError(serr).Warn("failed to buffer session HLS; falling back to direct byte-range playback")
 			directURL := directPlayURL(downloadURL)
 			sc.ExportTag.Sources = []ra.ExportSource{{
