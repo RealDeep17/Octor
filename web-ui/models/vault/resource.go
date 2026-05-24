@@ -19,9 +19,10 @@ type Resource struct {
 	VaultedAt  *time.Time `pg:"vaulted_at"`
 	Expired    bool       `pg:"expired,notnull,default:false"`
 	ExpiredAt  *time.Time `pg:"expired_at"`
-	Name       string     `pg:"name,notnull"`
-	CreatedAt  time.Time  `pg:"created_at,notnull,default:now()"`
-	UpdatedAt  time.Time  `pg:"updated_at,notnull,default:now()"`
+	Name          string     `pg:"name,notnull"`
+	SelectedFiles []string   `pg:"selected_files,array"`
+	CreatedAt     time.Time  `pg:"created_at,notnull,default:now()"`
+	UpdatedAt     time.Time  `pg:"updated_at,notnull,default:now()"`
 }
 
 // GetResource returns a resource by ID

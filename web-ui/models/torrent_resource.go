@@ -86,15 +86,15 @@ func GetStaleOrMissingMetadataResourceIDs(ctx context.Context, db *pg.DB, staleT
 		SELECT DISTINCT resource_id FROM (
 			SELECT m.resource_id 
 			FROM movie m
-			JOIN movie_metadata md ON m.movie_metadata_id = md.movie_metadata_id
-			WHERE md.poster_url = '' OR md.poster_url IS NULL OR md.updated_at < ?
+			LEFT JOIN movie_metadata md ON m.movie_metadata_id = md.movie_metadata_id
+			WHERE m.movie_metadata_id IS NULL OR md.poster_url = '' OR md.poster_url IS NULL OR md.updated_at < ?
 			
 			UNION
 			
 			SELECT s.resource_id
 			FROM series s
-			JOIN series_metadata sd ON s.series_metadata_id = sd.series_metadata_id
-			WHERE sd.poster_url = '' OR sd.poster_url IS NULL OR sd.updated_at < ?
+			LEFT JOIN series_metadata sd ON s.series_metadata_id = sd.series_metadata_id
+			WHERE s.series_metadata_id IS NULL OR sd.poster_url = '' OR sd.poster_url IS NULL OR sd.updated_at < ?
 
 			UNION
 

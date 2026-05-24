@@ -51,6 +51,7 @@
              {{ if .ShowProgress }}
                data-vault-progress
                data-resource-id="{{ .ResourceID }}"
+               data-vault-saved-label="{{ if and .Resource (gt (len .Resource.SelectedFiles) 0) }}{{ t $.Lang "vault.dashboard.vaultedSelective" }}{{ else }}{{ t $.Lang "vault.dashboard.vaulted" }}{{ end }}"
              {{ end }}>
           <div class="flex items-center gap-3 px-4 py-3.5">
             <div class="shrink-0">
@@ -94,7 +95,11 @@
                 {{ else if and .Resource .Resource.Expired }}
                   <span class="badge badge-sm bg-o-primary/10 border-o-primary/30 text-o-primaryL">Expired</span>
                 {{ else if and .Resource .Resource.Vaulted }}
-                  <span class="badge badge-sm bg-green-500/10 border-green-500/30 text-green-400">Saved</span>
+                  {{ if gt (len .Resource.SelectedFiles) 0 }}
+                    <span class="badge badge-sm bg-green-500/10 border-green-500/30 text-green-400">{{ t $.Lang "vault.dashboard.vaultedSelective" }}</span>
+                  {{ else }}
+                    <span class="badge badge-sm bg-green-500/10 border-green-500/30 text-green-400">{{ t $.Lang "vault.dashboard.vaulted" }}</span>
+                  {{ end }}
                 {{ else if .ShowProgress }}
                   <span data-vault-progress-badge>
                     {{ if .WorkerStatus }}

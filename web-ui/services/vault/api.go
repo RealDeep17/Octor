@@ -181,10 +181,18 @@ func (s *Api) GetResourceCached(ctx context.Context, resourceID string) (*Resour
 }
 
 // PutResource queues a resource for storage in the Vault
-func (s *Api) PutResource(ctx context.Context, resourceID string) (*Resource, error) {
+func (s *Api) PutResource(ctx context.Context, resourceID string, selectedFiles []string) (*Resource, error) {
 	u := fmt.Sprintf("%s/resource/%s", s.url, resourceID)
+	var body []byte
+	if len(selectedFiles) > 0 {
+		var req struct {
+			SelectedFiles []string `json:"selected_files"`
+		}
+		req.SelectedFiles = selectedFiles
+		body, _ = json.Marshal(req)
+	}
 	resource := &Resource{}
-	_, err := s.doRequest(ctx, u, "PUT", nil, resource)
+	_, err := s.doRequest(ctx, u, "PUT", body, resource)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to put resource")
 	}

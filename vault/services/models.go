@@ -72,9 +72,10 @@ type Resource struct {
 	Status     Status    `json:"status" pg:"status,use_zero"`
 	TotalSize  int64     `json:"total_size" pg:"total_size,notnull,use_zero,default:0"`
 	StoredSize int64     `json:"stored_size" pg:"stored_size,notnull,use_zero,default:0"`
-	Error      *string   `json:"error,omitempty" pg:"error"`
-	CreatedAt  time.Time `json:"created_at" pg:"created_at,notnull,default:now()"`
-	UpdatedAt  time.Time `json:"updated_at" pg:"updated_at,notnull,default:now()"`
+	Error         *string   `json:"error,omitempty" pg:"error"`
+	SelectedFiles []string  `json:"selected_files,omitempty" pg:"selected_files,array"`
+	CreatedAt     time.Time `json:"created_at" pg:"created_at,notnull,default:now()"`
+	UpdatedAt     time.Time `json:"updated_at" pg:"updated_at,notnull,default:now()"`
 
 	// Lease columns (migration 8). A non-null claim_expires_at in the future
 	// means the row is owned by the worker in claimed_by for that duration.
@@ -196,8 +197,8 @@ func APILogWrite(ctx context.Context, db *pg.DB, resourceID string, operationTyp
 }
 
 // ResourceQueueForStoring inserts a new resource with queued status or updates existing to queued.
-func ResourceQueueForStoring(ctx context.Context, db *pg.DB, id string) (*Resource, error) {
-	res := &Resource{ID: id, Status: StatusQueuedForStoring}
+func ResourceQueueForStoring(ctx context.Context, db *pg.DB, id string, selectedFiles []string) (*Resource, error) {
+	res := &Resource{ID: id, Status: StatusQueuedForStoring, SelectedFiles: selectedFiles}
 	err := db.Model(res).
 		Context(ctx).
 		WherePK().
@@ -206,17 +207,16 @@ func ResourceQueueForStoring(ctx context.Context, db *pg.DB, id string) (*Resour
 		return nil, err
 	}
 	if errors.Is(err, pg.ErrNoRows) {
+		res.SelectedFiles = selectedFiles
 		if _, err = db.Model(res).Context(ctx).Insert(); err != nil {
 			return nil, err
 		}
 		return res, nil
 	}
-	if res.Status == StatusQueuedForStoring || res.Status == StatusStoring || res.Status == StatusStored {
-		return res, nil
-	}
 	res.Status = StatusQueuedForStoring
+	res.SelectedFiles = selectedFiles
 	// update
-	if _, err = db.Model(res).Context(ctx).Column("status").WherePK().Update(); err != nil {
+	if _, err = db.Model(res).Context(ctx).Column("status", "selected_files").WherePK().Update(); err != nil {
 		return nil, err
 	}
 	// reload

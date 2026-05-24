@@ -537,3 +537,65 @@
 .navbar-redesign a {
   color: var(--o-text) !important;
 }
+
+/* --- Toast Notifications Redesign (Octor Skin-Aware) --- */
+.toast-alert {
+  @apply shadow-[0_15px_30px_rgba(0,0,0,0.4)] px-5 py-3.5 rounded-xl text-sm font-semibold flex items-center gap-2.5;
+  animation: popin 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  background: linear-gradient(135deg, rgba(var(--o-bg-rgb), 0.95) 0%, var(--o-surface) 100%);
+  border: 1px solid var(--o-line);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--o-text);
+  min-width: 280px;
+  max-width: 420px;
+  transform: translateY(10px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast-alert.toast-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-alert::before {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-weight: 800;
+  font-size: 1.1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.toast-alert-success {
+  border-color: rgba(34, 211, 238, 0.3) !important;
+  color: var(--o-cyan) !important;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.08) 0%, rgba(var(--o-bg-rgb), 0.95) 100%) !important;
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.1), 0 15px 30px rgba(0,0,0,0.4) !important;
+}
+.toast-alert-success::before {
+  content: '✓';
+  color: var(--o-cyan);
+}
+
+.toast-alert-info {
+  border-color: rgba(34, 211, 238, 0.3) !important;
+  color: var(--o-cyan) !important;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.08) 0%, rgba(var(--o-bg-rgb), 0.95) 100%) !important;
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.1), 0 15px 30px rgba(0,0,0,0.4) !important;
+}
+.toast-alert-info::before {
+  content: 'ℹ';
+  color: var(--o-cyan);
+}
+
+.toast-alert-error {
+  border-color: rgba(244, 63, 94, 0.3) !important;
+  color: var(--o-primary-l) !important;
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.08) 0%, rgba(var(--o-bg-rgb), 0.95) 100%) !important;
+  box-shadow: 0 0 30px rgba(244, 63, 94, 0.1), 0 15px 30px rgba(0,0,0,0.4) !important;
+}
+.toast-alert-error::before {
+  content: '✕';
+  color: var(--o-primary-l);
+}

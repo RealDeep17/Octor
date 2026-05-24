@@ -7,8 +7,10 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/gin-gonic/gin"
+	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
 	"github.com/webtor-io/web-ui/models"
+	vaultModels "github.com/webtor-io/web-ui/models/vault"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/web"
@@ -21,8 +23,13 @@ func (h *Handler) addPledge(c *gin.Context) {
 	user := auth.GetUserFromContext(c)
 	apiClaims := api.GetClaimsFromContext(c)
 
+	selectedFiles := c.PostFormArray("selected_files[]")
+	if len(selectedFiles) == 0 {
+		selectedFiles = c.PostFormArray("selected_files")
+	}
+
 	// Call business logic
-	err := h.createPledge(c.Request.Context(), resourceID, user, apiClaims)
+	err := h.createPledge(c.Request.Context(), resourceID, user, apiClaims, selectedFiles)
 	if err != nil {
 		web.RedirectWithError(c, err)
 		return
@@ -38,7 +45,7 @@ func (h *Handler) addPledge(c *gin.Context) {
 }
 
 // createPledge contains the core business logic for pledge creation (Level 2: Business logic)
-func (h *Handler) createPledge(ctx context.Context, resourceID string, user *auth.User, apiClaims *api.Claims) error {
+func (h *Handler) createPledge(ctx context.Context, resourceID string, user *auth.User, apiClaims *api.Claims, selectedFiles []string) error {
 	// Validate resource_id
 	if resourceID == "" {
 		return errors.New("resource_id is required")
@@ -49,10 +56,60 @@ func (h *Handler) createPledge(ctx context.Context, resourceID string, user *aut
 		return errors.New("failed to get claims")
 	}
 
+	// Calculate required VP
+	var requiredVP float64
+	if len(selectedFiles) > 0 {
+		list, err := h.api.ListResourceContentCached(ctx, apiClaims, resourceID, &api.ListResourceContentArgs{
+			Output: api.OutputList,
+		})
+		if err == nil {
+			var selectedBytes int64
+			for _, file := range list.Items {
+				for _, sel := range selectedFiles {
+					if file.PathStr == sel {
+						selectedBytes += file.Size
+						break
+					}
+				}
+			}
+			requiredVP = float64(selectedBytes) / (1024 * 1024 * 1024)
+		} else {
+			var err error
+			requiredVP, err = h.vault.GetRequiredVP(ctx, apiClaims, resourceID)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		var err error
+		requiredVP, err = h.vault.GetRequiredVP(ctx, apiClaims, resourceID)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Get or create resource
 	resource, err := h.vault.GetOrCreateResource(ctx, apiClaims, resourceID)
 	if err != nil {
 		return err
+	}
+
+	// Update RequiredVP and SelectedFiles if we did selective vaulting
+	if len(selectedFiles) > 0 {
+		db := h.pg.Get()
+		if db != nil {
+			_, err := db.Model((*vaultModels.Resource)(nil)).
+				Context(ctx).
+				Set("required_vp = ?", requiredVP).
+				Set("selected_files = ?", pg.Array(selectedFiles)).
+				Where("resource_id = ?", resourceID).
+				Update()
+			if err != nil {
+				return errors.Wrap(err, "failed to update resource required VP and selected files")
+			}
+			resource.RequiredVP = requiredVP
+			resource.SelectedFiles = selectedFiles
+		}
 	}
 
 	// Create pledge

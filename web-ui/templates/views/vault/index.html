@@ -47,7 +47,7 @@
       {{/* ── Stats ─────────────────────────────────────── */}}
       <div class="bg-base-300/50 border border-o-line rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center">
         <span class="text-xl font-bold text-green-400">{{ .Data.Stats.VaultedCount }}</span>
-        <span class="text-[10px] text-o-muted mt-1 font-bold tracking-widest uppercase">Saved</span>
+        <span class="text-[10px] text-o-muted mt-1 font-bold tracking-widest uppercase">{{ t $.Lang "vault.dashboard.vaulted" }}</span>
       </div>
       <div class="bg-base-300/50 border border-o-line rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center">
         <span class="text-xl font-bold {{ if gt .Data.Stats.LoadingCount 0 }}text-o-cyan{{ else }}text-o-muted{{ end }}">{{ .Data.Stats.LoadingCount }}</span>
@@ -85,6 +85,7 @@
             data-vault-progress
             data-resource-id="{{ .ResourceID }}"
             data-csrf="{{ $.CSRF }}"
+            data-vault-saved-label="{{ if gt (len .Resource.SelectedFiles) 0 }}{{ t $.Lang "vault.dashboard.vaultedSelective" }}{{ else }}{{ t $.Lang "vault.dashboard.vaulted" }}{{ end }}"
           {{ end }}
         >
           {{/* Row: icon + name + status */}}
@@ -139,7 +140,11 @@
                   </span>
                 </span>
               {{ else if .Resource.Vaulted }}
-                <span class="badge badge-sm bg-green-500/10 border-green-500/30 text-green-400">Saved</span>
+                {{ if gt (len .Resource.SelectedFiles) 0 }}
+                  <span class="badge badge-sm bg-green-500/10 border-green-500/30 text-green-400">{{ t $.Lang "vault.dashboard.vaultedSelective" }}</span>
+                {{ else }}
+                  <span class="badge badge-sm bg-green-500/10 border-green-500/30 text-green-400">{{ t $.Lang "vault.dashboard.vaulted" }}</span>
+                {{ end }}
               {{ end }}
 
               {{/* Retry button */}}

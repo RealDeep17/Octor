@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/go-pg/pg/v10"
@@ -24,6 +25,7 @@ type User struct {
 // GetOrCreateUser finds or creates a user by email.
 func GetOrCreateUser(ctx context.Context, db *pg.DB, email string) (*User, bool, error) {
 	user := &User{}
+	email = strings.ToLower(email)
 
 	// Find by email
 	err := db.Model(user).

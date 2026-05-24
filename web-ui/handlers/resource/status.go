@@ -34,6 +34,7 @@ type TorrentStatus struct {
 	CompletedStr   string  `json:"completed_str,omitempty"`
 	RemainingStr   string  `json:"remaining_str,omitempty"`
 	Detail         string  `json:"detail,omitempty"`
+	Selective      bool    `json:"selective"`
 }
 
 // TorrentStatsData holds the relevant fields from a torrent stats event.
@@ -57,7 +58,7 @@ func resolveStatus(dbResource *vaultModels.Resource, apiResource *vault.Resource
 	if vaultState.State == "vaulted" {
 		return vaultState
 	}
-	if vaultState.State == "vaulting" {
+	if vaultState.State == "vaulting" || vaultState.State == "waiting" {
 		if stats != nil {
 			vaultState.Seeders = stats.Seeders
 		}
@@ -97,19 +98,21 @@ func resolveVaultState(dbResource *vaultModels.Resource, apiResource *vault.Reso
 	if dbResource == nil {
 		return &TorrentStatus{State: "idle"}
 	}
+	selective := len(dbResource.SelectedFiles) > 0
 	if dbResource.Vaulted {
-		return &TorrentStatus{State: "vaulted"}
+		return &TorrentStatus{State: "vaulted", Selective: selective}
 	}
 	if !dbResource.Funded {
 		return &TorrentStatus{State: "idle"}
 	}
 	// Funded but not vaulted — check API for progress
 	if apiResource == nil {
-		return &TorrentStatus{State: "vaulting", Progress: 0}
+		return &TorrentStatus{State: "vaulting", Progress: 0, Selective: selective}
 	}
 	status := &TorrentStatus{
-		State:    "vaulting",
-		Progress: apiResource.GetProgress(),
+		State:     "vaulting",
+		Progress:  apiResource.GetProgress(),
+		Selective: selective,
 	}
 	if apiResource.TotalSize > 0 {
 		status.TotalStr = formatBytes(apiResource.TotalSize)
@@ -127,7 +130,7 @@ func resolveVaultState(dbResource *vaultModels.Resource, apiResource *vault.Reso
 	case vault.StatusProcessing:
 		return status
 	case vault.StatusCompleted:
-		return &TorrentStatus{State: "vaulted"}
+		return &TorrentStatus{State: "vaulted", Selective: selective}
 	case vault.StatusQueued:
 		status.State = "waiting"
 		status.Progress = 0
@@ -294,7 +297,11 @@ func (s *Handler) status(c *gin.Context) {
 			if !ok {
 				return false
 			}
-			status.Label = i18n.TranslateWithLocalizer(i18n.GetLocalizer(c), "resource.status."+status.State)
+			stateKey := status.State
+			if status.Selective && (status.State == "vaulted" || status.State == "vaulting") {
+				stateKey = status.State + "Selective"
+			}
+			status.Label = i18n.TranslateWithLocalizer(i18n.GetLocalizer(c), "resource.status."+stateKey)
 			c.SSEvent("message", status)
 			return status.State != "vaulted"
 		}

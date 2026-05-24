@@ -488,7 +488,7 @@ func fetchRcloneFreeSpaceGB(remote, configPath string) (float64, error) {
 	return 0, errors.New("rclone about: could not parse free bytes from JSON output")
 }
 
-// CreatePledge creates a new pledge for a resource
+// CreatePledge creates or updates a pledge for a resource
 func (s *Vault) CreatePledge(ctx context.Context, user *auth.User, resource *vaultModels.Resource) (*vaultModels.Pledge, error) {
 	db := s.pg.Get()
 	if db == nil {
@@ -513,10 +513,27 @@ func (s *Vault) CreatePledge(ctx context.Context, user *auth.User, resource *vau
 			return errors.Wrap(err, "failed to lock user vault points")
 		}
 
-		// Check if user has unlimited VP (Total = nil)
-		if userVP.Total == nil {
-			// Unlimited VP - allow pledge creation
+		// Check if pledge already exists
+		existingPledge := &vaultModels.Pledge{}
+		err = tx.Model(existingPledge).
+			Where("user_id = ? AND resource_id = ?", user.ID, resource.ResourceID).
+			For("UPDATE").
+			Select()
+
+		pledgeExists := !errors.Is(err, pg.ErrNoRows)
+		if err != nil && !errors.Is(err, pg.ErrNoRows) {
+			return errors.Wrap(err, "failed to query existing pledge")
+		}
+
+		var diff float64
+		if pledgeExists {
+			diff = resource.RequiredVP - existingPledge.Amount
 		} else {
+			diff = resource.RequiredVP
+		}
+
+		// If total VP is not unlimited (Total != nil), check limits
+		if userVP.Total != nil && diff > 0 {
 			// Calculate available VP
 			// Get all funded pledges for user
 			var pledges []vaultModels.Pledge
@@ -539,43 +556,61 @@ func (s *Vault) CreatePledge(ctx context.Context, user *auth.User, resource *vau
 			available := *userVP.Total - fundedSum
 
 			// Check if user has enough available VP
-			if available < resource.RequiredVP {
+			if available < diff {
 				return errors.New("insufficient vault points")
 			}
 		}
 
-		// Create pledge with Funded=true, FrozenAt=now()
-		now := time.Now()
-		pledge := &vaultModels.Pledge{
-			UserID:     user.ID,
-			ResourceID: resource.ResourceID,
-			Amount:     resource.RequiredVP,
-			Funded:     true,
-			FrozenAt:   now,
+		var pledge *vaultModels.Pledge
+		if pledgeExists {
+			// Update existing pledge
+			existingPledge.Amount = resource.RequiredVP
+			existingPledge.Funded = true
+			_, err = tx.Model(existingPledge).
+				Context(ctx).
+				WherePK().
+				Update()
+			if err != nil {
+				return errors.Wrap(err, "failed to update pledge")
+			}
+			pledge = existingPledge
+		} else {
+			// Create new pledge
+			now := time.Now()
+			pledge = &vaultModels.Pledge{
+				UserID:     user.ID,
+				ResourceID: resource.ResourceID,
+				Amount:     resource.RequiredVP,
+				Funded:     true,
+				FrozenAt:   now,
+			}
+			_, err = tx.Model(pledge).
+				Context(ctx).
+				Insert()
+			if err != nil {
+				return errors.Wrap(err, "failed to create pledge")
+			}
 		}
 
-		_, err = tx.Model(pledge).
-			Context(ctx).
-			Insert()
-		if err != nil {
-			return errors.Wrap(err, "failed to create pledge")
+		// Write transaction log if there is any difference in points
+		if diff != 0 {
+			txLog := &vaultModels.TxLog{
+				UserID:     user.ID,
+				ResourceID: &resource.ResourceID,
+				Balance:    -diff,
+				OpType:     vaultModels.OpTypeFund,
+			}
+			_, err = tx.Model(txLog).Context(ctx).Insert()
+			if err != nil {
+				return errors.Wrap(err, "failed to create fund log")
+			}
 		}
 
-		// Create tx_log entry with OpTypeFund (negative balance)
-		// OpTypeFund is always negative according to documentation
-		txLog := &vaultModels.TxLog{
-			UserID:     user.ID,
-			ResourceID: &resource.ResourceID,
-			Balance:    -resource.RequiredVP,
-			OpType:     vaultModels.OpTypeFund,
+		// Update resource: increase funded_vp by difference in pledge amount
+		newFundedVP := resource.FundedVP + diff
+		if newFundedVP < 0 {
+			newFundedVP = 0
 		}
-		_, err = tx.Model(txLog).Context(ctx).Insert()
-		if err != nil {
-			return errors.Wrap(err, "failed to create fund log")
-		}
-
-		// Update resource: increase funded_vp by pledge amount
-		newFundedVP := resource.FundedVP + resource.RequiredVP
 		err = vaultModels.UpdateResourceFundedVP(ctx, tx, resource.ResourceID, newFundedVP)
 		if err != nil {
 			return errors.Wrap(err, "failed to update resource funded VP")
@@ -588,7 +623,7 @@ func (s *Vault) CreatePledge(ctx context.Context, user *auth.User, resource *vau
 				return errors.Wrap(err, "failed to mark resource as unexpired and funded")
 			}
 
-			// Put to Vault API when resource transitions to Funded state
+			// Put to Vault API when resource transitions to/is in Funded state
 			vaulted, err := s.putResourceToVaultAPI(ctx, tx, resource)
 			if err != nil {
 				return errors.Wrap(err, "failed to sync resource with vault api")
@@ -862,7 +897,7 @@ func (s *Vault) putResourceToVaultAPI(ctx context.Context, tx *pg.Tx, resource *
 
 	// If resource doesn't exist in Vault, or is in a failed/deleting/inactive status, re-add/re-queue it via PUT
 	if vaultResource == nil || (vaultResource.Status != StatusQueued && vaultResource.Status != StatusProcessing) {
-		_, err = s.vaultApi.PutResource(ctx, resource.ResourceID)
+		_, err = s.vaultApi.PutResource(ctx, resource.ResourceID, resource.SelectedFiles)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to put resource to vault api")
 		}
@@ -986,7 +1021,15 @@ func (s *Vault) PutResource(ctx context.Context, resourceID string) (*Resource, 
 	if s.vaultApi == nil {
 		return nil, errors.New("vault API is not configured")
 	}
-	return s.vaultApi.PutResource(ctx, resourceID)
+	db := s.pg.Get()
+	var selectedFiles []string
+	if db != nil {
+		res, err := vaultModels.GetResource(ctx, db, resourceID)
+		if err == nil && res != nil {
+			selectedFiles = res.SelectedFiles
+		}
+	}
+	return s.vaultApi.PutResource(ctx, resourceID, selectedFiles)
 }
 
 // pointsEqual compares two *float64 values, treating nil as distinct from any number

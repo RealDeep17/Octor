@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
+	ra "github.com/webtor-io/rest-api/services"
 	"github.com/webtor-io/web-ui/services/api"
 )
 
@@ -18,10 +19,14 @@ type VaultPledgeAddForm struct {
 	Funded        bool
 	Vaulted       bool
 	ResourceID    string
+	Items         []ra.ListItem
+	Selective     bool
+	SelectedFiles []string
 }
 
 type VaultButton struct {
-	Funded bool
+	Funded    bool
+	Selective bool
 }
 
 type VaultPledgeRemoveForm struct {
@@ -57,6 +62,13 @@ func (s *Handler) prepareVaultPledgeAddForm(c *gin.Context, args *GetArgs) (*Vau
 	// Convert bytes to GB
 	torrentSizeGB := float64(list.Size) / (1024 * 1024 * 1024)
 
+	var files []ra.ListItem
+	for _, item := range list.Items {
+		if item.Type == ra.ListTypeFile {
+			files = append(files, item)
+		}
+	}
+
 	vaultForm := &VaultPledgeAddForm{
 		Available:     stats.Available,
 		Total:         stats.Total,
@@ -65,6 +77,7 @@ func (s *Handler) prepareVaultPledgeAddForm(c *gin.Context, args *GetArgs) (*Vau
 		Funded:        false,
 		Vaulted:       false,
 		ResourceID:    args.ID,
+		Items:         files,
 	}
 
 	// Check if user is supporting this torrent
@@ -74,6 +87,8 @@ func (s *Handler) prepareVaultPledgeAddForm(c *gin.Context, args *GetArgs) (*Vau
 	}
 
 	if resource != nil {
+		vaultForm.Selective = len(resource.SelectedFiles) > 0
+		vaultForm.SelectedFiles = resource.SelectedFiles
 		// Check if resource is vaulted
 		if resource.Vaulted {
 			vaultForm.Vaulted = true
@@ -121,6 +136,8 @@ func (s *Handler) prepareVaultButton(ctx context.Context, args *GetArgs) (*Vault
 	if resource == nil || !resource.Funded {
 		return vaultButton, nil
 	}
+
+	vaultButton.Selective = len(resource.SelectedFiles) > 0
 
 	// Get user's pledge for this resource using service
 	pledge, err := s.vault.GetPledge(ctx, args.User, resource)

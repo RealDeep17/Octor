@@ -19,80 +19,237 @@
 				<button class="btn btn-soft" data-umami-event="vault-pledge-error-confirmed">{{ t .Ctx.Lang "vault.ok" }}</button>
 			</form>
 		</div>
-	{{ else if .Data.Funded }}
-		{{ template "vault/pledge-modal/add/success" . }}
 	{{ else }}
-		{{ if .Data.Available }}
-			{{ if ge (derefFloat64 .Data.Available) .Data.Required }}
+		
+		<!-- Warnings & Instructions -->
+		<div id="vault-nopoints-msg" class="hidden">
+			<p class="pt-4 pb-1 text-sm text-o-sub">
+				{{ t .Ctx.Lang "vault.noPoints" }}
+			</p>
+			<p class="pb-2 text-sm text-o-sub">
+				{{ t .Ctx.Lang "vault.upgradeHint" }}
+			</p>
+			<p class="pb-2">
+				<a href="/donate" target="_blank" class="text-sm text-o-primaryL hover:underline" data-umami-event="vault-upgrade-clicked">{{ t .Ctx.Lang "vault.upgradeSubscription" }}</a>
+			</p>
+		</div>
+		
+		<div id="vault-haspoints-msg">
+			{{ if .Data.Available }}
 				<p class="pt-4 pb-2 text-sm text-o-sub">
 					{{ t .Ctx.Lang "vault.hasPoints" }}
 				</p>
 			{{ else }}
-				<p class="pt-4 pb-1 text-sm text-o-sub">
-					{{ t .Ctx.Lang "vault.noPoints" }}
-				</p>
-				<p class="pb-2 text-sm text-o-sub">
-					{{ t .Ctx.Lang "vault.upgradeHint" }}
-				</p>
-				<p class="pb-2">
-					<a href="/donate" target="_blank" class="text-sm text-o-primaryL hover:underline" data-umami-event="vault-upgrade-clicked">{{ t .Ctx.Lang "vault.upgradeSubscription" }}</a>
+				<p class="pt-4 pb-2 text-sm text-o-sub">
+					{{ t .Ctx.Lang "vault.unlimitedPoints" }}
 				</p>
 			{{ end }}
-		{{ else }}
-			<p class="pt-4 pb-2 text-sm text-o-sub">
-				{{ t .Ctx.Lang "vault.unlimitedPoints" }}
-			</p>
-		{{ end }}
-		<div class="bg-base-200/50 rounded-xl p-4 my-3">
-			<table class="table w-full text-sm">
-				<tbody>
-					<tr>
-						<td class="text-left font-semibold text-o-sub">{{ t .Ctx.Lang "vault.torrentSize" }}</td>
-						<td class="text-right text-w-text">{{ printf "%.2f" .Data.TorrentSizeGB }}</td>
-					</tr>
-					<tr>
-						<td class="text-left font-semibold text-o-sub">{{ t .Ctx.Lang "vault.requiredVP" }}</td>
-						<td class="text-right text-w-text">{{ printf "%.2f" .Data.Required }}</td>
-					</tr>
-					<tr>
-						<td class="text-left font-semibold text-o-sub">{{ t .Ctx.Lang "vault.availableVP" }}</td>
-						<td class="text-right text-w-text">
-							{{ if .Data.Available }}
-								{{ printf "%.2f" (derefFloat64 .Data.Available) }}
-							{{ else }}
-								<span class="text-xl">&#8734;</span>
-							{{ end }}
-						</td>
-					</tr>
-					<tr>
-						<td class="text-left font-semibold text-o-sub">{{ t .Ctx.Lang "vault.totalVP" }}</td>
-						<td class="text-right text-w-text">
-							{{ if .Data.Total }}
-								{{ printf "%.2f" (derefFloat64 .Data.Total) }}
-							{{ else }}
-								<span class="text-xl">&#8734;</span>
-							{{ end }}
-						</td>
-					</tr>
-				</tbody>
-			</table>
-		</div>
-		<div class="text-left w-full mt-1 mb-2">
-			<a href="{{ langPath .Ctx.Lang "/instructions/vault" }}" class="text-sm text-o-muted hover:text-o-sub link link-hover" data-umami-event="instruction-vault" target="_blank">{{ t .Ctx.Lang "vault.whatIs" }}</a>
 		</div>
 
-		<div class="modal-action justify-center">
-			{{ if or (not .Data.Available) (ge (derefFloat64 .Data.Available) .Data.Required) }}
-				<form action="{{ langPath .Ctx.Lang "/vault/add" }}" method="post" data-async-target="#pledge-modal" data-async-push-state="false" data-async-update-#library-button="library">
-					<input type="hidden" name="resource_id" value="{{ .Data.ResourceID }}" />
-					<button type="submit" class="btn btn-soft" data-umami-event="vault-store-confirmed">
-						{{ t .Ctx.Lang "vault.storeInVault" }}
-					</button>
-				</form>
+		<form action="{{ langPath .Ctx.Lang "/vault/add" }}" method="post" id="vault-pledge-form" data-async-target="#pledge-modal" data-async-push-state="false" data-async-update-#library-button="library">
+			<input type="hidden" name="resource_id" value="{{ .Data.ResourceID }}" />
+
+			<!-- Rich File Explorer Checklist -->
+			{{ if .Data.Items }}
+			<div class="bg-base-200/40 rounded-xl border border-o-line/40 p-3 my-3">
+				<!-- Header Actions -->
+				<div class="flex items-center justify-between px-1 pb-2.5 mb-2 border-b border-o-line/30">
+					<label class="flex items-center text-xs font-semibold tracking-wider text-o-muted uppercase cursor-pointer select-none">
+						<input type="checkbox" id="vault-select-all" class="checkbox checkbox-xs checkbox-primary mr-2" {{ if not .Data.Selective }}checked{{ end }} />
+						Select All ({{ len .Data.Items }} files)
+					</label>
+					<span id="vault-selected-count" class="text-[10px] text-o-primaryL font-bold uppercase tracking-widest">{{ len .Data.Items }} Selected</span>
+				</div>
+
+				<!-- Files Scroll Container -->
+				<div class="max-h-[200px] overflow-y-auto divide-y divide-w-line/50 pr-1" id="vault-files-checklist">
+					{{ range .Data.Items }}
+					<label class="flex items-center justify-between py-2 px-1 hover:bg-base-300/30 transition-colors rounded-lg cursor-pointer group select-none">
+						<div class="flex items-center gap-2 min-w-0 flex-1">
+							<input type="checkbox" name="selected_files[]" value="{{ .PathStr }}" data-size="{{ .Size }}" class="checkbox checkbox-xs checkbox-primary shrink-0" {{ if or (not $.Data.Selective) (inSlice $.Data.SelectedFiles .PathStr) }}checked{{ end }} />
+							
+							<!-- Standard File Icon -->
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4 text-o-muted group-hover:text-o-primaryL transition-colors shrink-0">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+							</svg>
+
+							<span class="text-xs truncate font-medium text-o-sub group-hover:text-base-content transition-colors" title="{{ .Name }}">{{ .Name }}</span>
+						</div>
+						<span class="text-[10px] text-o-muted font-mono shrink-0 ml-2">{{ bitsForHumans .Size }}</span>
+					</label>
+					{{ end }}
+				</div>
+			</div>
 			{{ end }}
-			<form method="dialog">
-				<button class="btn btn-ghost border border-o-line text-o-sub hover:border-o-primary hover:text-base-content" data-umami-event="vault-cancelled">{{ t .Ctx.Lang "vault.cancel" }}</button>
-			</form>
-		</div>
+
+			<!-- Stats Details Table -->
+			<div class="bg-base-200/50 rounded-xl p-4 my-3">
+				<table class="table w-full text-sm">
+					<tbody>
+						<tr>
+							<td class="text-left font-semibold text-o-sub border-none py-1.5">{{ t .Ctx.Lang "vault.torrentSize" }}</td>
+							<td class="text-right text-w-text border-none py-1.5 font-semibold" id="vault-display-size">{{ printf "%.2f" .Data.TorrentSizeGB }} GB</td>
+						</tr>
+						<tr>
+							<td class="text-left font-semibold text-o-sub border-none py-1.5">{{ t .Ctx.Lang "vault.requiredVP" }}</td>
+							<td class="text-right text-w-text border-none py-1.5 font-bold text-o-primaryL" id="vault-display-required">{{ printf "%.2f" .Data.Required }}</td>
+						</tr>
+						<tr>
+							<td class="text-left font-semibold text-o-sub border-none py-1.5">{{ t .Ctx.Lang "vault.availableVP" }}</td>
+							<td class="text-right text-w-text border-none py-1.5 font-semibold">
+								{{ if .Data.Available }}
+									{{ printf "%.2f" (derefFloat64 .Data.Available) }}
+								{{ else }}
+									<span class="text-xl">&#8734;</span>
+								{{ end }}
+							</td>
+						</tr>
+						<tr>
+							<td class="text-left font-semibold text-o-sub border-none py-1.5">{{ t .Ctx.Lang "vault.totalVP" }}</td>
+							<td class="text-right text-w-text border-none py-1.5">
+								{{ if .Data.Total }}
+									{{ printf "%.2f" (derefFloat64 .Data.Total) }}
+								{{ else }}
+									<span class="text-xl">&#8734;</span>
+								{{ end }}
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+
+			<div class="text-left w-full mt-1 mb-2">
+				<a href="{{ langPath .Ctx.Lang "/instructions/vault" }}" class="text-sm text-o-muted hover:text-o-sub link link-hover animate-pulse" data-umami-event="instruction-vault" target="_blank">{{ t .Ctx.Lang "vault.whatIs" }}</a>
+			</div>
+
+			<div class="modal-action justify-center">
+				<button type="submit" class="btn btn-soft" data-vault-store-btn data-umami-event="vault-store-confirmed">
+					{{ t .Ctx.Lang "vault.storeInVault" }}
+				</button>
+				{{ if .Data.Funded }}
+				<a href="{{ langPath .Ctx.Lang .Ctx.Path }}?pledge-remove-form=true" class="btn btn-ghost border border-o-line text-error hover:bg-error/15 hover:border-error/30" data-async-target="#pledge-modal" data-async-push-state="false" data-umami-event="vault-remove-clicked">
+					{{ t .Ctx.Lang "vault.removeTitle" }}
+				</a>
+				{{ end }}
+				<button type="button" class="btn btn-ghost border border-o-line text-o-sub hover:border-o-primary hover:text-base-content" data-umami-event="vault-cancelled" onclick="this.closest('dialog').close()">{{ t .Ctx.Lang "vault.cancel" }}</button>
+			</div>
+			<!-- Hidden helper to pass Go variables to script safely without triggering JS lints -->
+			<div id="vault-limit-data" class="hidden" 
+				data-available="{{ if .Data.Available }}{{ derefFloat64 .Data.Available }}{{ else }}0{{ end }}" 
+				data-has-limit="{{ if .Data.Available }}true{{ else }}false{{ end }}">
+			</div>
+		</form>
+
+		<!-- Dynamic Recalculation Script -->
+		<script>
+		(function() {
+			const modal = document.getElementById('pledge-modal');
+			if (!modal) return;
+
+			const checkboxes = modal.querySelectorAll('input[name="selected_files[]"]');
+			const selectAll = modal.querySelector('#vault-select-all');
+			const selectedCount = modal.querySelector('#vault-selected-count');
+			
+			const sizeDisplay = modal.querySelector('#vault-display-size');
+			const vpDisplay = modal.querySelector('#vault-display-required');
+			const storeBtn = modal.querySelector('button[data-vault-store-btn]');
+			const noPointsMsg = modal.querySelector('#vault-nopoints-msg');
+			const hasPointsMsg = modal.querySelector('#vault-haspoints-msg');
+			
+			const limitData = modal.querySelector('#vault-limit-data');
+			const availableVP = parseFloat(limitData ? limitData.getAttribute('data-available') : '0');
+			const hasLimit = limitData ? limitData.getAttribute('data-has-limit') === 'true' : false;
+
+			function formatBytes(bytes) {
+				if (bytes === 0) return '0.00 B';
+				const k = 1024;
+				const dm = 2;
+				const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+				const i = Math.floor(Math.log(bytes) / Math.log(k));
+				return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+			}
+
+			function updateVP() {
+				let totalBytes = 0;
+				let checkedCount = 0;
+				
+				checkboxes.forEach(cb => {
+					if (cb.checked) {
+						totalBytes += parseInt(cb.getAttribute('data-size') || '0', 10);
+						checkedCount++;
+					}
+				});
+
+				// Update selected count badge
+				if (selectedCount) {
+					selectedCount.textContent = `${checkedCount} Selected`;
+				}
+
+				// Calculate size in GB and required VP
+				const sizeGB = totalBytes / (1024 * 1024 * 1024);
+				const requiredVP = sizeGB; // 1 VP = 1 GB
+
+				// Update displays
+				if (sizeDisplay) {
+					sizeDisplay.textContent = formatBytes(totalBytes);
+				}
+				if (vpDisplay) {
+					vpDisplay.textContent = requiredVP.toFixed(2);
+				}
+
+				// Update Select All checkbox state
+				if (selectAll) {
+					selectAll.checked = checkedCount === checkboxes.length;
+					selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+				}
+
+				// Handle points warning and submit button states
+				if (hasLimit) {
+					if (availableVP >= requiredVP && checkedCount > 0) {
+						if (noPointsMsg) noPointsMsg.classList.add('hidden');
+						if (hasPointsMsg) hasPointsMsg.classList.remove('hidden');
+						if (storeBtn) {
+							storeBtn.disabled = false;
+							storeBtn.classList.remove('btn-disabled', 'opacity-50');
+						}
+					} else {
+						if (noPointsMsg) noPointsMsg.classList.remove('hidden');
+						if (hasPointsMsg) hasPointsMsg.classList.add('hidden');
+						if (storeBtn) {
+							storeBtn.disabled = true;
+							storeBtn.classList.add('btn-disabled', 'opacity-50');
+						}
+					}
+				} else {
+					// Unlimited points
+					if (storeBtn) {
+						storeBtn.disabled = checkedCount === 0;
+						if (checkedCount === 0) {
+							storeBtn.classList.add('btn-disabled', 'opacity-50');
+						} else {
+							storeBtn.classList.remove('btn-disabled', 'opacity-50');
+						}
+					}
+				}
+			}
+
+			// Event listeners
+			checkboxes.forEach(cb => {
+				cb.addEventListener('change', updateVP);
+			});
+
+			if (selectAll) {
+				selectAll.addEventListener('change', function() {
+					checkboxes.forEach(cb => {
+						cb.checked = selectAll.checked;
+					});
+					updateVP();
+				});
+			}
+
+			// Run initial update
+			updateVP();
+		})();
+		</script>
 	{{ end }}
 {{ end }}

@@ -42,6 +42,18 @@ func s3Key(hash string) string {
 	return hash + "/" + hash
 }
 
+func (s *Worker) s3Key(hash string, path string, torrentName string) string {
+	if s.humanReadable && path != "" && torrentName != "" {
+		// Flatten human path by stripping redundant torrent name prefix
+		cleanPath := strings.TrimLeft(path, "/")
+		if strings.HasPrefix(cleanPath, torrentName+"/") {
+			cleanPath = strings.TrimPrefix(cleanPath, torrentName+"/")
+		}
+		return fmt.Sprintf("media/%s [%s]/%s", torrentName, s.resourceID, cleanPath)
+	}
+	return hash + "/" + hash
+}
+
 func (s *Worker) recordOwnership(ctx context.Context, cla *Claims, resourceID string, torrentName string, files []ResourceFile) {
 	// This record in S3 tracks ownership and exact file hashes for disaster recovery.
 	s3Cl := s.s3.Get()
@@ -50,13 +62,17 @@ func (s *Worker) recordOwnership(ctx context.Context, cla *Claims, resourceID st
 	}
 
 	type fileMeta struct {
-		Path string `json:"path"`
-		Hash string `json:"hash"`
+		Path  string `json:"path"`
+		Hash  string `json:"hash"`
+		S3Key string `json:"s3_key"`
 	}
 	
 	var fm []fileMeta
 	for _, f := range files {
-		fm = append(fm, fileMeta{Path: f.Path, Hash: f.FileHash})
+		// Calculate what the S3 key was for this file
+		// (This handles both legacy hash and new human paths)
+		key := s.s3Key(f.FileHash, f.Path, torrentName)
+		fm = append(fm, fileMeta{Path: f.Path, Hash: f.FileHash, S3Key: key})
 	}
 
 	key := fmt.Sprintf("metadata/resources/%s.json", resourceID)
@@ -70,7 +86,7 @@ func (s *Worker) recordOwnership(ctx context.Context, cla *Claims, resourceID st
 	body, _ := json.Marshal(data)
 
 	_, err := s3Cl.PutObjectWithContext(ctx, &awss3.PutObjectInput{
-		Bucket: aws.String(s.bucket),
+		Bucket: aws.String("storage"),
 		Key:    aws.String(key),
 		Body:   bytes.NewReader(body),
 	})
@@ -102,10 +118,12 @@ type Worker struct {
 	workerBase         string // hostname-derived prefix, suffixed with goroutine index
 	verifyIntegrity    bool
 	maxConcurrentJobs  int
+	humanReadable      bool
 	wg                 sync.WaitGroup
 }
 
 const (
+	humanReadableFlag        = "human-readable"
 	workerCountFlag          = "workers"
 	awsBucketFlag            = "aws-bucket"
 	awsUploadConcurrencyFlag = "aws-upload-concurrency"
@@ -728,7 +746,7 @@ func (s *Worker) handleStore(ctx context.Context, db *pg.DB, id string) (err err
 		return errors.Wrap(err, "failed to list existing resource_file for pruning")
 	}
 
-	// 2. Record ownership metadata with full file list
+	// 2. Record ownership metadata with full file list (at root via 'storage' bucket)
 	if s.bucket != "" {
 		s.recordOwnership(ctx, cla, id, torrentName, existing)
 	}
@@ -795,7 +813,7 @@ func (s *Worker) gcFileIfUnreferenced(ctx context.Context, db *pg.DB, hash strin
 	if f.UploadID != "" {
 		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 			Bucket:   aws.String(s.bucket),
-			Key:      aws.String(s3Key(hash)),
+			Key:      aws.String(s.s3Key(hash, "", "")),
 			UploadId: aws.String(f.UploadID),
 		})
 		if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
@@ -813,7 +831,7 @@ func (s *Worker) gcFileIfUnreferenced(ctx context.Context, db *pg.DB, hash strin
 	// not exist (e.g. we only had an in-flight multipart).
 	_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(s3Key(hash)),
+		Key:    aws.String(s.s3Key(hash, "", "")),
 	})
 	if _, err := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
@@ -872,7 +890,7 @@ func (s *Worker) sweepOrphanFiles(ctx context.Context, db *pg.DB) (int, error) {
 		if f.UploadID != "" {
 			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
-				Key:      aws.String(s3Key(f.Hash)),
+				Key:      aws.String(s.s3Key(f.Hash, "", "")),
 				UploadId: aws.String(f.UploadID),
 			})
 			if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
@@ -885,7 +903,7 @@ func (s *Worker) sweepOrphanFiles(ctx context.Context, db *pg.DB) (int, error) {
 		}
 		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(s3Key(f.Hash)),
+			Key:    aws.String(s.s3Key(f.Hash, "", "")),
 		})
 		if _, err := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
@@ -988,7 +1006,7 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 		if f.UploadID != "" {
 			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
-				Key:      aws.String(s3Key(rf.FileHash)),
+				Key:      aws.String(s.s3Key(rf.FileHash, rf.Path, torrentName)),
 				UploadId: aws.String(f.UploadID),
 			})
 			if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
@@ -1006,7 +1024,7 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 		// No more references — delete S3 object and file row
 		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(s3Key(rf.FileHash)),
+			Key:    aws.String(s.s3Key(rf.FileHash, rf.Path, torrentName)),
 		})
 		_, delErr := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
@@ -1039,32 +1057,32 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 			Key:    aws.String(mediaKey),
 		})
 
-		// 2. ARCHIVE .torrent file instead of deleting
+		// 2. ARCHIVE .torrent file instead of deleting (at root via 'storage' bucket)
 		torrentKey := fmt.Sprintf("torrents/%s [%s].torrent", torrentName, id)
 		archiveKey := fmt.Sprintf("torrents/.archived/%s [%s].torrent", torrentName, id)
 		_, err = s3Cl.CopyObjectWithContext(ctx, &awss3.CopyObjectInput{
-			Bucket:     aws.String(s.bucket),
-			CopySource: aws.String(url.PathEscape(s.bucket + "/" + torrentKey)),
+			Bucket:     aws.String("storage"),
+			CopySource: aws.String(url.PathEscape("storage/" + torrentKey)),
 			Key:        aws.String(archiveKey),
 		})
 		if err == nil {
 			_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
-				Bucket: aws.String(s.bucket),
+				Bucket: aws.String("storage"),
 				Key:    aws.String(torrentKey),
 			})
 			log.WithField("path", archiveKey).Info("archived torrent file")
 		} else {
 			// Fallback: if copy fails, just delete it to keep storage consistent
 			_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
-				Bucket: aws.String(s.bucket),
+				Bucket: aws.String("storage"),
 				Key:    aws.String(torrentKey),
 			})
 		}
 
-		// 3. Delete metadata file
+		// 3. Delete metadata file (at root via 'storage' bucket)
 		metaKey := fmt.Sprintf("metadata/resources/%s.json", id)
 		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
-			Bucket: aws.String(s.bucket),
+			Bucket: aws.String("storage"),
 			Key:    aws.String(metaKey),
 		})
 	}
@@ -1178,7 +1196,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		s3Cl := s.s3.Get()
 		_, headErr := s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(s3Key(existing.Hash)),
+			Key:    aws.String(s.s3Key(existing.Hash, item.PathStr, torrentName)),
 		})
 		if headErr != nil {
 			_, headErr = s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
@@ -1204,7 +1222,12 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 			return nil, errors.Wrap(err, "failed to reset stale stored file row from dedup")
 		}
 	}
-	humanPath := fmt.Sprintf("media/%s [%s]/%s", torrentName, id, item.PathStr)
+	// Flatten human path by stripping redundant torrent name prefix
+	cleanPath := strings.TrimLeft(item.PathStr, "/")
+	if strings.HasPrefix(cleanPath, torrentName+"/") {
+		cleanPath = strings.TrimPrefix(cleanPath, torrentName+"/")
+	}
+	humanPath := fmt.Sprintf("media/%s [%s]/%s", torrentName, id, cleanPath)
 
 	// No existing stored file found by path+size, proceed with exporting and storing by content hash
 	ei, err := s.api.ExportResourceContent(ctx, cla, id, item.ID)
@@ -1297,7 +1320,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	if err == nil && f.Status == StatusStored {
 		_, headErr := s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(s3Key(hash)),
+			Key:    aws.String(s.s3Key(hash, item.PathStr, torrentName)),
 		})
 		if headErr != nil {
 			_, headErr = s3Cl.HeadObjectWithContext(ctx, &awss3.HeadObjectInput{
@@ -1334,7 +1357,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		if f.UploadID != "" {
 			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
-				Key:      aws.String(s3Key(hash)),
+				Key:      aws.String(s.s3Key(hash, item.PathStr, torrentName)),
 				UploadId: aws.String(f.UploadID),
 			})
 			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
@@ -1351,7 +1374,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		}
 		_, err := s3Cl.PutObjectWithContext(ctx, &awss3.PutObjectInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(s3Key(hash)),
+			Key:    aws.String(s.s3Key(hash, item.PathStr, torrentName)),
 			Body:   bytes.NewReader(nil),
 			Metadata: map[string]*string{
 				"Human-Path": aws.String(humanPath),
@@ -1372,7 +1395,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		}).Info("part size changed, restarting upload")
 		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
 			Bucket:   aws.String(s.bucket),
-			Key:      aws.String(s3Key(hash)),
+			Key:      aws.String(s.s3Key(hash, item.PathStr, torrentName)),
 			UploadId: aws.String(f.UploadID),
 		})
 		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
@@ -1391,7 +1414,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	if f.UploadID == "" {
 		out, err := s3Cl.CreateMultipartUploadWithContext(ctx, &awss3.CreateMultipartUploadInput{
 			Bucket: aws.String(s.bucket),
-			Key:    aws.String(s3Key(hash)),
+			Key:    aws.String(s.s3Key(hash, item.PathStr, torrentName)),
 			Metadata: map[string]*string{
 				"Human-Path": aws.String(humanPath),
 			},
@@ -1840,15 +1863,17 @@ func (s *Worker) prepareMetadata(ctx context.Context, cla *Claims, id string, fi
 	if s.bucket != "" {
 		s3Cl := s.s3.Get()
 		if s3Cl != nil {
-			// 1. Store .torrent file for recovery
+			// 1. Store .torrent file for recovery (at root via 'storage' bucket)
 			if torrentRaw != nil {
 				key := fmt.Sprintf("torrents/%s [%s].torrent", torrentName, id)
 				_, _ = s3Cl.PutObjectWithContext(ctx, &awss3.PutObjectInput{
-					Bucket: aws.String(s.bucket),
+					Bucket: aws.String("storage"),
 					Key:    aws.String(key),
 					Body:   bytes.NewReader(torrentRaw),
 				})
 			}
+			// 2. Record ownership metadata (at root via 'storage' bucket)
+			s.recordOwnership(ctx, cla, id, torrentName, nil) // Temporarily nil until handleStore call
 		}
 	}
 	return torrentName, mi

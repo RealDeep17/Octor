@@ -24,7 +24,12 @@ func (s *Web) putResource(c *gin.Context) {
 		_ = c.Error(errors.New("DB not configured"))
 		return
 	}
-	res, err := ResourceQueueForStoring(c.Request.Context(), db, id)
+	var req struct {
+		SelectedFiles []string `json:"selected_files"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	res, err := ResourceQueueForStoring(c.Request.Context(), db, id, req.SelectedFiles)
 	if err != nil {
 		if aerr := APILogWrite(c.Request.Context(), db, id, OperationStore, http.StatusInternalServerError); aerr != nil {
 			log.WithError(aerr).WithField("resource_id", id).Warn("failed to write api log")
