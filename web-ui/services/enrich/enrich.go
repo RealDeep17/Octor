@@ -519,24 +519,32 @@ func (s *Enricher) Enrich(ctx context.Context, hash string, claims *api.Claims, 
 		return nil
 	}
 	log.Infof("start processing media info %+v", mi)
+	// Resolve sidecar enrichment permission:
+	//   - no claims (background job) → always enabled
+	//   - admin user                 → respects their toggle (fail-closed: false on error)
+	//   - regular user               → never enabled
 	sidecarEnrichment := false
-	if claims != nil && claims.Subject != "" {
+	if claims == nil || claims.Subject == "" {
+		// Background job — no user context, always allow sidecar.
+		sidecarEnrichment = true
+	} else {
 		userID, err := uuid.FromString(claims.Subject)
 		if err == nil {
 			u := &models.User{}
 			err = db.Model(u).Context(ctx).Where("user_id = ?", userID).Limit(1).Select()
 			if err == nil && s.admin.IsAdminEmail(u.Email) {
 				settings, err := models.GetUserStremioSettingsData(ctx, db, userID)
-				if err == nil && settings != nil {
-					sidecarEnrichment = settings.SidecarEnrichment
+				if err != nil || settings == nil {
+					log.WithError(err).Warnf("sidecar: failed to load admin settings for user %s, defaulting to false", userID)
+					sidecarEnrichment = false
 				} else {
-					sidecarEnrichment = true
+					sidecarEnrichment = settings.SidecarEnrichment
 				}
 			}
+			// non-admin user: sidecarEnrichment stays false
 		}
-	} else {
-		sidecarEnrichment = true
 	}
+
 	ctx = context.WithValue(ctx, "sidecar_enrichment", sidecarEnrichment)
 
 	mt, err := s.enrichMediaInfo(ctx, db, hash, claims, force, hintVideoID)
@@ -741,13 +749,6 @@ func (s *Enricher) searchAllMappers(ctx context.Context, vc *models.VideoContent
 		ctx = context.WithValue(ctx, "is_adult", true)
 	}
 	for i, m := range s.mappers {
-		if isAdult && m.GetName() != "OMDB" {
-			log.WithFields(log.Fields{
-				"title":  vc.Title,
-				"mapper": m.GetName(),
-			}).Info("searchAllMappers: skipping non-OMDB mapper for adult content")
-			continue
-		}
 		md, err := m.Map(ctx, vc, t, f)
 		if err != nil {
 			log.WithError(err).WithField("mapper", m.GetName()).Warn("mapper failed, continuing to next")

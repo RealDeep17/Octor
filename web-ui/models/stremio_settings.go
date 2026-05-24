@@ -151,6 +151,6 @@ func GetDefaultStremioSettings() *StremioSettingsData {
 			{Resolution: "720p", Enabled: true},
 			{Resolution: "other", Enabled: true},
 		},
-		SidecarEnrichment: true,
+		SidecarEnrichment: false,
 	}
 }

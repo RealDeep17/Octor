@@ -64,22 +64,6 @@
                 </div>
             </div>
 
-            <!-- Sidecar Enrichment -->
-            {{ if .Ctx.IsAdmin }}
-            <div class="mt-6 pt-5 border-t border-o-line/30">
-                <div class="flex items-start gap-4">
-                    <div class="flex-1">
-                        <h3 class="text-sm font-semibold mb-1">{{ t .Ctx.Lang "profile.settings.sidecarEnrichment" }}</h3>
-                        <p class="text-xs text-o-muted leading-relaxed">
-                            {{ t .Ctx.Lang "profile.settings.sidecarEnrichmentDesc" }}
-                        </p>
-                    </div>
-                    <label class="cursor-pointer pt-0.5">
-                        <input type="checkbox" name="sidecar_enrichment" class="toggle toggle-soft" {{ if .Data.SidecarEnrichment }}checked{{ end }} />
-                    </label>
-                </div>
-            </div>
-            {{ end }}
 
             <div class="mt-4 flex justify-end">
                 <button type="submit" class="btn btn-soft" data-umami-event="stremio-settings-save">{{ t .Ctx.Lang "profile.settings.save" }}</button>

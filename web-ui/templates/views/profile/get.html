@@ -73,24 +73,41 @@
         {{ template "profile/embed_domains" (withContext $ .Data) }}
     </div>
     {{ end }}
-    <!-- Admin Controls -->
     {{ if .IsAdmin }}
     <div class="flex items-center gap-3 mt-12 mb-4">
         <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">Admin Controls</h2>
         <div class="flex-1 h-px bg-o-line/50"></div>
     </div>
     <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
-        <h3 class="text-sm font-semibold mb-2">Metadata Enrichment Maintenance</h3>
-        <p class="text-xs text-o-muted leading-relaxed mb-4">
+        <h3 class="text-sm font-semibold mb-1">Metadata Enrichment Maintenance</h3>
+        <p class="text-xs text-o-muted leading-relaxed">
             Trigger a background refresh of all metadata enrichment. This will update stale resources (older than 7 days), failed requests, and attempt to resolve missing posters or ratings.
         </p>
         <form method="post" action="{{ langPath $.Lang "/admin/enrichment/refresh" }}" data-async-target="main">
-            <button type="submit" class="btn btn-soft" data-umami-event="admin-enrichment-refresh">
-                Refresh All Metadata
-            </button>
+            <div class="mt-4 flex justify-end">
+                <button type="submit" class="btn btn-soft" data-umami-event="admin-enrichment-refresh">
+                    Refresh All Metadata
+                </button>
+            </div>
         </form>
     </div>
+    <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
+        <div class="flex items-start gap-4">
+            <div class="flex-1">
+                <h3 class="text-sm font-semibold mb-1">{{ t $.Lang "profile.settings.sidecarEnrichment" }}</h3>
+                <p class="text-xs text-o-muted leading-relaxed">
+                    {{ t $.Lang "profile.settings.sidecarEnrichmentDesc" }}
+                </p>
+            </div>
+            <form method="post" enctype="multipart/form-data" data-async-push-state="false" action="{{ langPath $.Lang "/stremio/settings/update" }}" data-async-target="#stremio-settings">
+                <label class="cursor-pointer pt-0.5">
+                    <input type="checkbox" name="sidecar_enrichment" class="toggle toggle-soft" {{ if .Data.StremioSettings.SidecarEnrichment }}checked{{ end }} onchange="this.form.submit()" />
+                </label>
+            </form>
+        </div>
+    </div>
     {{ end }}
+
 
     <div class="text-center mt-12 flex flex-col items-center gap-3">
         <a href="{{ langPath $.Lang "/logout" }}" class="btn btn-ghost text-o-muted hover:text-error text-sm" data-async-target="main" data-umami-event="logout">{{ t $.Lang "profile.logout" }}</a>
