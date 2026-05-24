@@ -18,11 +18,14 @@ import (
 )
 
 var (
-	storageDir     = "/srv/octor/infra-data/drive-mount"
-	tempUploadsDir = "/srv/octor/infra-data/drive-mount/.uploads"
+	storageDir     = "/srv/octor/infra-data/drive-mount-vfs"
+	indexDriveDir  = "/srv/octor/infra-data/drive1-index"
+	tempUploadsDir = "/srv/octor/infra-data/drive-mount-vfs/.uploads"
 	port           = ":9000"
 	uploadPartSize = int64(32 * 1024 * 1024) // Default to 32MB multipart size
+	humanReadable  = false                  // Default to original hash-based storage
 )
+
 
 // S3 Error response
 type s3Error struct {
@@ -62,6 +65,7 @@ type activeUpload struct {
 	bucket        string
 	key           string
 	finalPath     string
+	humanPath     string
 	destFile      *os.File
 	writer        *bufio.Writer
 	tempDir       string
@@ -87,6 +91,11 @@ var (
 	writeBufferSize = 16 * 1024 * 1024       // Default to 16MB sequential write buffer
 	maxStagingBytes = int64(512 * 1024 * 1024) // 512MB default max staging buffer
 )
+
+func createLink(finalPath string, humanPath string) {
+	// Links are disabled due to FUSE mount restrictions. 
+	// We handle this by uploading directly to the human path in handleS3.
+}
 
 func main() {
 	_ = mime.AddExtensionType(".mkv", "video/x-matroska")
@@ -122,6 +131,13 @@ func main() {
 		}
 	}
 
+	if os.Getenv("S3_GATEWAY_HUMAN_READABLE") == "true" {
+		humanReadable = true
+		log.Printf("[S3] HUMAN_READABLE mode ENABLED: Files will be stored with torrent names.")
+	} else {
+		log.Printf("[S3] HUMAN_READABLE mode DISABLED: Reverting to default hash-based storage.")
+	}
+
 	if envBufSize := os.Getenv("S3_GATEWAY_WRITE_BUFFER_SIZE"); envBufSize != "" {
 		if val, err := strconv.Atoi(envBufSize); err == nil {
 			writeBufferSize = val
@@ -144,9 +160,25 @@ func main() {
 		log.Printf("AWS_UPLOAD_PART_SIZE not set, defaulting to %d bytes", uploadPartSize)
 	}
 
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		if strings.HasPrefix(envPort, ":") {
+			port = envPort
+		} else {
+			port = ":" + envPort
+		}
+		log.Printf("Using PORT from environment: %s", port)
+	}
+
 	http.HandleFunc("/", handleS3)
 
 	log.Printf("Starting Zero-Buffer Direct-Stream S3 Gateway on port %s...", port)
+
+	if os.Getenv("S3_GATEWAY_HUMAN_READABLE") == "true" {
+		humanReadable = true
+		log.Printf("[S3] HUMAN_READABLE mode ENABLED: Files will be stored with torrent names.")
+	} else {
+		log.Printf("[S3] HUMAN_READABLE mode DISABLED: Reverting to default hash-based storage.")
+	}
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
@@ -293,6 +325,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
     <Bucket><Name>vault</Name></Bucket>
     <Bucket><Name>torrent-store</Name></Bucket>
     <Bucket><Name>poster-cache</Name></Bucket>
+    <Bucket><Name>storage</Name></Bucket>
   </Buckets>
 </ListAllMyBucketsResult>`))
 		return
@@ -304,7 +337,21 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		key = parts[1]
 	}
 
-	bucketDir := filepath.Join(storageDir, bucket)
+	// New Organized Mapping Logic
+	var bucketDir string
+	switch bucket {
+	case "vault":
+		bucketDir = filepath.Join(storageDir, "vault")
+	case "torrent-store":
+		bucketDir = filepath.Join(storageDir, "data", "torrents_system")
+	case "poster-cache":
+		bucketDir = filepath.Join(storageDir, "data", "postercache")
+	case "storage":
+		bucketDir = filepath.Join(indexDriveDir, "recovery")
+	default:
+		bucketDir = filepath.Join(storageDir, bucket)
+	}
+
 	if err := os.MkdirAll(bucketDir, 0777); err != nil {
 		writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
 		return
@@ -318,7 +365,15 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 	// 1. Create Multipart Upload
 	if isUploads && r.Method == http.MethodPost {
 		upID := generateUploadID()
+		
+		// If human path is provided, use it as the actual filename on the cloud drive
+		humanPath := r.Header.Get("X-Amz-Meta-Human-Path")
 		finalPath := filepath.Join(bucketDir, key)
+		if humanReadable && humanPath != "" {
+			finalPath = filepath.Join(storageDir, humanPath)
+			log.Printf("[S3] Direct Human Upload: Mapping %s/%s -> %s", bucket, key, finalPath)
+		}
+
 		if err := os.MkdirAll(filepath.Dir(finalPath), 0777); err != nil {
 			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
 			return
@@ -350,6 +405,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 			bucket:        bucket,
 			key:           key,
 			finalPath:     finalPath,
+			humanPath:     r.Header.Get("X-Amz-Meta-Human-Path"),
 			destFile:      destFile,
 			writer:        writer,
 			tempDir:       tempDir,
@@ -598,6 +654,8 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		// Clean up staging directory
 		_ = os.RemoveAll(u.tempDir)
 
+		createLink(u.finalPath, u.humanPath)
+
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
@@ -689,7 +747,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 	// 7. Delete Object
 	if r.Method == http.MethodDelete {
 		finalPath := filepath.Join(bucketDir, key)
-		_ = os.Remove(finalPath)
+		_ = os.RemoveAll(finalPath)
 		w.WriteHeader(http.StatusNoContent)
 		log.Printf("[S3] Deleted Object: Bucket=%s, Key=%s", bucket, key)
 		return
@@ -721,7 +779,12 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 
 	// 8. Put Object (Single part upload fallback)
 	if r.Method == http.MethodPut {
+		humanPath := r.Header.Get("X-Amz-Meta-Human-Path")
 		finalPath := filepath.Join(bucketDir, key)
+		if humanReadable && humanPath != "" {
+			finalPath = filepath.Join(storageDir, humanPath)
+		}
+
 		if err := os.MkdirAll(filepath.Dir(finalPath), 0777); err != nil {
 			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
 			return
@@ -752,6 +815,8 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+
+		createLink(finalPath, r.Header.Get("X-Amz-Meta-Human-Path"))
 
 		w.Header().Set("ETag", "\"completed-etag\"")
 		w.WriteHeader(http.StatusOK)
