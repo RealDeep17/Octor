@@ -297,6 +297,25 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 
 	log.Infof("got media type %v for hash %v", mt, hash)
 
+	// Fetch existing movies and series for this resource to preserve their metadata IDs in case new enrichment misses
+	existingMovies, _ := models.GetMoviesByResourceID(ctx, db, hash)
+	existingSeriesSlice, _ := models.GetSeriesByResourceID(ctx, db, hash)
+
+	var existingMovieMetadataID *uuid.UUID
+	if len(existingMovies) == 1 && existingMovies[0].MovieMetadataID != nil {
+		existingMovieMetadataID = existingMovies[0].MovieMetadataID
+	}
+	existingMovieMetaIDs := map[string]uuid.UUID{}
+	for _, em := range existingMovies {
+		if em.Path != nil && em.MovieMetadataID != nil {
+			existingMovieMetaIDs[*em.Path] = *em.MovieMetadataID
+		}
+	}
+	var existingSeriesMetadataID *uuid.UUID
+	if len(existingSeriesSlice) == 1 && existingSeriesSlice[0].SeriesMetadataID != nil {
+		existingSeriesMetadataID = existingSeriesSlice[0].SeriesMetadataID
+	}
+
 	var series *models.Series
 	var movies []*models.Movie
 
@@ -307,6 +326,9 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 			return nil, errors.Wrapf(err, "failed to make movie for hash %s", hash)
 		}
 		if movie != nil {
+			if existingMovieMetadataID != nil {
+				movie.MovieMetadataID = existingMovieMetadataID
+			}
 			movies = append(movies, movie)
 		}
 	case models.MediaInfoMediaTypeMovieMultiple:
@@ -314,10 +336,20 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to make movies for hash %s", hash)
 		}
+		for _, m := range movies {
+			if m.Path != nil {
+				if id, ok := existingMovieMetaIDs[*m.Path]; ok {
+					m.MovieMetadataID = &id
+				}
+			}
+		}
 	default:
 		series, err = s.makeSeriesWithEpisodes(torrentInfos, hash, mt)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to make series for hash %s", hash)
+		}
+		if series != nil && existingSeriesMetadataID != nil {
+			series.SeriesMetadataID = existingSeriesMetadataID
 		}
 	}
 
