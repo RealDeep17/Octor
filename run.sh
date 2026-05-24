@@ -924,6 +924,110 @@ cmd_enrich() {
 }
 
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SUBCOMMAND: reset (Factory Reset)
+# ------------------------------------------------------------------------------
+
+cmd_factory_reset() {
+    echo "========================================================================"
+    echo -e "\033[1;31m🛑 🚨 WARNING: OCTOR FACTORY RESET INITIATED 🚨 🛑\033[0m"
+    echo "========================================================================"
+    echo -e "\033[1;33mThis action is EXTREMELY DESTRUCTIVE and CANNOT BE UNDONE!\033[0m"
+    echo "------------------------------------------------------------------------"
+    echo -e "\033[1;31mTHE FOLLOWING WILL BE PERMANENTLY DELETED:\033[0m"
+    echo "  1. All local Octor Docker containers and databases (Postgres, Redis)."
+    echo "  2. All local BadgerDB metadata key-value stores."
+    echo "  3. All local disk and RAM caches (Seeder, SSD, Rclone VFS cache, S3)."
+    echo "  4. All compiled local binaries."
+    echo -e "  5. \033[1;31m🛑 ALL REMOTE GOOGLE DRIVE FILES AND FOLDERS\033[0m connected to Octor"
+    echo "     (Entire remote directory will be purged/emptied!)."
+    echo "------------------------------------------------------------------------"
+    echo -e "\033[1;32mAFTER DELETION, OCTOR WILL BE REBUILT FROM SCRATCH:\033[0m"
+    echo "  - Recompile all Go microservices and clean build cache."
+    echo "  - Rebuild and recreate all Docker containers and databases from clean state."
+    echo "  - Reinitialize clean NATS streams."
+    echo "  - Remount storage layers and start all services healthy."
+    echo "========================================================================"
+
+    # Prompt 1
+    read -p "Type 'factory-reset' to proceed with the FIRST stage of confirmation: " CONFIRM_1
+    if [[ "$CONFIRM_1" != "factory-reset" ]]; then
+        echo "❌ Reset cancelled (First check failed)."
+        exit 1
+    fi
+
+    # Prompt 2
+    echo -e "\n\033[1;31m⚠️  FINAL DANGER ZONE: This will wipe your Google Drive alpha union vault! ⚠️\033[0m"
+    read -p "Type 'DELETE ALL DATA' to proceed with the SECOND stage of confirmation: " CONFIRM_2
+    if [[ "$CONFIRM_2" != "DELETE ALL DATA" ]]; then
+        echo "❌ Reset cancelled (Second check failed)."
+        exit 1
+    fi
+
+    echo -e "\n\033[1;32m🚀 Starting factory reset process...\033[0m"
+
+    # Step 1. Stop all services and unmount paths
+    stop_all_octor
+    kill_ghosts
+    unmount_paths
+
+    # Step 2. Remove Docker infrastructure containers and persistent volumes
+    echo "🐳 Wiping Docker infrastructure and volumes..."
+    (cd "$PROJECT_ROOT" && run_sudo docker-compose --ansi never down -v --remove-orphans || true)
+    
+    # Step 3. Retrieve configuration paths
+    local CURRENT_MODE=$(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "non-chunker-vfs-ram")
+    local BADGER_PATH=$(grep '^BADGER_PATH=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "./badger-data")
+    [[ "$BADGER_PATH" != /* ]] && BADGER_PATH="$PROJECT_ROOT/$BADGER_PATH"
+    
+    local DATA_DIR=$(grep '^DATA_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "/mnt/seeder-cache")
+    local SSD_DATA_DIR=$(grep '^SSD_DATA_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "/srv/octor/infra-data/seeder-cache")
+    local RCLONE_CACHE_DIR=$(grep '^RCLONE_CACHE_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "/mnt/seeder-cache/rclone-vfs")
+    local S3_GATEWAY_TEMP_UPLOADS_DIR=$(grep '^S3_GATEWAY_TEMP_UPLOADS_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "/mnt/seeder-cache/s3-gateway-uploads")
+
+    # Step 4. Delete local data & databases
+    echo "🧹 Wiping local databases and persistent caches..."
+    run_sudo rm -rf "$BADGER_PATH" || true
+    
+    if [[ -d "$DATA_DIR" && "$DATA_DIR" != "/" && "$DATA_DIR" != "/srv" && "$DATA_DIR" != "$PROJECT_ROOT" ]]; then
+        run_sudo rm -rf "${DATA_DIR:?}"/* || true
+    fi
+    if [[ -d "$SSD_DATA_DIR" && "$SSD_DATA_DIR" != "/" && "$SSD_DATA_DIR" != "/srv" && "$SSD_DATA_DIR" != "$PROJECT_ROOT" ]]; then
+        run_sudo rm -rf "${SSD_DATA_DIR:?}"/* || true
+    fi
+    if [[ -d "$RCLONE_CACHE_DIR" && "$RCLONE_CACHE_DIR" != "/" && "$RCLONE_CACHE_DIR" != "/srv" && "$RCLONE_CACHE_DIR" != "$PROJECT_ROOT" ]]; then
+        run_sudo rm -rf "${RCLONE_CACHE_DIR:?}"/* || true
+    fi
+    if [[ -d "$S3_GATEWAY_TEMP_UPLOADS_DIR" && "$S3_GATEWAY_TEMP_UPLOADS_DIR" != "/" && "$S3_GATEWAY_TEMP_UPLOADS_DIR" != "/srv" && "$S3_GATEWAY_TEMP_UPLOADS_DIR" != "$PROJECT_ROOT" ]]; then
+        run_sudo rm -rf "${S3_GATEWAY_TEMP_UPLOADS_DIR:?}"/* || true
+    fi
+
+    # Step 5. Run full go prune
+    echo "🧹 Surgical cleanup of build caches..."
+    cmd_prune --all || true
+
+    # Step 6. Remote Google Drive Storage Purge
+    echo "🌐 Purging remote Google Drive storage..."
+    local RCLONE_REMOTE=$(grep '^VAULT_RCLONE_REMOTE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "ALPHA_UNION:")
+    local BUCKET_NAME=$(grep '^VAULT_AWS_BUCKET=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "vault")
+    local REMOTE_PATH="${RCLONE_REMOTE}${BUCKET_NAME}"
+    
+    if [[ "$REMOTE_PATH" == *":"* ]]; then
+        echo "   -> Running rclone purge on remote path: $REMOTE_PATH..."
+        rclone --config "$RCLONE_CONFIG" purge "$REMOTE_PATH" || true
+        rclone --config "$RCLONE_CONFIG" mkdir "$REMOTE_PATH" || true
+    else
+        echo "⚠️  SAFEGUARD: Refusing to purge non-remote path: '$REMOTE_PATH'"
+    fi
+
+    echo -e "\n\033[1;32m✅ Local databases, caches, and remote Google Drive successfully purged!\033[0m"
+    echo -e "\033[1;36m🔄 Initiating Octor rebuilding phase...\033[0m\n"
+
+    # Step 7. Trigger a full cmd_mode switch with rebuild, docker up, rclone cache clear, and force options!
+    cmd_mode "$CURRENT_MODE" --docker --build --rclone --force
+}
+
+# ------------------------------------------------------------------------------
 # ENTRY POINT
 # ------------------------------------------------------------------------------
 
@@ -936,6 +1040,7 @@ case "$COMMAND" in
     mode) [[ $# -gt 0 ]] && shift; cmd_mode "$@" ;;
     benchmark|bench) [[ $# -gt 0 ]] && shift; cmd_benchmark "$@" ;;
     prune) [[ $# -gt 0 ]] && shift; cmd_prune "$@" ;;
+    reset|factory-reset|--factory-reset) cmd_factory_reset ;;
     install) cmd_install ;;
     build) cmd_build ;;
     status) cmd_status ;;
@@ -956,6 +1061,9 @@ case "$COMMAND" in
         echo "  enrich refresh [DAYS]      Smart refresh — stale/missing (default 7d)"
         echo "  enrich run                 Enrich resources missing metadata only"
         echo "  enrich force-all           Force re-enrich everything (incl. abandoned)"
+        echo "  reset                      🛑 Perform a DESTRUCTIVE Factory Reset on local"
+        echo "                             databases, caches, and remote Google Drive, and"
+        echo "                             recompile/rebuild everything cleanly."
         echo "  install                    Setup/Update systemd service files"
         echo "  build                      Compile all microservices"
         echo "  status                     Show current system health"
