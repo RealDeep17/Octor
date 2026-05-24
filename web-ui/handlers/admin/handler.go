@@ -140,6 +140,7 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 	gr.GET("/drive", h.driveIndex)
 	gr.GET("/drive/*path", h.driveIndex)
 	gr.POST("/enrichment/refresh", h.refreshEnrichment)
+	gr.POST("/enrichment/force-all", h.forceAllEnrichment)
 }
 
 type DriveItem struct {
@@ -938,6 +939,10 @@ func (h *Handler) getLiveSeeds(ctx context.Context, c *gin.Context, resourceID s
 	return 0
 }
 
+// refreshEnrichment is the "Smart Refresh" button.
+// It only processes stale, missing, or transiently-failed resources
+// (NoMetadata past 1h cooldown, Error past 1h, Processing stale >15min).
+// Abandoned rows are excluded — those require an explicit force action.
 func (h *Handler) refreshEnrichment(c *gin.Context) {
 	db, err := h.db()
 	if err != nil {
@@ -951,19 +956,56 @@ func (h *Handler) refreshEnrichment(c *gin.Context) {
 
 		ids, err := models.GetStaleOrMissingMetadataResourceIDs(bgCtx, db, 7*24*time.Hour)
 		if err != nil {
-			log.WithError(err).Error("Background metadata refresh failed to query stale resources")
+			log.WithError(err).Error("Smart Refresh: failed to query stale resources")
 			return
 		}
 
-		log.Infof("Admin triggered background metadata refresh: found %d resources to refresh", len(ids))
+		log.Infof("Smart Refresh: found %d resources to process", len(ids))
 		for i, id := range ids {
-			log.Infof("Background refresh [%d/%d]: refreshing resource %s", i+1, len(ids), id)
-			err = h.enricher.Enrich(bgCtx, id, &api.Claims{}, true, "")
+			log.Infof("Smart Refresh [%d/%d]: enriching resource %s", i+1, len(ids), id)
+			// force=false: respects the 1h cooldown and skips Abandoned rows
+			err = h.enricher.Enrich(bgCtx, id, &api.Claims{}, false, "")
 			if err != nil {
-				log.WithError(err).Warnf("Background refresh: failed to refresh resource %s", id)
+				log.WithError(err).Warnf("Smart Refresh: failed on resource %s", id)
 			}
 		}
-		log.Info("Background metadata refresh completed successfully")
+		log.Info("Smart Refresh completed")
+	}()
+
+	web.RedirectWithSuccessAndMessage(c, "toast.enrichmentRefreshStarted")
+}
+
+// forceAllEnrichment is the "Force All" button.
+// It re-enriches every resource in the DB regardless of status,
+// including Abandoned rows (resets retry_count). Use after a
+// major pipeline fix (e.g. sidecar was down, new mapper added).
+func (h *Handler) forceAllEnrichment(c *gin.Context) {
+	db, err := h.db()
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+		defer cancel()
+
+		resources, err := models.GetAllResources(bgCtx, db)
+		if err != nil {
+			log.WithError(err).Error("Force All: failed to query all resources")
+			return
+		}
+
+		log.Infof("Force All: re-enriching %d resources", len(resources))
+		for i, r := range resources {
+			log.Infof("Force All [%d/%d]: enriching resource %s", i+1, len(resources), r.ResourceID)
+			// force=true: steals any Processing lock, resets retry_count, unblocks Abandoned
+			err = h.enricher.Enrich(bgCtx, r.ResourceID, &api.Claims{}, true, "")
+			if err != nil {
+				log.WithError(err).Warnf("Force All: failed on resource %s", r.ResourceID)
+			}
+		}
+		log.Info("Force All completed")
 	}()
 
 	web.RedirectWithSuccessAndMessage(c, "toast.enrichmentRefreshStarted")

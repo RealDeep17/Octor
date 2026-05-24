@@ -69,4 +69,5 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	plg.GET("/episode/still/:video_id/:season/:episode/:file", h.still)
 	lg.POST("/add", h.add)
 	lg.POST("/remove", h.remove)
+	lg.POST("/:id/enrich", h.enrichResource)
 }

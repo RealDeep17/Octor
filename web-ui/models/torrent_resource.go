@@ -84,28 +84,53 @@ func GetStaleOrMissingMetadataResourceIDs(ctx context.Context, db *pg.DB, staleT
 	var ids []string
 	query := `
 		SELECT DISTINCT resource_id FROM (
-			SELECT m.resource_id 
+			-- Movies with missing or stale metadata (poster gone / expired)
+			SELECT m.resource_id
 			FROM movie m
 			LEFT JOIN movie_metadata md ON m.movie_metadata_id = md.movie_metadata_id
-			WHERE m.movie_metadata_id IS NULL OR md.poster_url = '' OR md.poster_url IS NULL OR md.updated_at < ?
-			
+			WHERE m.movie_metadata_id IS NULL
+			   OR md.poster_url = '' OR md.poster_url IS NULL
+			   OR md.updated_at < ?
+
 			UNION
-			
+
+			-- Series with missing or stale metadata
 			SELECT s.resource_id
 			FROM series s
 			LEFT JOIN series_metadata sd ON s.series_metadata_id = sd.series_metadata_id
-			WHERE s.series_metadata_id IS NULL OR sd.poster_url = '' OR sd.poster_url IS NULL OR sd.updated_at < ?
+			WHERE s.series_metadata_id IS NULL
+			   OR sd.poster_url = '' OR sd.poster_url IS NULL
+			   OR sd.updated_at < ?
 
 			UNION
 
-			SELECT resource_id
-			FROM media_info
-			WHERE status = ? OR (status = ? AND updated_at < ?)
+			-- Error rows past 1h cooldown (retryable)
+			SELECT resource_id FROM media_info
+			WHERE status = ? AND updated_at < now() - INTERVAL '1 hour'
+
+			UNION
+
+			-- NoMetadata rows past 1h cooldown (retryable, not Abandoned)
+			SELECT resource_id FROM media_info
+			WHERE status = ? AND updated_at < now() - INTERVAL '1 hour'
+
+			UNION
+
+			-- Stale Processing locks (> 15 min = dead worker)
+			SELECT resource_id FROM media_info
+			WHERE status = ? AND updated_at < now() - INTERVAL '15 minutes'
+
+			-- NOTE: Abandoned (status=6) is intentionally excluded.
+			-- Only force=true (per-item ↻ or Force All) can reach Abandoned rows.
 		) tmp
 	`
 	cutoff := time.Now().Add(-staleThreshold)
-	processingCutoff := time.Now().Add(-6 * time.Hour)
-	_, err := db.QueryContext(ctx, &ids, query, cutoff, cutoff, int16(MediaInfoStatusError), int16(MediaInfoStatusProcessing), processingCutoff)
+	_, err := db.QueryContext(ctx, &ids, query,
+		cutoff,                           // movie metadata stale cutoff
+		cutoff,                           // series metadata stale cutoff
+		int16(MediaInfoStatusError),      // Error rows
+		int16(MediaInfoStatusNoMetadata), // NoMetadata rows
+		int16(MediaInfoStatusProcessing), // stale Processing rows
+	)
 	return ids, err
 }
-

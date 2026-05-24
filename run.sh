@@ -795,16 +795,35 @@ cmd_doctor() {
 # ------------------------------------------------------------------------------
 
 cmd_enrich() {
-    local SUB="${1:-}"
-    if [[ "$SUB" == "refresh" ]]; then
-        local DAYS="${2:-7}"
-        echo "♻️  Refreshing metadata (stale > $DAYS days)..."
-        # Source env manually since we're calling the binary
-        export $(grep -v '^#' "$ENV_FILE" | xargs)
-        "$BIN_DIR"/web-ui enrich refresh --days "$DAYS"
-    else
-        echo "Usage: ./run.sh enrich refresh [DAYS]"
-    fi
+    local SUB="${1:-help}"
+    # Source env so the binary has all required vars
+    export $(grep -v '^#' "$ENV_FILE" | xargs)
+    # Suppress proto registration warnings from shared proto packages
+    export GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
+
+    case "$SUB" in
+        refresh)
+            local DAYS="${2:-7}"
+            echo "♻️  Smart Refresh — stale/missing metadata (>${DAYS}d)..."
+            echo "    (Respects 1h cooldown on NoMetadata/Error. Skips Abandoned.)"
+            "$BIN_DIR"/web-ui enrich refresh --days "$DAYS"
+            ;;
+        run)
+            echo "▶️  Enriching resources without metadata..."
+            "$BIN_DIR"/web-ui enrich run
+            ;;
+        force-all|force)
+            echo "⚡ Force All — re-enriching EVERY resource (including Abandoned)..."
+            echo "    (Resets retry_count. Use after a major pipeline fix.)"
+            "$BIN_DIR"/web-ui enrich run --force
+            ;;
+        *)
+            echo "Usage:"
+            echo "  ./run.sh enrich refresh [DAYS]   Smart refresh — stale/missing (default 7d)"
+            echo "  ./run.sh enrich run              Enrich resources missing metadata only"
+            echo "  ./run.sh enrich force-all        Force re-enrich everything (incl. abandoned)"
+            ;;
+    esac
 }
 
 # ------------------------------------------------------------------------------
@@ -837,7 +856,9 @@ case "$COMMAND" in
         echo "                             Run performance benchmark"
         echo "                             (e.g.: './run.sh bench all -m \"magnet:...\"')"
         echo "  prune [--all]              Clean Go caches and local binaries"
-        echo "  enrich refresh [DAYS]      Refresh stale metadata"
+        echo "  enrich refresh [DAYS]      Smart refresh — stale/missing (default 7d)"
+        echo "  enrich run                 Enrich resources missing metadata only"
+        echo "  enrich force-all           Force re-enrich everything (incl. abandoned)"
         echo "  install                    Setup/Update systemd service files"
         echo "  build                      Compile all microservices"
         echo "  status                     Show current system health"

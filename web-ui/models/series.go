@@ -82,6 +82,12 @@ func (s *Series) GetIntYear() int {
 }
 
 func ReplaceSeriesForResource(ctx context.Context, db *pg.DB, resourceID string, seriesList []*Series) error {
+	// Safety guard: never delete existing rows when the new result is empty.
+	// This preserves previously-enriched series/episode data if re-enrichment finds nothing.
+	if len(seriesList) == 0 {
+		return nil
+	}
+
 	tx, err := db.BeginContext(ctx)
 	if err != nil {
 		return err

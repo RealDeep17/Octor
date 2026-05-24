@@ -558,11 +558,39 @@ func (s *Enricher) Enrich(ctx context.Context, hash string, claims *api.Claims, 
 		}
 		log.WithError(err).Error("failed to enrich media info")
 	} else if mt == nil {
+		// No video files in the torrent — not a metadata failure.
 		mi.Status = int16(models.MediaInfoStatusNoMedia)
+		mi.RetryCount = 0
 	} else {
-		mi.Status = int16(models.MediaInfoStatusDone)
+		// Video files found — now check whether any mapper actually produced metadata.
+		// Done is only written when a real poster_url or video_id is linked.
 		mtInt16 := int16(*mt)
 		mi.MediaType = &mtInt16
+
+		hasMetadata, checkErr := models.ResourceHasLinkedMetadata(ctx, db, hash)
+		if checkErr != nil {
+			log.WithError(checkErr).Warnf("could not verify linked metadata for hash %s, defaulting to NoMetadata", hash)
+			hasMetadata = false
+		}
+
+		if hasMetadata {
+			// Real enrichment success.
+			mi.Status = int16(models.MediaInfoStatusDone)
+			mi.RetryCount = 0
+			log.Infof("enrichment Done for hash %s (has linked metadata)", hash)
+		} else {
+			// Mappers all missed. Increment retry counter.
+			mi.RetryCount = mi.RetryCount + 1
+			if mi.RetryCount >= int16(models.MaxEnrichRetries) {
+				// Exhausted retries — stop automatic re-enrichment.
+				// Only force=true (per-item ↻ or Force All) can unblock this.
+				mi.Status = int16(models.MediaInfoStatusAbandoned)
+				log.Warnf("enrichment Abandoned for hash %s after %d retries (no mapper matched)", hash, mi.RetryCount)
+			} else {
+				mi.Status = int16(models.MediaInfoStatusNoMetadata)
+				log.Infof("enrichment NoMetadata for hash %s (attempt %d/%d)", hash, mi.RetryCount, models.MaxEnrichRetries)
+			}
+		}
 	}
 	err = models.UpdateMediaInfo(ctx, db, mi)
 	if err != nil {

@@ -69,6 +69,12 @@ func (s *Movie) GetEpisode(season int, episode int) *Episode {
 }
 
 func ReplaceMoviesForResource(ctx context.Context, db *pg.DB, resourceID string, movies []*Movie) error {
+	// Safety guard: never delete existing rows when the new result is empty.
+	// This preserves previously-enriched movie data if re-enrichment finds nothing.
+	if len(movies) == 0 {
+		return nil
+	}
+
 	tx, err := db.BeginContext(ctx)
 	if err != nil {
 		return err
@@ -86,14 +92,12 @@ func ReplaceMoviesForResource(ctx context.Context, db *pg.DB, resourceID string,
 		return err
 	}
 
-	// Insert new movies if any
-	if len(movies) > 0 {
-		_, err = tx.Model(&movies).
-			Context(ctx).
-			Insert()
-		if err != nil {
-			return err
-		}
+	// Insert new movies
+	_, err = tx.Model(&movies).
+		Context(ctx).
+		Insert()
+	if err != nil {
+		return err
 	}
 
 	return tx.Commit()
