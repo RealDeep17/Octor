@@ -72,5 +72,9 @@ func makeEnricher(c *cli.Context, cl *http.Client, pg *cs.PG, sapi *api.Api, ant
 
 	// Setting Enricher
 	adminSvc := admin.New(c)
-	return enr.NewEnricher(pg, sapi, mdMappers, epMappers, aiResolver, adminSvc)
+	concurrency := c.Int("enrich-concurrency")
+	if concurrency <= 0 {
+		concurrency = 25
+	}
+	return enr.NewEnricher(pg, sapi, mdMappers, epMappers, aiResolver, adminSvc, concurrency)
 }

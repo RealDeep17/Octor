@@ -25,6 +25,7 @@ type Enricher struct {
 	episodeMappers []EpisodeMapper
 	aiResolver     *AIResolver
 	admin          *admin.Admin
+	Concurrency    int
 }
 
 type MetadataMapper interface {
@@ -118,7 +119,7 @@ func (s *Enricher) Localize(ctx context.Context, md *models.VideoMetadata, lang 
 	}
 }
 
-func NewEnricher(pg *services.PG, api *api.Api, mappers []MetadataMapper, episodeMappers []EpisodeMapper, aiResolver *AIResolver, admin *admin.Admin) *Enricher {
+func NewEnricher(pg *services.PG, api *api.Api, mappers []MetadataMapper, episodeMappers []EpisodeMapper, aiResolver *AIResolver, admin *admin.Admin, concurrency int) *Enricher {
 	return &Enricher{
 		pg:             pg,
 		api:            api,
@@ -126,6 +127,7 @@ func NewEnricher(pg *services.PG, api *api.Api, mappers []MetadataMapper, episod
 		episodeMappers: episodeMappers,
 		aiResolver:     aiResolver,
 		admin:          admin,
+		Concurrency:    concurrency,
 	}
 }
 

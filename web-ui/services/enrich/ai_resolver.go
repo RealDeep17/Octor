@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -70,6 +71,12 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 			Value:  3,
 			EnvVar: "AI_ENRICH_MAX_CANDIDATES",
 		},
+		cli.IntFlag{
+			Name:   "enrich-concurrency",
+			Usage:  "maximum concurrent workers for metadata enrichment",
+			Value:  25,
+			EnvVar: "ENRICH_CONCURRENCY",
+		},
 	)
 }
 
@@ -106,6 +113,7 @@ type AIResolver struct {
 	timeout       time.Duration
 	client        *anthropic.Client
 	pg            *cs.PG
+	mu            sync.Mutex
 }
 
 // New wires the resolver from CLI flags and a shared anthropic client.
@@ -254,6 +262,9 @@ func contentTypeToInt(ct models.ContentType) int16 {
 
 // callClaude runs the tool-use call and returns the raw candidates.
 func (r *AIResolver) callClaude(ctx context.Context, pathStr, parsedTitle string, parsedYear *int16, ct models.ContentType) ([]TitleCandidate, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 

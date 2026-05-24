@@ -139,8 +139,6 @@ func enrichPopular(c *cli.Context) error {
 	return nil
 }
 
-const enrichWorkerConcurrency = 25
-
 func enrich(c *cli.Context) error {
 	force := c.Bool("force")
 	forceError := c.Bool("force-error")
@@ -202,9 +200,9 @@ func enrich(c *cli.Context) error {
 		return err
 	}
 
-	log.Infof("enrich: processing %d resources with %d concurrent workers", len(resources), enrichWorkerConcurrency)
+	log.Infof("enrich: processing %d resources with %d concurrent workers", len(resources), en.Concurrency)
 
-	sem := make(chan struct{}, enrichWorkerConcurrency)
+	sem := make(chan struct{}, en.Concurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstErr error
@@ -269,9 +267,9 @@ func refreshEnrich(c *cli.Context) error {
 	}
 
 	total := len(ids)
-	log.Infof("found %d resources with stale, missing, or error metadata to refresh. Running with %d concurrent workers", total, enrichWorkerConcurrency)
+	log.Infof("found %d resources with stale, missing, or error metadata to refresh. Running with %d concurrent workers", total, en.Concurrency)
 
-	sem := make(chan struct{}, enrichWorkerConcurrency)
+	sem := make(chan struct{}, en.Concurrency)
 	var wg sync.WaitGroup
 
 	for i, id := range ids {

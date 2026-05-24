@@ -940,14 +940,10 @@ func (h *Handler) getLiveSeeds(ctx context.Context, c *gin.Context, resourceID s
 	return 0
 }
 
-// enrichWorkerConcurrency is the number of parallel metadata API calls
-// made during Smart Refresh and Force All operations.
-const enrichWorkerConcurrency = 25
-
 // runEnrichPool fans out enrichment over a semaphore-limited worker pool.
-// Each resource is processed concurrently up to enrichWorkerConcurrency at a time.
+// Each resource is processed concurrently up to the configured enricher Concurrency limit at a time.
 func (h *Handler) runEnrichPool(ctx context.Context, ids []string, force bool, label string) {
-	sem := make(chan struct{}, enrichWorkerConcurrency)
+	sem := make(chan struct{}, h.enricher.Concurrency)
 	var wg sync.WaitGroup
 
 	db, err := h.db()
@@ -958,7 +954,7 @@ func (h *Handler) runEnrichPool(ctx context.Context, ids []string, force bool, l
 	_ = db // enricher holds its own DB ref; kept here for potential future use
 
 	total := len(ids)
-	log.Infof("%s: processing %d resources with %d concurrent workers", label, total, enrichWorkerConcurrency)
+	log.Infof("%s: processing %d resources with %d concurrent workers", label, total, h.enricher.Concurrency)
 
 	for i, id := range ids {
 		id := id
