@@ -9,9 +9,8 @@ import (
 )
 
 // enrichResource handles POST /lib/:id/enrich
-// Forces re-enrichment of a single library resource (admin only).
-// This is the Jellyfin-style "Refresh Metadata" per-item action —
-// it always runs (force=true), bypassing the 24h lock, and resets retry_count.
+// Force re-enriches a single library resource for any logged-in user.
+// force=true always runs: bypasses the 24h lock and resets retry_count.
 func (s *Handler) enrichResource(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -21,9 +20,10 @@ func (s *Handler) enrichResource(c *gin.Context) {
 		return
 	}
 
-	// Admin only — same gate as sidecar enrichment.
-	if !wc.IsAdmin {
-		c.AbortWithStatus(http.StatusForbidden)
+	// Any authenticated user can trigger re-enrichment on their own library items.
+	// The route group middleware already requires a valid session.
+	if wc.User == nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
@@ -38,8 +38,7 @@ func (s *Handler) enrichResource(c *gin.Context) {
 		return
 	}
 
-	// Run synchronously so the UI gets immediate feedback.
-	// force=true: always runs, steals any existing Processing lock, resets retry_count.
+	// force=true: steals any existing Processing lock, resets retry_count, unblocks Abandoned.
 	err := s.enricher.Enrich(ctx, resourceID, wc.ApiClaims, true, "")
 	if err != nil {
 		log.WithError(err).Errorf("per-item enrich failed for resource %s", resourceID)
@@ -48,7 +47,5 @@ func (s *Handler) enrichResource(c *gin.Context) {
 	}
 
 	log.Infof("per-item enrich completed for resource %s", resourceID)
-
-	// HTMX partial: redirect back to the library button area so the UI refreshes.
 	web.RedirectWithSuccessAndMessage(c, "toast.enrichmentStarted")
 }

@@ -140,11 +140,12 @@ func TryInsertOrLockMediaInfo(ctx context.Context, db *pg.DB, resourceID string,
 		}
 
 		existing.Status = int16(MediaInfoStatusProcessing)
-		existing.RetryCount = 0 // any force resets the retry counter
+		existing.RetryCount = 0    // any force resets the retry counter
+		existing.UpdatedAt = time.Now() // timer starts NOW for this item
 
 		_, txErr = tx.Model(&existing).
 			Context(ctx).
-			Column("status", "retry_count").
+			Column("status", "retry_count", "updated_at").
 			WherePK().
 			Update()
 		if txErr != nil {
@@ -195,11 +196,15 @@ func TryInsertOrLockMediaInfo(ctx context.Context, db *pg.DB, resourceID string,
 	}
 
 	// Update status to "processing" (retry_count stays unchanged for non-force).
+	// Promote to Processing — set updated_at explicitly so the 15-min stale
+	// timer is measured from when this item starts processing, not from any
+	// prior state transition.
 	existing.Status = int16(MediaInfoStatusProcessing)
+	existing.UpdatedAt = time.Now()
 
 	_, txErr = tx.Model(&existing).
 		Context(ctx).
-		Column("status").
+		Column("status", "updated_at").
 		WherePK().
 		Update()
 	if txErr != nil {

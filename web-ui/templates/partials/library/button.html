@@ -12,8 +12,7 @@
                             {{ t $.Ctx.Lang "library.removeFromLibrary" }}
                         </button>
                     </form>
-                    {{/* Per-item metadata refresh — admin only */}}
-                    {{ if $.Ctx.IsAdmin }}
+                    {{/* Per-item metadata refresh — available to all library users */}}
                     <form method="post" data-async-push-state="false" action="{{ langPath $.Ctx.Lang "/lib/" }}{{ .ID }}/enrich" data-async-target="#library-button">
                         <button type="submit" class="btn btn-ghost btn-sm text-o-muted hover:text-o-primary" title="Refresh metadata">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
@@ -21,7 +20,6 @@
                             </svg>
                         </button>
                     </form>
-                    {{ end }}
                 </div>
             {{ else }}
                 <form method="post" enctype="multipart/form-data" data-async-push-state="false" action="{{ langPath $.Ctx.Lang "/lib/add" }}" data-async-target="#library-button">

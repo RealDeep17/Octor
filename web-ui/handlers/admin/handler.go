@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -939,10 +940,50 @@ func (h *Handler) getLiveSeeds(ctx context.Context, c *gin.Context, resourceID s
 	return 0
 }
 
+// enrichWorkerConcurrency is the number of parallel metadata API calls
+// made during Smart Refresh and Force All operations.
+const enrichWorkerConcurrency = 25
+
+// runEnrichPool fans out enrichment over a semaphore-limited worker pool.
+// Each resource is processed concurrently up to enrichWorkerConcurrency at a time.
+func (h *Handler) runEnrichPool(ctx context.Context, ids []string, force bool, label string) {
+	sem := make(chan struct{}, enrichWorkerConcurrency)
+	var wg sync.WaitGroup
+
+	db, err := h.db()
+	if err != nil {
+		log.WithError(err).Errorf("%s: failed to get DB", label)
+		return
+	}
+	_ = db // enricher holds its own DB ref; kept here for potential future use
+
+	total := len(ids)
+	log.Infof("%s: processing %d resources with %d concurrent workers", label, total, enrichWorkerConcurrency)
+
+	for i, id := range ids {
+		id := id
+		i := i
+		wg.Add(1)
+		sem <- struct{}{} // acquire slot
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }() // release slot
+			log.Infof("%s [%d/%d]: enriching %s", label, i+1, total, id)
+			if err := h.enricher.Enrich(ctx, id, &api.Claims{}, force, ""); err != nil {
+				log.WithError(err).Warnf("%s: failed on resource %s", label, id)
+			}
+		}()
+	}
+
+	wg.Wait()
+	log.Infof("%s: completed", label)
+}
+
 // refreshEnrichment is the "Smart Refresh" button.
-// It only processes stale, missing, or transiently-failed resources
-// (NoMetadata past 1h cooldown, Error past 1h, Processing stale >15min).
+// Only processes stale, missing, or transiently-failed resources
+// (NoMetadata past 1h, Error past 1h, Processing stale >15min).
 // Abandoned rows are excluded — those require an explicit force action.
+// Runs 25 concurrent API calls.
 func (h *Handler) refreshEnrichment(c *gin.Context) {
 	db, err := h.db()
 	if err != nil {
@@ -959,36 +1000,26 @@ func (h *Handler) refreshEnrichment(c *gin.Context) {
 			log.WithError(err).Error("Smart Refresh: failed to query stale resources")
 			return
 		}
-
-		log.Infof("Smart Refresh: found %d resources to process", len(ids))
-		for i, id := range ids {
-			log.Infof("Smart Refresh [%d/%d]: enriching resource %s", i+1, len(ids), id)
-			// force=false: respects the 1h cooldown and skips Abandoned rows
-			err = h.enricher.Enrich(bgCtx, id, &api.Claims{}, false, "")
-			if err != nil {
-				log.WithError(err).Warnf("Smart Refresh: failed on resource %s", id)
-			}
-		}
-		log.Info("Smart Refresh completed")
+		h.runEnrichPool(bgCtx, ids, false, "Smart Refresh")
 	}()
 
 	web.RedirectWithSuccessAndMessage(c, "toast.enrichmentRefreshStarted")
 }
 
 // forceAllEnrichment is the "Force All" button.
-// It re-enriches every resource in the DB regardless of status,
-// including Abandoned rows (resets retry_count). Use after a
-// major pipeline fix (e.g. sidecar was down, new mapper added).
+// Re-enriches every resource regardless of status, including Abandoned (resets retry_count).
+// Use after a major pipeline fix (e.g. sidecar was down, new mapper added).
+// Runs 25 concurrent API calls.
 func (h *Handler) forceAllEnrichment(c *gin.Context) {
-	db, err := h.db()
-	if err != nil {
-		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 		defer cancel()
+
+		db, err := h.db()
+		if err != nil {
+			log.WithError(err).Error("Force All: failed to get DB")
+			return
+		}
 
 		resources, err := models.GetAllResources(bgCtx, db)
 		if err != nil {
@@ -996,17 +1027,13 @@ func (h *Handler) forceAllEnrichment(c *gin.Context) {
 			return
 		}
 
-		log.Infof("Force All: re-enriching %d resources", len(resources))
+		ids := make([]string, len(resources))
 		for i, r := range resources {
-			log.Infof("Force All [%d/%d]: enriching resource %s", i+1, len(resources), r.ResourceID)
-			// force=true: steals any Processing lock, resets retry_count, unblocks Abandoned
-			err = h.enricher.Enrich(bgCtx, r.ResourceID, &api.Claims{}, true, "")
-			if err != nil {
-				log.WithError(err).Warnf("Force All: failed on resource %s", r.ResourceID)
-			}
+			ids[i] = r.ResourceID
 		}
-		log.Info("Force All completed")
+		h.runEnrichPool(bgCtx, ids, true, "Force All")
 	}()
 
 	web.RedirectWithSuccessAndMessage(c, "toast.enrichmentRefreshStarted")
 }
+
