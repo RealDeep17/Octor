@@ -448,6 +448,8 @@
     "toast.user_subtitle.uploaded": "Untertitel hochgeladen",
     "toast.user_subtitle.deleted": "Untertitel gelöscht",
     "toast.enrichmentRefreshStarted": "Hintergrund-Metadatenaktualisierung gestartet",
+    "toast.enrichmentStarted": "Metadata refresh started",
+    "toast.forceAllEnrichmentStarted": "Full metadata re-enrichment started",
     "speedtest.badge": "Geschwindigkeitstest",
     "speedtest.title": "Verbindungsgeschwindigkeitstest",
     "speedtest.subtitle": "Messen Sie Ihre Download-Geschwindigkeit von Octor-Servern, um herauszufinden, welche Videoqualität Sie ohne Pufferung streamen können.",

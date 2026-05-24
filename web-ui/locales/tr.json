@@ -448,6 +448,8 @@
     "toast.user_subtitle.uploaded": "Altyazı yüklendi",
     "toast.user_subtitle.deleted": "Altyazı silindi",
     "toast.enrichmentRefreshStarted": "Arka plan meta veri yenileme başlatıldı",
+    "toast.enrichmentStarted": "Metadata refresh started",
+    "toast.forceAllEnrichmentStarted": "Full metadata re-enrichment started",
     "speedtest.badge": "Hız testi",
     "speedtest.title": "Bağlantı hızı testi",
     "speedtest.subtitle": "Tampon yapmadan hangi video kalitesinde streaming yapabileceğini öğrenmek için Octor sunucularından indirme hızını ölç.",

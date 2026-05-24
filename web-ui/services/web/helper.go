@@ -615,3 +615,13 @@ func (s *Helper) CanonicalURL(lang string, path string) string {
 	}
 	return s.domain + "/" + lang + path
 }
+
+// InSlice checks if a string slice contains a given string
+func (s *Helper) InSlice(slice []string, val string) bool {
+	for _, v := range slice {
+		if v == val {
+			return true
+		}
+	}
+	return false
+}

@@ -1030,6 +1030,6 @@ func (h *Handler) forceAllEnrichment(c *gin.Context) {
 		h.runEnrichPool(bgCtx, ids, true, "Force All")
 	}()
 
-	web.RedirectWithSuccessAndMessage(c, "toast.enrichmentRefreshStarted")
+	web.RedirectWithSuccessAndMessage(c, "toast.forceAllEnrichmentStarted")
 }
 

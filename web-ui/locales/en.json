@@ -512,6 +512,8 @@
     "toast.user_subtitle.uploaded": "Subtitle uploaded",
     "toast.user_subtitle.deleted": "Subtitle deleted",
     "toast.enrichmentRefreshStarted": "Background metadata refresh started",
+    "toast.enrichmentStarted": "Metadata refresh started",
+    "toast.forceAllEnrichmentStarted": "Full metadata re-enrichment started",
     "speedtest.badge": "Speed Test",
     "speedtest.title": "Connection Speed Test",
     "speedtest.subtitle": "Measure your download speed from Octor servers to find out what video quality you can stream without buffering.",

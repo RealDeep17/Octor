@@ -66,7 +66,11 @@ func (s *VideoContentHelper) HasPosterHorizontal(m models.VideoContentWithMetada
 		strings.Contains(posterURL, "theporndb.net") ||
 		strings.Contains(posterURL, "stashdb.org") ||
 		strings.HasPrefix(videoID, "tpdb:") ||
-		strings.HasPrefix(videoID, "stash:")
+		strings.HasPrefix(videoID, "tpdb=") ||
+		strings.HasPrefix(videoID, "tpdb_jav:") ||
+		strings.HasPrefix(videoID, "tpdb_jav=") ||
+		strings.HasPrefix(videoID, "stash:") ||
+		strings.HasPrefix(videoID, "stash=")
 }
 
 func (s *VideoContentHelper) GetPosterLayout(m models.VideoContentWithMetadata) string {
@@ -86,7 +90,11 @@ func (s *VideoContentHelper) GetPosterLayout(m models.VideoContentWithMetadata) 
 	if strings.Contains(posterURL, "theporndb.net") ||
 		strings.Contains(posterURL, "stashdb.org") ||
 		strings.HasPrefix(videoID, "tpdb:") ||
-		strings.HasPrefix(videoID, "stash:") {
+		strings.HasPrefix(videoID, "tpdb=") ||
+		strings.HasPrefix(videoID, "tpdb_jav:") ||
+		strings.HasPrefix(videoID, "tpdb_jav=") ||
+		strings.HasPrefix(videoID, "stash:") ||
+		strings.HasPrefix(videoID, "stash=") {
 		return "horizontal"
 	}
 	return "vertical"

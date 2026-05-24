@@ -113,19 +113,35 @@
                 </div>
               {{ end }}
               <span class="w-card-badge top-2 left-2 text-o-cyan max-w-[calc(100%-1rem)] truncate" title="{{ .OwnerTitle }}">{{ .OwnerLabel }}</span>
-              <form method="post" enctype="multipart/form-data"
-                    action="{{ langPath $.Lang "/admin/library/remove" }}"
-                    data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
-                    onclick="event.stopPropagation()">
-                  <input type="hidden" name="resource_id" value="{{ .ResourceID }}" />
-                  <input type="hidden" name="user_id" value="{{ .PrimaryUserID }}" />
-                  <button type="submit" class="w-card-badge-ghost bottom-2 right-2 hover:text-o-primary" title="Remove from Library">
-                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                      </svg>
-                  </button>
-              </form>
-              {{/* Layout toggle (bottom-left) */}}
+              {{/* Grouped Actions Capsule (bottom-right) */}}
+              <div class="absolute bottom-2 right-2 flex gap-1.5 bg-black/70 backdrop-blur-[4px] rounded-full px-2 py-1 border border-white/5 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ease-out z-10" onclick="event.stopPropagation()">
+                  <!-- Refresh Metadata -->
+                  <form method="post" action="{{ langPath $.Lang (printf "/lib/%s/enrich" .ResourceID) }}"
+                        data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
+                        class="inline">
+                      <button type="submit" class="p-0.5 text-o-muted hover:text-green-400 transition-colors" title="Refresh Metadata">
+                          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                          </svg>
+                      </button>
+                  </form>
+
+                  <div class="w-[1px] h-3.5 bg-white/10 self-center"></div>
+
+                  <!-- Delete -->
+                  <form method="post" enctype="multipart/form-data"
+                        action="{{ langPath $.Lang "/admin/library/remove" }}"
+                        data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
+                        class="inline">
+                      <input type="hidden" name="resource_id" value="{{ .ResourceID }}" />
+                      <input type="hidden" name="user_id" value="{{ .PrimaryUserID }}" />
+                      <button type="submit" class="p-0.5 text-o-muted hover:text-o-primary transition-colors" title="Remove from Library">
+                          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                          </svg>
+                      </button>
+                  </form>
+              </div>              {{/* Layout toggle (bottom-left) */}}
               {{ if and (.Content | hasPoster) (.Content | hasPosterHorizontal) }}
               <button type="button" class="w-card-badge-ghost bottom-2 left-2 cursor-pointer hover:text-o-primary !opacity-100 z-10 peer-checked:[&_.vertical-icon]:hidden peer-checked:[&_.horizontal-icon]:block"
                       title="Toggle aspect ratio"

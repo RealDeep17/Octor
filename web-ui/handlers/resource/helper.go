@@ -258,7 +258,11 @@ func (s *Helper) HasEnrichedPosterHorizontal(gd *GetData) bool {
 		strings.Contains(md.PosterURL, "theporndb.net") || 
 		strings.Contains(md.PosterURL, "stashdb.org") || 
 		strings.HasPrefix(md.VideoID, "tpdb:") || 
-		strings.HasPrefix(md.VideoID, "stash:")
+		strings.HasPrefix(md.VideoID, "tpdb=") || 
+		strings.HasPrefix(md.VideoID, "tpdb_jav:") || 
+		strings.HasPrefix(md.VideoID, "tpdb_jav=") || 
+		strings.HasPrefix(md.VideoID, "stash:") ||
+		strings.HasPrefix(md.VideoID, "stash=")
 }
 
 func (s *Helper) GetEnrichedPosterHorizontalURL(gd *GetData) string {
@@ -304,7 +308,11 @@ func (s *Helper) GetEnrichedPosterLayout(gd *GetData) string {
 		if strings.Contains(md.PosterURL, "theporndb.net") || 
 			strings.Contains(md.PosterURL, "stashdb.org") || 
 			strings.HasPrefix(md.VideoID, "tpdb:") || 
-			strings.HasPrefix(md.VideoID, "stash:") {
+			strings.HasPrefix(md.VideoID, "tpdb=") || 
+			strings.HasPrefix(md.VideoID, "tpdb_jav:") || 
+			strings.HasPrefix(md.VideoID, "tpdb_jav=") || 
+			strings.HasPrefix(md.VideoID, "stash:") ||
+			strings.HasPrefix(md.VideoID, "stash=") {
 			return "horizontal"
 		}
 	}

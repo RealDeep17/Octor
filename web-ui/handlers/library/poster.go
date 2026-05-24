@@ -227,7 +227,11 @@ func (s *Handler) getResizedJPEGPosterWithCache(ctx context.Context, db *pg.DB, 
 				isAdult := strings.Contains(md.PosterURL, "theporndb.net") ||
 					strings.Contains(md.PosterURL, "stashdb.org") ||
 					strings.HasPrefix(md.VideoID, "tpdb:") ||
-					strings.HasPrefix(md.VideoID, "stash:")
+					strings.HasPrefix(md.VideoID, "tpdb=") ||
+					strings.HasPrefix(md.VideoID, "tpdb_jav:") ||
+					strings.HasPrefix(md.VideoID, "tpdb_jav=") ||
+					strings.HasPrefix(md.VideoID, "stash:") ||
+					strings.HasPrefix(md.VideoID, "stash=")
 				if isAdult || (md.PosterURL == "" && md.PosterHorizontalURL != "") {
 					hasOnlyHorizontal = true
 				}

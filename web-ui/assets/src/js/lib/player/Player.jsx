@@ -367,27 +367,29 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
         if (!resumeReady) return;
         if (resumePosition && resumePosition > 0) {
             setShowResumePrompt(true);
+            // Seek immediately in the background so it starts pre-buffering the right point
+            const video = videoRef.current;
+            if (video) {
+                if (isSession && sessionSeekUrl) {
+                    handleSeek(resumePosition);
+                } else {
+                    video.currentTime = resumePosition;
+                }
+            }
         } else {
             // No resume position, start playing.
             videoRef.current?.play().catch(() => { });
         }
-    }, [resumeReady]);
+    }, [resumeReady, resumePosition, isSession, sessionSeekUrl, handleSeek]);
 
     // Handle resume choice
     const handleResume = useCallback(() => {
         setShowResumePrompt(false);
-        const video = videoRef.current;
-        if (!video) return;
-        if (isSession && sessionSeekUrl) {
-            handleSeek(resumePosition);
-        } else {
-            video.currentTime = resumePosition;
-        }
-        video.play().catch(() => { });
+        videoRef.current?.play().catch(() => { });
         // Save resumed position immediately
-        const dur = duration > 0 ? duration : (video.duration || 0);
+        const dur = duration > 0 ? duration : (videoRef.current?.duration || 0);
         if (dur > 0) forceSendPosition(resumePosition, dur);
-    }, [resumePosition, isSession, sessionSeekUrl, handleSeek, duration, forceSendPosition]);
+    }, [resumePosition, duration, forceSendPosition]);
 
     const handleStartOver = useCallback(() => {
         setShowResumePrompt(false);

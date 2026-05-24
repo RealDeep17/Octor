@@ -285,8 +285,7 @@ func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[stri
 	for _, f := range meta.Files {
 		if f.Hash == "" { continue }
 		
-		// Insert file
-		// File status 2 = StatusStored (from models.go StatusStored = 2)
+		// Insert file record
 		_, err = vaultDb.Exec(`
 			INSERT INTO file (hash, status, total_size, stored_size, created_at, updated_at)
 			VALUES (?, 2, 0, 0, now(), now()) ON CONFLICT DO NOTHING`,
@@ -295,7 +294,7 @@ func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[stri
 			log.Printf("  [ERROR] Vault DB: Failed to insert file %s: %v", f.Hash, err)
 		}
 
-		// Insert resource_file mapping
+		// Insert mapping - this supports BOTH legacy hashes and new human paths
 		_, err = vaultDb.Exec(`
 			INSERT INTO resource_file (resource_id, file_hash, path)
 			VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,

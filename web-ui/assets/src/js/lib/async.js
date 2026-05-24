@@ -70,6 +70,11 @@ async function asyncFetch(url, targetSelector, fetchParams, params, options) {
     const versionAtStart = historyVersion;
     const res = await fetchFunc(url, fetchParams);
     if (versionAtStart !== historyVersion) return null;
+    if (!res.ok) {
+        const { showToast } = await import("./toast");
+        showToast(`Request failed ${res.status} : sidecar`, "error");
+        return res;
+    }
     const text = await res.text();
     if (versionAtStart !== historyVersion) return null;
     const fragments = parseFragments(text);

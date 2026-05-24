@@ -114,7 +114,7 @@ module.exports = async (env, options) => {
                     secure: false,
                 },
             ],
-            watchFiles: ['templates/*.html', 'assets/src/*'],
+            watchFiles: ['templates/**/*.html', 'assets/src/**/*'],
         },
         optimization: {
             // splitChunks disabled: entry points are loaded independently via Go
@@ -135,7 +135,7 @@ module.exports = async (env, options) => {
                     test: /\.css$/i,
                     include: path.resolve(__dirname, 'assets', 'src'),
                     use: [
-                        devMode ? 'style-loader' : MiniCssExtractPlugin.loader,
+                        MiniCssExtractPlugin.loader,
                         'css-loader',
                         'postcss-loader'
                     ],

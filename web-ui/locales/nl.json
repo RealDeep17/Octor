@@ -448,6 +448,8 @@
     "toast.user_subtitle.uploaded": "Ondertitel geüpload",
     "toast.user_subtitle.deleted": "Ondertitel verwijderd",
     "toast.enrichmentRefreshStarted": "Achtergrond metadata vernieuwing gestart",
+    "toast.enrichmentStarted": "Metadata refresh started",
+    "toast.forceAllEnrichmentStarted": "Full metadata re-enrichment started",
     "speedtest.badge": "Snelheidstest",
     "speedtest.title": "Verbindingssnelheidstest",
     "speedtest.subtitle": "Meet je downloadsnelheid van Octor servers om te zien welke videokwaliteit je kunt streamen zonder buffering.",

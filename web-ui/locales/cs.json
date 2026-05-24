@@ -448,6 +448,8 @@
     "toast.user_subtitle.uploaded": "Titulky nahrány",
     "toast.user_subtitle.deleted": "Titulky smazány",
     "toast.enrichmentRefreshStarted": "Aktualizace metadat na pozadí byla spuštěna",
+    "toast.enrichmentStarted": "Metadata refresh started",
+    "toast.forceAllEnrichmentStarted": "Full metadata re-enrichment started",
     "speedtest.badge": "Test rychlosti",
     "speedtest.title": "Test rychlosti připojení",
     "speedtest.subtitle": "Změř svou rychlost stahování ze serverů Octor a zjisti jakou kvalitu videa můžeš streamovat bez bufferování.",

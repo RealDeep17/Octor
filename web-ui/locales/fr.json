@@ -448,6 +448,8 @@
     "toast.user_subtitle.uploaded": "Sous-titre téléversé",
     "toast.user_subtitle.deleted": "Sous-titre supprimé",
     "toast.enrichmentRefreshStarted": "Mise à jour des métadonnées en arrière-plan démarrée",
+    "toast.enrichmentStarted": "Metadata refresh started",
+    "toast.forceAllEnrichmentStarted": "Full metadata re-enrichment started",
     "speedtest.badge": "Test de vitesse",
     "speedtest.title": "Test de vitesse de connexion",
     "speedtest.subtitle": "Mesurez votre vitesse de téléchargement depuis les serveurs Octor pour découvrir quelle qualité vidéo vous pouvez diffuser sans buffering.",

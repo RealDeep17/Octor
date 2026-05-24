@@ -111,16 +111,14 @@
                     Use after a major pipeline fix (e.g. sidecar was down, new mapper added).
                 </p>
             </div>
-            <form method="post" action="{{ langPath $.Lang "/admin/enrichment/force-all" }}" data-async-target="main" class="shrink-0"
-                  data-confirm="Re-enrich ALL resources? This will run in the background and may take a long time."
-                  onsubmit="return !this.dataset.confirm || confirm(this.dataset.confirm)">
-                <button type="submit" class="btn btn-outline btn-error btn-sm" data-umami-event="admin-enrichment-force-all">
+            <div class="shrink-0">
+                <button type="button" class="btn btn-outline btn-error btn-sm" data-umami-event="admin-enrichment-force-all" onclick="document.getElementById('force-all-modal').showModal()">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                     </svg>
                     Force All
                 </button>
-            </form>
+            </div>
         </div>
     </div>
     <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
@@ -143,15 +141,51 @@
 
     <div class="text-center mt-12 flex flex-col items-center gap-3">
         <a href="{{ langPath $.Lang "/logout" }}" class="btn btn-ghost text-o-muted hover:text-error text-sm" data-async-target="main" data-umami-event="logout">{{ t $.Lang "profile.logout" }}</a>
-        <form method="post" action="{{ langPath $.Lang "/profile/delete" }}" data-async-target="main"
-              data-confirm="{{ t $.Lang "profile.deleteConfirm" }}"
-              onsubmit="return !this.dataset.confirm || confirm(this.dataset.confirm)">
-            <button type="submit" class="btn btn-ghost text-o-muted hover:text-error text-xs"
-                data-umami-event="profile-delete">
-                {{ t $.Lang "profile.deleteAccount" }}
-            </button>
-        </form>
+        <button type="button" class="btn btn-ghost text-o-muted hover:text-error text-xs"
+            data-umami-event="profile-delete" onclick="document.getElementById('delete-account-modal').showModal()">
+            {{ t $.Lang "profile.deleteAccount" }}
+        </button>
     </div>
   </div>
+
+  {{/* ── Custom Force All Confirmation Modal ── */}}
+  <dialog id="force-all-modal" class="modal">
+      <div class="modal-box max-w-sm bg-base-300 border border-o-line rounded-2xl shadow-xl">
+          <h3 class="text-lg font-bold text-error flex items-center gap-2 mb-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              Re-enrich All?
+          </h3>
+          <p class="text-sm text-o-muted leading-relaxed mb-4">Are you sure you want to re-enrich all resources? This will run in the background and may take a long time to complete.</p>
+          <div class="modal-action justify-end gap-2">
+              <form method="dialog" class="inline">
+                  <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
+              </form>
+              <form method="post" action="{{ langPath $.Lang "/admin/enrichment/force-all" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('force-all-modal').close()">
+                  <button type="submit" class="btn btn-sm btn-error">Proceed</button>
+              </form>
+          </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  {{/* ── Custom Delete Account Confirmation Modal ── */}}
+  <dialog id="delete-account-modal" class="modal">
+      <div class="modal-box max-w-sm bg-base-300 border border-o-line rounded-2xl shadow-xl">
+          <h3 class="text-lg font-bold text-error flex items-center gap-2 mb-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              {{ t $.Lang "profile.deleteAccount" }}?
+          </h3>
+          <p class="text-sm text-o-muted leading-relaxed mb-4">{{ t $.Lang "profile.deleteConfirm" }}</p>
+          <div class="modal-action justify-end gap-2">
+              <form method="dialog" class="inline">
+                  <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
+              </form>
+              <form method="post" action="{{ langPath $.Lang "/profile/delete" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('delete-account-modal').close()">
+                  <button type="submit" class="btn btn-sm btn-error">Delete</button>
+              </form>
+          </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
 </section>
 {{ end }}

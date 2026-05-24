@@ -8,7 +8,8 @@
     "build": "webpack --mode=production",
     "start": "concurrently --kill-others \"npm run server\" \"npm run webpack-dev-server\"",
     "server": "air",
-    "webpack-dev-server": "webpack-dev-server --mode=development"
+    "webpack-dev-server": "webpack-dev-server --mode=development",
+    "watch": "webpack --mode=development -w"
   },
   "keywords": [],
   "author": "",
