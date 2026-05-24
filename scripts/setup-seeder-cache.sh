@@ -27,6 +27,10 @@ if [ "$RAM_CACHE_ENABLED" != "true" ]; then
     
     # Ensure a clean state for SSD mode by wiping existing cache
     if [ -d "$SSD_DATA_DIR" ]; then
+        if [[ "$SSD_DATA_DIR" == "/" || "$SSD_DATA_DIR" == "/srv" || "$SSD_DATA_DIR" == "/srv/" || "$SSD_DATA_DIR" == "/home/"* ]]; then
+            echo "❌ Error: SSD_DATA_DIR is set to a protected path ($SSD_DATA_DIR). Refusing to wipe."
+            exit 1
+        fi
         echo "setup-seeder-cache: Wiping existing SSD cache at $SSD_DATA_DIR..."
         rm -rf "${SSD_DATA_DIR:?}"/*
     fi
@@ -43,7 +47,11 @@ if [ "$RAM_CACHE_ENABLED" != "true" ]; then
     # Create symlink from DATA_DIR to the SSD storage directory
     if [ "$DATA_DIR" != "$SSD_DATA_DIR" ]; then
         if [ -d "$DATA_DIR" ] && [ ! -L "$DATA_DIR" ]; then
-            rmdir "$DATA_DIR" 2>/dev/null || rm -rf "$DATA_DIR"
+            if ! rmdir "$DATA_DIR" 2>/dev/null; then
+                echo "❌ Error: $DATA_DIR is not empty and cannot be safely converted to a symlink."
+                echo "Please manually empty or remove $DATA_DIR first."
+                exit 1
+            fi
         fi
         ln -sfn "$SSD_DATA_DIR" "$DATA_DIR"
     fi

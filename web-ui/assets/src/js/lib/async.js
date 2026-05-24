@@ -1,5 +1,23 @@
 import loadAsyncView from "./loadAsyncView";
 
+let historyVersion = 0;
+
+window.addEventListener('popstate', () => {
+    historyVersion++;
+});
+
+const originalPushState = window.history.pushState;
+window.history.pushState = function() {
+    historyVersion++;
+    return originalPushState.apply(this, arguments);
+};
+
+const originalReplaceState = window.history.replaceState;
+window.history.replaceState = function() {
+    historyVersion++;
+    return originalReplaceState.apply(this, arguments);
+};
+
 if (!window.__popstateFilters) window.__popstateFilters = [];
 export function addPopstateFilter(fn) {
     window.__popstateFilters.push(fn);
@@ -49,8 +67,11 @@ async function asyncFetch(url, targetSelector, fetchParams, params, options) {
             return params.fetch(oldFetch, url, fetchParams);
         }
     }
+    const versionAtStart = historyVersion;
     const res = await fetchFunc(url, fetchParams);
+    if (versionAtStart !== historyVersion) return null;
     const text = await res.text();
+    if (versionAtStart !== historyVersion) return null;
     const fragments = parseFragments(text);
     loadAsyncView(target, fragments.main ?? text, options);
     for (const f of updateFields) {
@@ -148,7 +169,7 @@ function asyncForms(p = {}) {
             context: 'forms',
             async wrap(fetch, push, url, fetchParams) {
                 const res = await fetch();
-                if (res.status === 200) {
+                if (res && res.status === 200) {
                     const u = new URL(res.url);
                     push(u.pathname + u.search, {
                         headers: fetchParams.headers,
