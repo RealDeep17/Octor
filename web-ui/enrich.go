@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-pg/migrations/v8"
@@ -86,6 +87,7 @@ func configureEnrich(c *cli.Command) {
 		Action: refreshEnrich,
 	}
 	refreshCmd.Flags = cs.RegisterPGFlags(refreshCmd.Flags)
+	refreshCmd.Flags = api.RegisterFlags(refreshCmd.Flags)
 	refreshCmd.Flags = ac.RegisterFlags(refreshCmd.Flags)
 	refreshCmd.Flags = configureEnricher(refreshCmd.Flags)
 	refreshCmd.Flags = append(refreshCmd.Flags,
@@ -136,6 +138,8 @@ func enrichPopular(c *cli.Context) error {
 	log.Info("enrich popular completed")
 	return nil
 }
+
+const enrichWorkerConcurrency = 25
 
 func enrich(c *cli.Context) error {
 	force := c.Bool("force")
@@ -197,13 +201,33 @@ func enrich(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
+	log.Infof("enrich: processing %d resources with %d concurrent workers", len(resources), enrichWorkerConcurrency)
+
+	sem := make(chan struct{}, enrichWorkerConcurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
+
 	for _, resource := range resources {
-		err = en.Enrich(ctx, resource.ResourceID, &api.Claims{}, force, "")
-		if err != nil {
-			return err
-		}
+		resource := resource
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			err := en.Enrich(ctx, resource.ResourceID, &api.Claims{}, force, "")
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+			}
+		}()
 	}
-	return nil
+	wg.Wait()
+	return firstErr
 }
 
 func refreshEnrich(c *cli.Context) error {
@@ -244,15 +268,28 @@ func refreshEnrich(c *cli.Context) error {
 		return err
 	}
 
-	log.Infof("found %d resources with stale, missing, or error metadata to refresh", len(ids))
+	total := len(ids)
+	log.Infof("found %d resources with stale, missing, or error metadata to refresh. Running with %d concurrent workers", total, enrichWorkerConcurrency)
+
+	sem := make(chan struct{}, enrichWorkerConcurrency)
+	var wg sync.WaitGroup
 
 	for i, id := range ids {
-		log.Infof("[%d/%d] refreshing metadata for resource %s", i+1, len(ids), id)
-		err = en.Enrich(ctx, id, &api.Claims{}, true, "")
-		if err != nil {
-			log.WithError(err).Warnf("failed to refresh metadata for resource %s", id)
-		}
+		id := id
+		i := i
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			log.Infof("[%d/%d] refreshing metadata for resource %s", i+1, total, id)
+			err := en.Enrich(ctx, id, &api.Claims{}, true, "")
+			if err != nil {
+				log.WithError(err).Warnf("failed to refresh metadata for resource %s", id)
+			}
+		}()
 	}
+	wg.Wait()
 
 	return nil
 }
