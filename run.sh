@@ -169,8 +169,8 @@ unmount_paths() {
 backup_env() {
     mkdir -p "$BACKUP_DIR"
     cp "$ENV_FILE" "$BACKUP_DIR/custom.env.bak.$(date +%Y%m%d%H%M%S)"
-    # Keep only last 20 backups
-    ls -dt "$BACKUP_DIR"/* | tail -n +21 | xargs rm -f -- 2>/dev/null || true
+    # Keep only last 10 backups
+    ls -dt "$BACKUP_DIR"/* | tail -n +11 | xargs rm -f -- 2>/dev/null || true
 }
 
 # ------------------------------------------------------------------------------

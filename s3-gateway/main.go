@@ -173,12 +173,6 @@ func main() {
 
 	log.Printf("Starting Zero-Buffer Direct-Stream S3 Gateway on port %s...", port)
 
-	if os.Getenv("S3_GATEWAY_HUMAN_READABLE") == "true" {
-		humanReadable = true
-		log.Printf("[S3] HUMAN_READABLE mode ENABLED: Files will be stored with torrent names.")
-	} else {
-		log.Printf("[S3] HUMAN_READABLE mode DISABLED: Reverting to default hash-based storage.")
-	}
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
@@ -347,7 +341,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 	case "poster-cache":
 		bucketDir = filepath.Join(storageDir, "data", "postercache")
 	case "storage":
-		bucketDir = filepath.Join(indexDriveDir, "recovery")
+		bucketDir = filepath.Join(storageDir, "recovery")
 	default:
 		bucketDir = filepath.Join(storageDir, bucket)
 	}
@@ -822,7 +816,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		log.Printf("[S3] Put Object: Bucket=%s, Key=%s, Size=%d bytes", bucket, key, written)
 		return
-	}
+		}
 
-	writeError(w, http.StatusMethodNotAllowed, "MethodNotAllowed", "Method not allowed", r.URL.Path)
-}
+		writeError(w, http.StatusMethodNotAllowed, "MethodNotAllowed", "Method not allowed", r.URL.Path)
+		}
