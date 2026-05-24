@@ -275,6 +275,91 @@ cmd_mode() {
         *) echo "❌ Invalid mode: $MODE"; exit 1 ;;
     esac
 
+    # 3b. Warn about Chunker Mode Switches and transition consequences
+    local CURRENT_MODE_NAME=""
+    if [[ -f "$ENV_FILE" ]]; then
+        CURRENT_MODE_NAME=$(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    fi
+
+    if [[ -n "$CURRENT_MODE_NAME" && "$CURRENT_MODE_NAME" != "$MODE_NAME" ]]; then
+        local CURRENT_IS_CHUNKER=false
+        if [[ "$CURRENT_MODE_NAME" =~ ^chunker-vfs- ]]; then
+            CURRENT_IS_CHUNKER=true
+        fi
+
+        if [[ "$CURRENT_IS_CHUNKER" = "true" && "$USE_CHUNKER" = "false" ]]; then
+            echo "========================================================================"
+            echo -e "\033[1;31m🛑 CRITICAL WARNING: PERFORMANCE MODE DOWNGRADE DETECTED\033[0m"
+            echo "========================================================================"
+            echo -e "You are switching from a \033[1;33mChunker Mode (pp-)\033[0m to a \033[1;33mNon-Chunker Mode (sp-)\033[0m."
+            echo -e "  Current Mode: \033[1;36m$CURRENT_MODE_NAME\033[0m"
+            echo -e "  Target Mode:  \033[1;36m$MODE_NAME\033[0m"
+            echo "------------------------------------------------------------------------"
+            echo -e "\033[1;31m⚠️  CRITICAL CONSEQUENCES:\033[0m"
+            echo "  1. Any files uploaded while Chunker mode was active were split into"
+            echo "     part files (e.g., .001, .002, etc.) on the remote Google Drive."
+            echo "  2. Non-Chunker modes bypass the chunker overlay entirely."
+            echo -e "  3. \033[1;31mRESULT:\033[0m These previously uploaded chunked files will appear on your"
+            echo "     filesystem as raw, fragmented pieces. They will be UNPLAYABLE and"
+            echo "     corrupted in Octor, WebDAV, or downstream media players!"
+            echo "------------------------------------------------------------------------"
+            echo -e "\033[1;32m💡 REMEDIATION:\033[0m"
+            echo "  To access those files, you must switch back to a Chunker (pp-) mode,"
+            echo "  or manually download, merge, and re-upload them without chunking."
+            echo "========================================================================"
+            
+            if [[ "$FORCE" = "false" && -t 0 ]]; then
+                read -p "Are you absolutely sure you want to proceed with this switch? [y/N]: " CONFIRM
+                if [[ ! "$CONFIRM" =~ ^[yY](es)?$ ]]; then
+                    echo "❌ Mode switch aborted."
+                    exit 1
+                fi
+            else
+                echo "⚠️  Non-interactive or --force flag detected. Proceeding automatically..."
+            fi
+
+        elif [[ "$CURRENT_IS_CHUNKER" = "false" && "$USE_CHUNKER" = "true" ]]; then
+            echo "========================================================================"
+            echo -e "\033[1;32mℹ️  INFORMATION: PERFORMANCE MODE UPGRADE DETECTED\033[0m"
+            echo "========================================================================"
+            echo -e "You are switching from a \033[1;33mNon-Chunker Mode (sp-)\033[0m to a \033[1;33mChunker Mode (pp-)\033[0m."
+            echo -e "  Current Mode: \033[1;36m$CURRENT_MODE_NAME\033[0m"
+            echo -e "  Target Mode:  \033[1;36m$MODE_NAME\033[0m"
+            echo "------------------------------------------------------------------------"
+            echo -e "\033[1;32m✅ WHAT HAPPENS TO EXISTING DATA?\033[0m"
+            echo "  - Existing single-part/plain files remain fully readable and accessible"
+            echo "    through the chunker overlay. No immediate action is required!"
+            echo "------------------------------------------------------------------------"
+            echo -e "\033[1;33m⚠️  FUTURE UPLOAD CONSEQUENCES:\033[0m"
+            echo "  - Any NEW files uploaded in this Chunker mode will be split into chunks."
+            echo "  - If you switch back to a Non-Chunker (sp-) mode in the future,"
+            echo "    those new files will become fragmented and unplayable."
+            echo "========================================================================"
+
+            if [[ "$FORCE" = "false" && -t 0 ]]; then
+                read -p "Do you want to proceed with this switch? [y/N]: " CONFIRM
+                if [[ ! "$CONFIRM" =~ ^[yY](es)?$ ]]; then
+                    echo "❌ Mode switch aborted."
+                    exit 1
+                fi
+            else
+                echo "⚠️  Non-interactive or --force flag detected. Proceeding automatically..."
+            fi
+
+        else
+            echo "========================================================================"
+            echo -e "\033[1;36m🔄 CHANGING PERFORMANCE MODE PROFILE\033[0m"
+            echo "========================================================================"
+            echo -e "Adjusting cache size and VFS behavior profiles within the same storage type."
+            echo -e "  Current Profile: \033[1;36m$CURRENT_MODE_NAME\033[0m"
+            echo -e "  Target Profile:  \033[1;36m$MODE_NAME\033[0m"
+            echo "------------------------------------------------------------------------"
+            echo "  - No storage architecture changes are required."
+            echo "  - Existing cached files are preserved."
+            echo "========================================================================"
+        fi
+    fi
+
     if [ "$SYNC_SERVICES" = "true" ]; then
         echo "=== SYNCING SERVICES ==="
         run_sudo cp "$PROJECT_ROOT"/octor-*.service /etc/systemd/system/
@@ -348,12 +433,19 @@ cmd_mode() {
 
     run_sudo systemctl daemon-reload
     echo "=== STARTING STORAGE LAYER ==="
-    start_service_with_retry "octor-rclone-mount" 3 30
-    wait_for_mount "$PROJECT_ROOT/infra-data/drive-mount-vfs" 60
+    if ! start_service_with_retry "octor-rclone-mount" 3 30 || ! wait_for_mount "$PROJECT_ROOT/infra-data/drive-mount-vfs" 60; then
+        echo -e "\n\033[1;33m⚠️  WARNING: Storage mount (octor-rclone-mount) failed to boot or mount successfully!\033[0m"
+        echo "   This is often due to an expired OAuth token, missing network connection, or rclone lock."
+        echo "   We will continue starting the other microservices so that the Web UI and sidecar"
+        echo "   remain accessible, but storage operations will fail until resolved.\n"
+    fi
 
     if [ "$USE_CHUNKER" = "true" ]; then
-        start_service_with_retry "octor-rclone-chunker" 3 30
-        wait_for_mount "$PROJECT_ROOT/infra-data/drive-mount" 60
+        if ! start_service_with_retry "octor-rclone-chunker" 3 30 || ! wait_for_mount "$PROJECT_ROOT/infra-data/drive-mount" 60; then
+            echo -e "\n\033[1;33m⚠️  WARNING: Chunker mount (octor-rclone-chunker) failed to boot or mount successfully!\033[0m"
+            echo "   This can happen if the underlying rclone-mount is unavailable or if the path is locked."
+            echo "   We will proceed starting the microservices, but chunker operations will be offline.\n"
+        fi
     fi
 
     ensure_infra_containers
@@ -448,20 +540,25 @@ cmd_benchmark() {
         ensure_infra_containers
         
         # 1. Database Cleanup
-        docker exec -i octor-postgres psql -U octor -d vault -c "DELETE FROM file WHERE hash IN (SELECT file_hash FROM resource_file WHERE resource_id = '$RESOURCE_ID');" || true
+        docker exec -i octor-postgres psql -U octor -d vault -c "DELETE FROM resource_file WHERE resource_id = '$RESOURCE_ID';" || true
         docker exec -i octor-postgres psql -U octor -d vault -c "DELETE FROM resource WHERE resource_id = '$RESOURCE_ID';" || true
+        # Best-effort orphan file cleanup (removes files with no other references)
+        docker exec -i octor-postgres psql -U octor -d vault -c "DELETE FROM file WHERE hash NOT IN (SELECT file_hash FROM resource_file);" || true
         
         # 2. Remote Storage Cleanup (Before Round)
-        echo "🧹 Wiping remote S3/Rclone storage before test..."
+        echo "🧹 Surgical cleanup of remote S3/Rclone storage for resource $RESOURCE_ID..."
         local RCLONE_REMOTE=$(grep '^VAULT_RCLONE_REMOTE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "ALPHA_UNION:")
         local BUCKET_NAME=$(grep '^VAULT_AWS_BUCKET=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "vault")
         local REMOTE_PATH="${RCLONE_REMOTE}${BUCKET_NAME}"
         
         if [[ "$REMOTE_PATH" == *":"* ]]; then
-            rclone --config "$RCLONE_CONFIG" purge "$REMOTE_PATH" || true
-            rclone --config "$RCLONE_CONFIG" mkdir "$REMOTE_PATH" || true
-        else
-            echo "⚠️  SAFEGUARD: Refusing to rclone purge non-remote path: '$REMOTE_PATH'"
+            # Delete metadata JSON
+            rclone --config "$RCLONE_CONFIG" deletefile "${REMOTE_PATH}/metadata/resources/${RESOURCE_ID}.json" --quiet || true
+            # Delete torrent files
+            rclone --config "$RCLONE_CONFIG" delete "${REMOTE_PATH}/torrents/" --include "* [${RESOURCE_ID}].torrent" --quiet || true
+            rclone --config "$RCLONE_CONFIG" deletefile "${REMOTE_PATH}/torrents/${RESOURCE_ID}.torrent" --quiet || true
+            # Delete human-readable media folder
+            rclone --config "$RCLONE_CONFIG" purge "${REMOTE_PATH}/media/" --include "* [${RESOURCE_ID}]/**" --quiet || true
         fi
 
         cmd_mode "$MODE" --bench --force --rclone
@@ -538,12 +635,12 @@ cmd_benchmark() {
         echo "| $MODE | $speed_avg | $speed_peak | $cpu_avg | $cpu_peak | $ram_avg | $ram_peak | $ssd_avg | $total_tx |" >> "$LOG_FILE"
         
         # 3. Remote Storage Cleanup (After Round) - Prevent Bloat
-        echo "🧹 Cleaning up remote storage after test round..."
+        echo "🧹 Surgical cleanup of remote storage for resource $RESOURCE_ID..."
         if [[ "$REMOTE_PATH" == *":"* ]]; then
-            rclone --config "$RCLONE_CONFIG" purge "$REMOTE_PATH" || true
-            rclone --config "$RCLONE_CONFIG" mkdir "$REMOTE_PATH" || true
-        else
-            echo "⚠️  SAFEGUARD: Refusing to rclone purge non-remote path: '$REMOTE_PATH'"
+            rclone --config "$RCLONE_CONFIG" deletefile "${REMOTE_PATH}/metadata/resources/${RESOURCE_ID}.json" --quiet || true
+            rclone --config "$RCLONE_CONFIG" delete "${REMOTE_PATH}/torrents/" --include "* [${RESOURCE_ID}].torrent" --quiet || true
+            rclone --config "$RCLONE_CONFIG" deletefile "${REMOTE_PATH}/torrents/${RESOURCE_ID}.torrent" --quiet || true
+            rclone --config "$RCLONE_CONFIG" purge "${REMOTE_PATH}/media/" --include "* [${RESOURCE_ID}]/**" --quiet || true
         fi
     done
     echo "🎉 Benchmark complete. Results in $LOG_FILE"
