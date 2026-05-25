@@ -1,6 +1,6 @@
 [Unit]
 Description=Octor Seeder Cache Setup (SSD or RAM ext4)
-Documentation=Set RAM_CACHE_SIZE in /srv/octor/custom.env to enable RAM mode
+# Documentation: Set RAM_CACHE_SIZE in /srv/octor/custom.env to enable RAM mode
 Before=octor-torrent-web-seeder.service
 After=local-fs.target
 
