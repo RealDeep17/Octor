@@ -40,13 +40,14 @@ import (
 )
 
 type server struct {
-	redis *redis.Client
+	redis    *redis.Client
+	cacheTTL time.Duration
 }
 
 const ErrorText = "ERROR"
 const CacheKeyPrefix = "content-prober"
 
-func ffprobe(ctx context.Context, url string) (string, error) {
+func ffprobe(ctx context.Context, url string, fast bool) (string, error) {
 	done := make(chan error)
 	ffprobe, err := exec.LookPath("ffprobe")
 	if err != nil {
@@ -58,9 +59,14 @@ func ffprobe(ctx context.Context, url string) (string, error) {
 		log.WithField("url", url).WithError(err).Info("Unable to parse url")
 		return "", err
 	}
-	cmdText := fmt.Sprintf("%s -show_format -show_streams -print_format json '%s'", ffprobe, parsedURL.String())
-	log.WithField("cmd", cmdText).Info("Running ffprobe command")
-	cmd := exec.Command(ffprobe, "-show_format", "-show_streams", "-print_format", "json", parsedURL.String())
+	var args []string
+	if fast {
+		args = []string{"-v", "error", "-show_entries", "format=duration", "-of", "json", parsedURL.String()}
+	} else {
+		args = []string{"-show_format", "-show_streams", "-print_format", "json", parsedURL.String()}
+	}
+	log.WithField("args", args).Info("Running ffprobe command")
+	cmd := exec.Command(ffprobe, args...)
 	var bufOut bytes.Buffer
 	var bufErr bytes.Buffer
 	cmd.Stdout = &bufOut
@@ -103,13 +109,17 @@ func sourceURL(ctx context.Context, req *pb.ProbeRequest) string {
 	return ""
 }
 
-func buildCacheKey(sourceURL string, infoHash string, filePath string) string {
+func buildCacheKey(sourceURL string, infoHash string, filePath string, fast bool) string {
 	hasher := md5.New()
 	str := sourceURL
 	if infoHash != "" && filePath != "" {
 		str = fmt.Sprintf("%s-%s", infoHash, filePath)
 	}
-	hasher.Write([]byte(fmt.Sprintf("%s-%s", CacheKeyPrefix, str)))
+	key := fmt.Sprintf("%s-%s", CacheKeyPrefix, str)
+	if fast {
+		key += ":dur"
+	}
+	hasher.Write([]byte(key))
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
@@ -123,25 +133,27 @@ func getCacheKey(ctx context.Context, req *pb.ProbeRequest) string {
 			filePath = strings.Join(md["path"], "")
 		}
 	}
-	return buildCacheKey(src, infoHash, filePath)
+	return buildCacheKey(src, infoHash, filePath, false)
 }
 
-func (s *server) probeRaw(ctx context.Context, sourceURL string, infoHash string, filePath string) (string, error) {
-	cacheKey := buildCacheKey(sourceURL, infoHash, filePath)
-	l := log.WithField("cacheKey", cacheKey).WithField("sourceURL", sourceURL)
+func (s *server) probeRaw(ctx context.Context, sourceURL string, infoHash string, filePath string, fast bool) (string, error) {
+	cacheKey := buildCacheKey(sourceURL, infoHash, filePath, fast)
+	l := log.WithField("cacheKey", cacheKey).WithField("sourceURL", sourceURL).WithField("fast", fast)
 	output, err := s.redis.Get(cacheKey).Result()
 	if err != nil {
 		l.WithError(err).Info("Failed to fetch redis cache")
-		output, err = ffprobe(ctx, sourceURL)
+		output, err = ffprobe(ctx, sourceURL, fast)
 		if err != nil {
 			err = errors.Wrapf(err, "probing failed")
 			l.WithError(err).Warn("Probing failed")
-			l.Info("Setting error cache")
-			s.redis.Set(cacheKey, ErrorText+err.Error(), time.Minute*60)
+			if !errors.Is(errors.Cause(err), context.Canceled) {
+				l.Info("Setting error cache")
+				s.redis.Set(cacheKey, ErrorText+err.Error(), time.Minute*60)
+			}
 			return "", err
 		}
 		l.Info("Setting cache")
-		s.redis.Set(cacheKey, output, time.Hour*24*7)
+		s.redis.Set(cacheKey, output, s.cacheTTL)
 	} else {
 		l.Info("Using cache")
 	}
@@ -165,7 +177,7 @@ func (s *server) Probe(ctx context.Context, req *pb.ProbeRequest) (*pb.ProbeRepl
 			filePath = strings.Join(md["path"], "")
 		}
 	}
-	output, err := s.probeRaw(ctx, src, infoHash, filePath)
+	output, err := s.probeRaw(ctx, src, infoHash, filePath, req.Fast)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -183,11 +195,12 @@ func (s *server) handleHTTPProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	infoHash := r.Header.Get("X-Info-Hash")
 	filePath := r.Header.Get("X-Path")
+	fast := r.Header.Get("X-Probe-Fast") == "true"
 
-	l := log.WithField("sourceURL", sourceURL).WithField("infoHash", infoHash).WithField("filePath", filePath)
+	l := log.WithField("sourceURL", sourceURL).WithField("infoHash", infoHash).WithField("filePath", filePath).WithField("fast", fast)
 	l.Info("Got new HTTP probing request")
 
-	output, err := s.probeRaw(r.Context(), sourceURL, infoHash, filePath)
+	output, err := s.probeRaw(r.Context(), sourceURL, infoHash, filePath, fast)
 	if err != nil {
 		l.WithError(err).Warn("HTTP probing failed")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -251,6 +264,12 @@ func main() {
 			Value:  "",
 			EnvVar: "REDIS_PASS, REDIS_PASSWORD",
 		},
+		cli.IntFlag{
+			Name:   "cache-ttl-days",
+			Usage:  "media probe cache TTL in days",
+			Value:  30,
+			EnvVar: "ENRICH_CACHE_TTL_DAYS",
+		},
 	}
 	app.Action = func(c *cli.Context) error {
 		if c.String("redis-host") == "" {
@@ -272,7 +291,10 @@ func main() {
 		})
 		defer client.Close()
 
-		srv := &server{redis: client}
+		srv := &server{
+			redis:    client,
+			cacheTTL: time.Duration(c.Int("cache-ttl-days")) * 24 * time.Hour,
+		}
 
 		grpcError := make(chan error, 1)
 		go func() {

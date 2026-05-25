@@ -147,7 +147,7 @@ func (s *OMDB) Map(ctx context.Context, m *models.VideoContent, mt models.Conten
 	if otype == om.OmdbTypeSeries {
 		omdbType = omdb.OmdbTypeSeries
 	}
-	omData, err := s.api.SearchByTitleAndYear(ctx, m.Title, m.Year, omdbType)
+	omData, err := s.api.SearchByTitleAndYear(ctx, m.Title, m.Year, omdbType, m.Duration)
 	if err != nil {
 		return nil, err
 	}

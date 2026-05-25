@@ -32,7 +32,8 @@ message Format {
 
 // The probe request message
 message ProbeRequest {
-  string url = 1;
+  string url  = 1;
+  bool   fast = 2;
 }
 
 // The probe response message

@@ -124,7 +124,7 @@ ensure_infra_containers() {
 
 stop_all_octor() {
     echo "=== STOPPING ALL OCTOR SERVICES ==="
-    run_sudo systemctl stop octor-* 2>/dev/null || true
+    run_sudo systemctl stop "octor-*" 2>/dev/null || true
     echo "✓ Services stopped."
 }
 
@@ -149,7 +149,7 @@ kill_ghosts() {
             fi
         fi
     done
-    for loop in $(losetup -a | grep "seeder-cache.img" | cut -d: -f1); do run_sudo losetup -d "$loop" || true; done
+    for loop in $(losetup -a | grep "seeder-cache.img" | cut -d: -f1 || true); do run_sudo losetup -d "$loop" || true; done
     if command -v fuser >/dev/null; then
         run_sudo fuser -k -n tcp 8080 8082 8086 >/dev/null 2>&1 || true
         for port in {50051..50063}; do run_sudo fuser -k -n tcp "$port" >/dev/null 2>&1 || true; done
@@ -194,7 +194,7 @@ cmd_mode() {
         echo "  b = Run in Bench Mode    n = Restart Nginx"
         echo "  c = Compile Binaries"
         echo "===================================================="
-        read -p "Select option and flags (e.g. '1 f r d n c'): " INPUT
+        read -p "Select option and flags (e.g. '1 f r d n c'): " INPUT || exit 1
         # Split input into positional parameters
         set -- $INPUT
     fi
@@ -309,7 +309,7 @@ cmd_mode() {
             echo "========================================================================"
             
             if [[ "$FORCE" = "false" && -t 0 ]]; then
-                read -p "Are you absolutely sure you want to proceed with this switch? [y/N]: " CONFIRM
+                read -p "Are you absolutely sure you want to proceed with this switch? [y/N]: " CONFIRM || exit 1
                 if [[ ! "$CONFIRM" =~ ^[yY](es)?$ ]]; then
                     echo "❌ Mode switch aborted."
                     exit 1
@@ -337,7 +337,7 @@ cmd_mode() {
             echo "========================================================================"
 
             if [[ "$FORCE" = "false" && -t 0 ]]; then
-                read -p "Do you want to proceed with this switch? [y/N]: " CONFIRM
+                read -p "Do you want to proceed with this switch? [y/N]: " CONFIRM || exit 1
                 if [[ ! "$CONFIRM" =~ ^[yY](es)?$ ]]; then
                     echo "❌ Mode switch aborted."
                     exit 1
@@ -363,6 +363,7 @@ cmd_mode() {
     if [ "$SYNC_SERVICES" = "true" ]; then
         echo "=== SYNCING SERVICES ==="
         run_sudo cp "$PROJECT_ROOT"/octor-*.service /etc/systemd/system/
+        run_sudo cp "$PROJECT_ROOT"/octor-*.cron /etc/systemd/system/ 2>/dev/null || true
         run_sudo systemctl daemon-reload
     fi
 
@@ -394,7 +395,9 @@ cmd_mode() {
             printf "."
             sleep 1
         done
-        [[ "$INFRA_READY" = "false" ]] && echo " ❌"
+        if [[ "$INFRA_READY" = "false" ]]; then
+            echo " ❌"
+        fi
 
         echo "=== INITIALIZING NATS JETSTREAM ==="
         (cd "$PROJECT_ROOT" && go run scripts/create_nats_stream.go >/dev/null) || echo "⚠️  NATS Init failed - services might crash!"
@@ -817,7 +820,7 @@ WantedBy=multi-user.target"
     SERVICES[octor-content-prober]="$COMMON_HEADER
 Description=Octor Content Prober
 WorkingDirectory=$PROJECT_ROOT/content-prober/server
-ExecStart=$BIN_DIR/content-prober --port 50063 --http-port 50062 --probe-port 52062 --redis-host \${REDIS_HOST} --redis-port \${REDIS_PORT}
+ExecStart=$BIN_DIR/content-prober --port 50063 --http-port 50062 --probe-port 52062 --redis-host \${REDIS_HOST} --redis-port \${REDIS_PORT} --cache-ttl-days \${ENRICH_CACHE_TTL_DAYS}
 
 [Install]
 WantedBy=multi-user.target"
@@ -861,9 +864,9 @@ cmd_build() {
 
 cmd_status() {
     echo "=== OCTOR SYSTEM STATUS ==="
-    echo "Mode: $(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2-)"
-    echo "Services: $(systemctl list-units "octor-*" --state=active --no-legend | wc -l) active"
-    echo "Containers: $(docker ps --format '{{.Names}}' | grep octor | wc -l) running"
+    echo "Mode: $(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- || echo "unknown")"
+    echo "Services: $(systemctl list-units "octor-*" --state=active --no-legend 2>/dev/null | wc -l) active"
+    echo "Containers: $(docker ps --format '{{.Names}}' 2>/dev/null | grep octor | wc -l) running"
     echo "Disk: $(df -h "$PROJECT_ROOT" | tail -1 | awk '{print $5}') usage"
     echo "RAM: $(free -m | awk '/Mem:/ {print $3}')MB used"
 }
@@ -894,7 +897,9 @@ cmd_doctor() {
 cmd_enrich() {
     local SUB="${1:-help}"
     # Source env so the binary has all required vars
-    export $(grep -v '^#' "$ENV_FILE" | xargs)
+    if [[ -f "$ENV_FILE" ]]; then
+        export $(grep -v '^#' "$ENV_FILE" | xargs)
+    fi
     # Suppress proto registration warnings from shared proto packages
     export GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
 

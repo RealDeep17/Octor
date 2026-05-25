@@ -7,6 +7,8 @@ type VideoContent struct {
 	Title      string         `pg:"title"`
 	Year       *int16         `pg:"year"`
 	Metadata   map[string]any `pg:"metadata,type:jsonb"`
+	Duration   *float64       `pg:"-"`
+	ItemID     string         `pg:"-"`
 }
 
 type ContentType string

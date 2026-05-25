@@ -506,10 +506,10 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 	mpCtx, mpCancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer mpCancel()
 	probeURL := contentProbeURL(downloadURL)
-	mp, probeErr := s.api.GetMediaProbe(mpCtx, probeURL)
+	mp, probeErr := s.api.GetMediaProbe(mpCtx, probeURL, false)
 	if probeErr != nil {
 		if mpItem, ok := exportResponse.ExportItems["media_probe"]; ok {
-			mp, probeErr = s.api.GetMediaProbe(mpCtx, mpItem.URL)
+			mp, probeErr = s.api.GetMediaProbe(mpCtx, mpItem.URL, false)
 		}
 	}
 	if probeErr != nil && errors.Is(errors.Cause(probeErr), context.Canceled) {

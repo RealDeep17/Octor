@@ -13,14 +13,27 @@ import json
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, List, Tuple
 from urllib.parse import quote
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from fastapi import FastAPI, Form, Query
 from fastapi.responses import JSONResponse
+
+# Global HTTP session for connection pooling (dramatically reduces handshake latency)
+SESSION = requests.Session()
+_RETRY_STRATEGY = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+SESSION.mount("https://", HTTPAdapter(max_retries=_RETRY_STRATEGY, pool_connections=32, pool_maxsize=32))
+SESSION.mount("http://", HTTPAdapter(max_retries=_RETRY_STRATEGY, pool_connections=32, pool_maxsize=32))
 
 try:
     from rapidfuzz import fuzz, process as rfprocess, utils as rfutils
@@ -37,7 +50,6 @@ except ImportError:
 app = FastAPI()
 
 # Simple in-memory LRU cache: title → response dict (max 500 entries)
-from functools import lru_cache as _lru_cache
 _RESULT_CACHE: dict = {}
 _CACHE_MAX = 500
 
@@ -61,8 +73,18 @@ SIDECAR_ENRICHMENT_ENABLED = os.getenv("SIDECAR_ENRICHMENT_ENABLED", "true").low
 
 SETTINGS_FILE = Path(os.getenv("SIDECAR_DATA_DIR", "./data") + "/settings.json")
 
-# Minimum fuzzy match score to accept a candidate (namer uses 89.9 for partial, 94.9 for full)
-MATCH_THRESHOLD = 65.0
+# Composite match score threshold — NOT a raw fuzzy string score.
+# Positive signals: site match (+80–120), performer (+150), date exact (+100), name fuzzy (+0–100),
+# no-site/date baselines (+50 each). A score of 100 requires at least one strong signal.
+MATCH_THRESHOLD = 100.0
+
+# Global thread pool for parallel search tasks (reuses threads and caps outgoing connections)
+SEARCH_EXECUTOR = ThreadPoolExecutor(max_workers=32)
+
+@app.on_event("shutdown")
+def shutdown_event():
+    log("Shutting down search executor pool")
+    SEARCH_EXECUTOR.shutdown(wait=False)
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 def log(msg: str):
@@ -101,129 +123,128 @@ def name_cleaner(name: str) -> str:
     name = re.sub(r'\s+', ' ', name).strip('- ')
     return name
 
-# Date and site parsers are defined after _NSFW_STUDIOS
-
 # ── NSFW studio detection ─────────────────────────────────────────────────────
 # Normalised (lowercase, no separators) studio names that unambiguously
 # indicate adult content when found in a torrent title.
-# Rule: only include names that CANNOT appear in mainstream movie/show titles.
+# Curated minimal baseline of the most popular studios (all others are resolved dynamically).
 _NSFW_STUDIOS = {
-    "analangels", "anal-angels", "pornpros", "18eighteen", "2chickssametime", "40somethingmag", "50plusmilfs", "60plusmilfs", "8thstreetlatinas", "adamevepictures", "adulttime",
-    "alsscan", "americandaydreams", "amourbabes", "analintroductions", "analmom", "assparade", "babes", "babygotboobs", "badoinkvr", "bellesafilms",
-    "bamvisions", "bangbros", "bangbus", "bangcasting", "bangpov", "bffs", "bifuckkink", "bigbuttslikeitbig",
-    "bignaturals", "bigtitsatschool", "bigtitsatwork", "bigtitsboss", "bigtitsinsports", "bigtitsinuniform", "bigtitsroundasses", "bigwetbutts",
-    "bikebabes", "bikinicrashers", "bizarrevideotranssexual", "blackandstacked", "blacked", "blackedraw", "blackisbetter", "blackmailed",
-    "blackonblondes", "blacksonblondes", "blacksoncougars", "blacksonsluts", "blackstepdad", "blackvalleygirls", "blackwhitefuckfest", "bleufilms",
-    "bloodangels", "blowjobfridays", "blowjobninjas", "bluecollarbabes", "bluefantasies", "bodyinmind", "bondagecompound", "bonedathome",
-    "bonusholeboys", "boobsquad", "bootyfullbabes", "bootyliciousmag", "boppingbabes", "borderpatrolsex", "bossymilfs", "boundgagged",
-    "boundgangbangs", "boundgods", "boundinpublic", "bountyhunterporn", "bracefaced", "brandibellecom", "brattamer", "brattymilf", "brattybabesownyou",
-    "brattybarebabes", "brattysis", "brazzers", "brazzersexxtra", "brazzersinteractive", "brazzersplus", "brazzersvip", "brazzersvr", "breedingmaterial",
-    "britishbukkakebabes", "brokenbabes", "brownbunnies", "bubblegumdungeon", "burningangel", "busstop", "bustedbabysitters", "bustyadventures",
-    "bustyangelique", "bustyarianna", "bustycollegecoeds", "bustydanniashe", "bustydustystash", "bustyinescudna", "bustykellykay", "bustykerrymarie",
-    "bustylornamorgan", "bustymerilyn", "bustyoldsluts", "bustyones", "bustysammieblack", "buttdivers", "buttmachineboys", "buttman",
-    "candymonroe", "canhescore", "captivemale", "cardiogasm", "caseyatruestory", "casting", "caughtfapping", "caughtmycoach",
-    "cfnm", "cfnmshow", "cfnmteens", "chantasbitches", "charlesdera", "charmed", "chasewaterbabes", "chastitybabes",
-    "cheatinghotbabes", "cheatingsis", "cheatingwithmyex", "cherrybrady", "cherrypop", "chloesworld", "chongas", "chrisstreamsproductions", "clubsweethearts",
-    "christophsbignaturaltits", "christymarks", "ciaobella", "cinematickink", "classroom", "clinicaltorments", "cock4stepmom", "collegebabesexposed",
-    "collegebash", "collegerules", "colombiafuckfest", "cosplaybabes", "cosplayground", "cougarseductions", "coupleswapping", "courtneytaylor", "creampieforgranny",
-    "creampiefunbabes", "cristalkinky", "cruelmedia", "crystalgunnsworld", "cuckoldsessions", "cum4k", "cumfiesta", "cumswappingsis", "cutiepie",
-    "czechcasting", "czechstreets", "czechvr", "czechvrnetwork", "dadcrush", "daddygetslucky", "daddypounds", "daddysboy",
-    "daddysgirl", "daddyslilangel", "dadsloveporn", "daisytaylor", "daughterswap", "davidperry", "daylenerio", "ddfbabes",
-    "deeper", "desiraesworld", "desireedulce", "detentiongirls", "devilsfilm", "devicebondage", "dfxbigbangz", "dfxsolemates", "dfxtracompilations",
-    "dfxtraoriginals", "dianepoppos", "diaryofamilf", "diaryofananny", "digitalplayground", "digitalsin", "dilfed", "dirtcheapteens",
-    "dirtymasseur", "dirtyworldtour", "divinebitches", "doctoradventures", "dogfartnetwork", "doghousedigital", "domai", "dontbreakme", "dorcel",
+    "10musume", "18eighteen", "18vr", "1pondo", "2chickssametime", "2girlsonecup", "40somethingmag", "50plusmilfs",
+    "5kporn", "60plusmilfs", "8kmilfs", "8thstreetlatinas", "adameve", "adamevepictures", "adulttime", "allfinegirls",
+    "allherluv", "alsscan", "americandaydreams", "amourbabes", "analintroductions", "analmom", "analtherapyxxx", "archiveofstevehicks",
+    "assparade", "avstars", "babes", "babygotboobs", "backroomcastingcouch", "badoinkvr", "hotmilfsfuck", "bamvisions", "bangbros",
+    "bangbus", "bangcasting", "bangingbeauties", "bangme", "bangpov", "bbwchan", "beautyandsenior", "bellesablinddate",
+    "bellesafilms", "bffs", "bifuckkink", "bigbuttslikeitbig", "bigmouthfuls", "bignaturals", "bigtitsatschool", "bigtitsatwork",
+    "bigtitsboss", "bigtitsinsports", "bigtitsinuniform", "bigtitsroundasses", "bigwetbutts", "bikebabes", "bikinicrashers", "bizarrevideotranssexual",
+    "blackandstacked", "blacked", "blackedraw", "blackisbetter", "blackmailed", "blackmeatwhitetreat", "blackonblondes", "blacksonblondes",
+    "blacksoncougars", "blacksonsluts", "blackstepdad", "blackvalleygirls", "blackwhitefuckfest", "bleufilms", "bloodangels", "blowjobfridays",
+    "blowjobninjas", "bluecollarbabes", "bluefantasies", "bodyinmind", "bondagecompound", "bonedathome", "bonusholeboys", "boobsquad",
+    "bootyfullbabes", "bootyliciousmag", "boppingbabes", "borderpatrolsex", "bossymilfs", "boundgagged", "boundgangbangs", "boundgods",
+    "boundinpublic", "bountyhunterporn", "bracefaced", "brattamer", "brattybabesownyou", "brattybarebabes", "brattymilf", "brattysis",
+    "brazzers", "brazzersexxtra", "breedingmaterial", "britishbukkakebabes", "brokenbabes", "brownbunnies", "bubblegumdungeon", "burningangel",
+    "busstop", "bustedbabysitters", "bustyadventures", "bustyangelique", "bustyarianna", "bustycollegecoeds", "bustydanniashe", "bustydustystash",
+    "bustyinescudna", "bustykellykay", "bustykerrymarie", "bustylornamorgan", "bustymerilyn", "bustyoldsluts", "bustyones", "bustysammieblack",
+    "buttdivers", "buttmachineboys", "buttman", "canhescore", "captivemale", "cardiogasm", "caribbeancom", "caribbeancompr",
+    "caughtfapping", "caughtmycoach", "cfnm", "cfnmshow", "cfnmteens", "chasewaterbabes", "chastitybabes", "cheatinghotbabes",
+    "cheatingsis", "cheatingwithmyex", "cherrybrady", "cherrypop", "chongas", "ciaobella", "cinematickink", "clinicaltorments",
+    "clubsweethearts", "cock4stepmom", "collegebabesexposed", "collegebash", "collegerules", "colombiafuckfest", "cosplaybabes", "cosplayground",
+    "cougarseductions", "coupleswapping", "creampieforgranny", "creampiefunbabes", "cruelmedia", "cuckoldsessions", "cum4k", "cumfiesta",
+    "cumswappingsis", "cutiepie", "czechanalsx", "czechboobs", "czechcasting", "czechfantasy", "czechharem", "czechhunter",
+    "czechmassage", "czechporncastle", "czechpublic", "czechstreets", "czechsuperstars", "czechvr", "czechvrnetwork", "czechwives",
+    "dadcrush", "daddygetslucky", "daddypounds", "daddysboy", "daddysgirl", "daddyslilangel", "dadsloveporn", "daughterswap",
+    "ddfbabes", "ddfbusty", "ddfnetwork", "ddfprod", "deeper", "detentiongirls", "devicebondage", "devilsfilm",
+    "diaryofamilf", "diaryofananny", "digitalplayground", "digitalsin", "dilfed", "familyswap", "dirtcheapteens", "dirtymasseur", "dirtyworldtour",
+    "divinebitches", "doctoradventures", "dogfartnetwork", "doghousedigital", "domai", "dontbreakme", "dorcel", "dorcelaoc",
     "dorminvasion", "driverxxx", "dronehunter", "dungeonsex", "dyked", "ebonythots", "edgedandbound", "electrosluts",
-    "elegantanal", "elegantangel", "emilywillis", "eroticababes", "eroticbeauty", "eternaldesire", "eurobabeschannel", "eurofoxes",
-    "evanottyvideos", "everythingbutt", "evilangel", "evilshow", "exotic4k", "extras", "extremepickups", "exxxtrasmall", "facialfest",
-    "familiestied", "familysinners", "familystrokes", "familystrokesfeatures", "familyswap", "familyxxx", "fans", "farthammer",
-    "feedherfuckher", "feedme", "femalesubmission", "fetishmodelpupett", "filthsyndicate", "filthyfamily", "firstclasspov", "firsttimefootsmellers", "fitnessrooms",
-    "flatandfuckedmilfs", "footjobfantasiescumtrue", "footsiebabes", "footworship", "forbiddenseductions", "fostertapes", "freaksinside", "freakyfembots",
-    "freeusefantasy", "freeusesingles", "fuckedandbound", "fuckfordollars", "fuckstudies", "fuckingmachines", "fuckmyass", "fuckteamfive", "futasentaisquad",
-    "futaworld", "futuredarkly", "gayrevenge", "gfflive", "gfforiginals", "ginarysgiantessadventures", "ginaryskinkyadventures", "ginarystickleadventures",
-    "gingerpatch", "girlcore", "girlfriendsfilms", "girlgirl", "girlgirlxxx", "girlsunderarrest", "girlswholie", "gloryholeloads",
-    "glowupz", "goddessginary", "goddessnudes", "greedy", "grinders", "hardcoregangbang", "hardkinks", "harmonyfetish",
-    "hazeher", "hentaisexschool", "herfreshmanyear", "heteroflexible", "hiddenlayers", "hijabhookup", "hkjfans", "hogtied",
-    "homealonemilfs", "honeybabesugarpiie", "hornybirds", "hotbabes4k", "hotkinkyjoxxx", "hotkinkyme", "housewife1on1", "howmenorgasm",
-    "hustler", "hustlerparodies", "hypkinkseductionispower", "iconfessfiles", "iconmale", "ifilmmyself", "ihaveawife", "iknowthatgirl",
-    "iloveblackshemales", "imadeporn", "indianbabes", "innocenthigh", "insidenaughtyamerica", "internalviolations", "intimatelypov", "isthisreal",
-    "iwantmysister", "jadekink", "jaytaylorxx", "jizzonmyjugs", "johnbloomberg", "joibabes", "joimom", "jonnidarkkoxxx",
-    "jordi", "joymii", "juicypinkbox", "julesjordan", "julesjordannetwork", "karinahart", "karupsprivatecollection", "katsokinky",
-    "kellymadison", "kellymadisonmedia", "kevinmoore", "kgbthetravelcamstudio", "kingmidas", "kink", "kink305", "kinkacademy",
-    "kinkbomb", "kinkcanary", "kinkclassics", "kinkcompilations", "kinkdevice", "kinkfeatures", "kinkicory", "kinklive",
-    "kinkmen", "kinkmenclassics", "kinkmenseries", "kinkmentestshoots", "kinkoncommand", "kinkrawtestshoots", "kinksisters", "kinktestshoots",
-    "kinktrans", "kinkuniversity", "kinkxbizarrevideo", "kinkxdigitalsin", "kinkxteaseandthankyou", "kinkyangels", "kinkybites", "kinkybitesmen",
+    "elegantanal", "elegantangel", "enjoyx", "eroticababes", "eroticax", "eroticbeauty", "erotique", "eternaldesire",
+    "eurobabeschannel", "eurofoxes", "everythingbutt", "evilangel", "evilshow", "exotic4k", "exploitedcollegegirls", "extremepickups",
+    "exxxtrasmall", "facialfest", "fakeagent", "fakeagentuk", "fakecop", "fakedrivingschool", "fakehospital", "fakeshooting",
+    "faketaxi", "familiestied", "familysinners", "familystrokes", "familystrokesfeatures", "familyswap", "familyxxx", "farthammer",
+    "feedherfuckher", "feedme", "femalesubmission", "fetishmodelpupett", "fillupymom", "filthsyndicate", "filthyfamily", "firstclasspov",
+    "firsttimefootsmellers", "fit18", "fitnessrooms", "flatandfuckedmilfs", "footjobfantasiescumtrue", "footsiebabes", "footworship", "forbiddenseductions",
+    "fostertapes", "freaksinside", "freakyfembots", "freeusefantasy", "freeusesingles", "freeze", "fuckedandbound", "fuckfordollars",
+    "fuckingmachines", "fuckmyass", "fuckpassvr", "fuckstudies", "fuckteamfive", "futuredarkly", "gayrevenge", "gfflive",
+    "gfforiginals", "gingerpatch", "girlcore", "girlfriendsfilms", "girlgirl", "girlgirlxxx", "girlsgonecrazy", "girlsgonepink",
+    "girlsunderarrest", "girlsway", "girlswholie", "girlswild", "gloryhole", "gloryholeloads", "glowupz", "goddessnudes",
+    "grinders", "handjobhq", "hardcoregangbang", "hardkinks", "hardx", "harmonyfetish", "hazeher", "hegre",
+    "hegreart", "hentaisexschool", "herfirstlesbiansex", "herfreshmanyear", "heteroflexible", "heyzo", "hiddenlayers", "hijabhookup",
+    "hogtied", "hologirlsvr", "homealonemilfs", "hornybirds", "hotbabes4k", "hotkinkyjoxxx", "hotkinkyme", "housewife1on1",
+    "howmenorgasm", "hussieauditions", "hussiepass", "hustler", "hustlerparodies", "hypkinkseductionispower", "iconmale", "ifilmmyself",
+    "ihaveawife", "iknowthatgirl", "iloveblackshemales", "indianbabes", "innocenthigh", "internalviolations", "intimatelypov", "isthisreal",
+    "iwantmysister", "javhd", "javhub", "jaxslayher", "jizzonmyjugs", "joibabes", "joimom", "jordi",
+    "joymii", "juicypinkbox", "julesjordan", "karupsprivatecollection", "kink", "kinkyangels", "kinkybites", "kinkybitesmen",
     "kinkydogs", "kinkyexploits", "kinkyfamily", "kinkyfeetures", "kinkygirlsberlin", "kinkyinlaws", "kinkykingdom", "kinkyleatherclips",
     "kinkymarisol", "kinkymistresses", "kinkypanthersbdsm", "kinkypleasures", "kinkyponygirl", "kinkyrubberworld", "kinkysex", "kinkysluts4k",
-    "kinkyspa", "kinkytwink", "kinkyvisions", "kissingsis", "lacylennon", "ladygonzo", "lasluts", "latexplaytime", "latinamilf", "legalporno", "lifeselector",
-    "latinachannel", "latinarampage", "latinasextapes", "latinastepmom", "latinateam", "legsex", "lesbiancrimestories", "lesbianghoststories",
-    "lesbiangirlongirl", "letsbebad", "letspostit", "letstryanal", "lild", "lillatinas", "lilsis", "linseysworld", "lukecooperx",
-    "littleasians", "livenaughtystudent", "livingwithanna", "lovehairy", "lunastar", "lusthd", "magicalfeet", "mandyiskinky",
-    "marinavaylor", "mature4k", "meanbitch", "meninpain", "menonedge", "messyjessy", "metart", "metartx", "metmodels",
-    "miakhalifa", "michaelninn", "mickybells", "mikesapartment", "milehighmedia", "milehighxtreme", "milfed", "milfhunter",
-    "milflessons", "milfslikeitbig", "milfslikeitblack", "milfsoup", "milfsugarbabesclassic", "milftugs", "milfy", "milfty", "milkenema",
-    "milkybabes", "millymarks", "mixedx", "mofos", "momcomesfirst", "momisamilf", "momishorny", "momknowsbest", "mommygotboobs",
-    "mommysboy", "mommystoytime", "momsanaladventure", "momsbangteens", "momsincontrol", "momslickteens", "momdrips", "mommy4k", "momsmoney", "momsteachsex", "momwantscreampie", "momwantstobreed",
-    "mondofetiche", "moneytalks", "monstercurves", "monstersofcock", "mormongirlz", "motherdaughterexchangeclub", "mranal", "mrcameltoe",
-    "mybabysittersclub", "mydirtymaid", "mydirtyuncle", "mydirtyvault", "myfamilypies", "myfirst", "myfirstsexteacher", "myfriendsfeet",
-    "myfriendshotgirl", "myfriendshotmom", "mygf", "mykinkydope", "mylf", "mylfxevilangel", "mylfxteamskeet", "mylifeinbrazil", "mypornbabes",
-    "nakedhustlers", "nakedkombat", "nakedyogalife", "naughtyamerica", "naughtyamericanetwork", "naughtyamericans", "naughtyamericavr", "naughtyathletics",
-    "naughtybookworms", "naughtycountrygirls", "naughtyflipside", "naughtymag", "naughtyoffice", "naughtyrichgirls", "naughtystaff", "naughtyweddings",
-    "newbieblack", "nfbusty", "newsensations", "newsensationsgirlsway", "newsensationsxanalized", "newsensationsxarchangel", "newsensationsxbang", "newsensationsxslutinspection", "newsensationsxwifebucket",
-    "nikkijadetaylor", "nofaces", "noirmale", "notmygrandpa", "nubilescasting", "nubileset", "nubilesnet", "nubilesporn",
-    "nubilespornnetwork", "nubilesunscripted", "officeobsession", "oldhornymilfs", "onlyfans", "onlytarts", "oopsfamily", "oopsie", "oopsieanimated",
-    "openfamily", "ourlittlesecret", "oyeloca", "pansexualx", "papaloads", "partygirls", "partyof3", "passportbros",
-    "pawg", "pegging", "pennyshow", "penthouse", "penthousegold", "perfectfuckingstrangersclassic", "perspective", "pervdoctor",
-    "pervdriver", "pervmassage", "pervmom", "pervtherapy", "pervzfeatures", "pervzsingles", "petiteballerinasfucked", "petitehdporn",
-    "petiteteens18", "pickinguppussy", "pinko", "pissing", "polyfamilylife", "pornfidelity", "pornmegaload", "pornstarwife", "pornstarplatinumkink",
-    "pornstarslikeitbig", "pornstarspa", "pornstarspunishment", "pornstarvote", "pov4k", "povfantasy", "povlife", "povmassage",
-    "povmasters", "povpickups", "powermunch", "preggoworld", "prettydirty", "princesscum", "private", "privateblack",
-    "privatecastings", "privatecastingx", "privateclassics", "privatefetish", "privategwen", "privatejet", "privateman", "privatemilfs",
-    "privateplace", "privatepornvideo", "privateschooljewel", "privatesextapes", "privatesociety", "privatestars", "privateteenvideo", "privatetranssexual",
-    "projectdtf", "projectrv", "propertysex", "publicagent", "publicbang", "publicdisgrace", "publicinvasion", "publicpickups",
-    "punishteens", "pure18", "puretaboo", "purets", "pussypatrol", "pvcbabes", "queensofkink", "rachelstarr",
-    "randysroadstop", "realbutts", "realfuckingcouples", "realgirlsnow", "realityjunkies", "realitykings", "realitysis", "realpornstarsvr",
-    "realwifestories", "reneerossvideo", "reptyleclassics", "reptylefeatures", "reptylelabs", "reptyleselects", "rkprime", "rkshorts",
-    "roccosiffredi", "roundandbrown", "rubateen", "russianfakeagent", "rustytaylor", "sadiewest", "sadisticrope", "sarataylor",
-    "sarennasworld", "savagegangbang", "sayunclexpakinky", "scalebustinbabes", "scoreclassics", "scorehd", "scoreland", "scoreland2",
-    "scoretheater", "scorevideos", "secretcrush", "seducedbyacougar", "selfdesire", "sexandgrades", "sexandsubmission", "sexart",
-    "sexbusters", "sexmex", "sexselector", "sexybabes", "sexyclubbabes", "sexysandeecom", "shanedieselsbanginbabes", "shapeofbeauty", "sharizelvideos",
-    "shesbreedingmaterial", "shesnew", "shewantshim", "shoplyfter", "showersolos", "showmybf", "singlemoms", "sislovesme",
-    "sisswap", "sisters", "sistertrick", "slayed", "sleazystepdad", "slutstepmom", "slutstepsister", "sluttywhitegirls",
-    "smashed", "sneakysex", "sofiarose", "solointerviews", "sophiedee", "spanish18", "spankmonster", "spizoo", "spermglazed", "sportbabes",
-    "springbreak", "stacyvandenbergboobs", "stayhomepov", "stepfamilychannel", "stepmomlessons", "stepmomvideos", "stepsiblings", "stepsiblingscaught",
-    "straplez", "streetranger", "strugglingbabes", "stunning18", "submissived", "sugarbabestv", "summervacation", "supersluts",
-    "swappzfeatures", "swappzsingles", "sweetheartvideo", "sweetsinner", "sweetsweetsallymae", "switch", "sxoriginals", "takenrough",
-    "tawnypeaks", "taylorlittle", "taylormadeclips", "taylorraz", "taylorsfetishemporium", "taylortitfucks", "taylortwins", "taylorwaneentertainment",
-    "teacherfucksteens", "teamskeet", "teamskeetallstars", "teamskeetclassics", "teamskeetextras", "teamskeetfeatures", "teamskeetlabs", "teamskeetnetwork", "teamskeetselects",
-    "teamskeetsingles", "teamskeetvip", "5kporn", "teamskeetxadultprime", "teamskeetxamazingfilms", "teamskeetxaussiefellatioqueens", "teamskeetxaveryblack", "teamskeetxbaeb",
-    "teamskeetxbananafever", "teamskeetxbang", "teamskeetxbjraw", "teamskeetxbrandibraids", "teamskeetxbrasilbimbos", "teamskeetxbrattyfootgirls", "teamskeetxbritstudioxxx", "teamskeetxcamsoda",
-    "teamskeetxcannonproductions", "teamskeetxclubcastings", "teamskeetxclubsweethearts", "teamskeetxcumkitchen", "teamskeetxdantecolle", "teamskeetxdoctaytay", "teamskeetxerotiquetvlive", "teamskeetxevaelfie",
-    "teamskeetxevilangel", "teamskeetxfamilyscrew", "teamskeetxfilthykings", "teamskeetxfit18", "teamskeetxflorarodgers", "teamskeetxfuckingawesome", "teamskeetxfuckingskinny", "teamskeetxgotfilled",
-    "teamskeetxgranddadz", "teamskeetxharmonyfilms", "teamskeetxherbcollins", "teamskeetxhobybuchanon", "teamskeetxhussiepass", "teamskeetximmaybee", "teamskeetximpuredesire", "teamskeetxjamesdeen",
-    "teamskeetxjapornxxx", "teamskeetxjasonmoody", "teamskeetxjavhub", "teamskeetxjonathanjordan", "teamskeetxjoybear", "teamskeetxkatekoss", "teamskeetxkrisskiss", "teamskeetxlaynalandry",
-    "teamskeetxlethalhardcore", "teamskeetxlunaxjames", "teamskeetxluxurygirl", "teamskeetxmanko88", "teamskeetxmickeymod", "teamskeetxmodelmediaasia", "teamskeetxmodelmediaus", "teamskeetxmollyredwolf",
-    "teamskeetxmybestsexlife", "teamskeetxmymilfz", "teamskeetxog", "teamskeetxonly3x", "teamskeetxpornfidelity", "teamskeetxpurgatoryx", "teamskeetxrawattack", "teamskeetxreislin",
-    "teamskeetxrileycyriis", "teamskeetxscreampies", "teamskeetxsheseducedme", "teamskeetxsinematica", "teamskeetxspankmonster", "teamskeetxsparksentertainment", "teamskeetxspizoo",
-    "teamskeetxstellasedona", "teamskeetxstephousehold", "teamskeetxsweetiefox", "teamskeetxtabbyandnoname", "teamskeetxtenshigao", "teamskeetxthicc18", "teamskeetxtoughlovex", "teamskeetxwilltilexxx",
-    "teamskeetxxanderporn", "teamskeetxxxxjobinterviews", "teamskeetxyesgirlz", "teamskeetxyoungbusty", "teenagelesbian", "teencurves", "teenfidelity", "teenjoi",
-    "teenoverload", "teenpies", "teenpinkvideos", "teensatwork", "teensdoporn", "teenslikeitbig", "teenslikeitblack", "teensloveanal",
-    "teensloveblackcocks", "teenslovecream", "teenslovehugecocks", "teenslovemoney", "teenyblack", "teslataylor", "theadulttimepodcast", "thebrats",
-    "thefootinfatuation", "thekinkfaeriex", "thelifeerotic", "theloft", "themikeandjoannashow", "theminion", "thepassenger", "therealworkout",
-    "thescoregroup", "thesexscout", "thespa", "thetrainingofo", "theupperfloor", "theyeslist", "thickumz", "thisgirlsucks",
-    "thundercock", "tickleaddiction", "tiffanytaylor", "tiffanytowers", "tinysis", "titsandtugs", "tittyattack", "tomboyish",
-    "tomboyz", "tonightsfuck", "tonightsgirlfriend", "tonightsts", "tonniataylor", "toywithme", "trannysurprise", "trannytemptation", "transfixed",
-    "transgressivefilms", "transsensual", "transsexualangel", "trophywives", "truelesbian", "truesexstories", "tsdivas", "tsfactor",
-    "tskink", "tsplayground", "tspussyhunters", "tsseduction", "tugjobs", "turningtwistys", "tushy", "tushyraw",
-    "twistys", "twistyshard", "twistysteasers", "uksoccerbabes", "ultimatesurrender", "underthebed", "unrelatedx", "upclosex",
-    "valoryirene", "vengeancexxx", "virtualporn", "virtualtaboo", "viviantaylor", "vivid", "vividalt", "vividceleb",
-    "vividclassic", "vivthomas", "vixen", "vixenmediagroup", "vrcosplayx", "wasteland", "watchingmydaughtergoblack", "watchingmymomgoblack",
-    "watchyourmom", "waterbondage", "wefuckblackgirls", "welivetogether", "wetforwomen", "whengirlsplay", "wheretheboysarent", "whippedass",
-    "wifewriting", "wifey", "wiredpussy", "withlovelexi", "wivesonvacation", "wolfwagner", "womenseekingwomen", "womensworld", "woodmanentertainment",
-    "workinglatinas", "wrestlingmale", "xandercorvus", "xlgirls", "xxxpawn", "youngandcurious", "youngermommy", "youngkink",
-    "yourwifemymeat", "zebragirls",
-    "onlyfans", "8kmilfs", "bbcsurprise", "bigcockbully", "bigcockhero", "bigmouthfuls",
+    "kinkyspa", "kinkytwink", "kinkyvisions", "kissingsis", "ladygonzo", "lasluts", "latexplaytime", "latinachannel",
+    "latinamilf", "latinarampage", "latinasextapes", "latinastepmom", "latinateam", "legalporno", "legsex", "lesbiancrimestories",
+    "lesbianghoststories", "lesbiangirlongirl", "letsbebad", "letspostit", "letstryanal", "lezbehonest", "lifeselector", "lild",
+    "lillatinas", "lilsis", "littleasians", "livenaughtystudent", "livingwithanna", "lovehairy", "lusthd", "magicalfeet",
+    "massagecreep", "mature4k", "maturenl", "meanbitch", "meninpain", "menonedge", "messyjessy", "metart",
+    "metartx", "metmodels", "michaelninn", "mikesapartment", "milehighmedia", "milehighxtreme", "milfed", "milfhunter",
+    "milflessons", "milfslikeitbig", "milfslikeitblack", "milfsoup", "milfsugarbabesclassic", "milftugs", "milfy", "milkenema",
+    "milkybabes", "mixedx", "mofos", "momcomesfirst", "momdrips", "momisamilf", "momishorny", "momknowsbest",
+    "mommy4k", "mommygotboobs", "mommysboy", "mommystoytime", "momsanaladventure", "momsbangteens", "momsincontrol", "momslickteens",
+    "momsmoney", "momsteachsex", "momwantscreampie", "momwantstobreed", "mondofetiche", "moneytalks", "monstercurves", "monstersofcock",
+    "mormongirlz", "motherdaughterexchangeclub", "mplstudios", "mranal", "mrcameltoe", "muramura", "mybabysittersclub", "mydirtymaid",
+    "mydirtyuncle", "mydirtyvault", "myfamilypies", "myfirst", "myfirstsexteacher", "myfriendsfeet", "myfriendshotgirl", "myfriendshotmom",
+    "mygf", "mykinkydope", "mylf", "mylfxevilangel", "mylfxteamskeet", "mylifeinbrazil", "mypornbabes", "nakedhustlers",
+    "nakedkombat", "nakedyogalife", "naughtyamerica", "naughtyamericavr", "newbieblack", "newsensations", "nfbusty", "nofaces",
+    "noirmale", "notmygrandpa", "nubilescasting", "nubileset", "nubilesnet", "nubilesporn", "nubilesunscripted", "officeobsession",
+    "oldhornymilfs", "onlyfans", "onlytarts", "oopsfamily", "oopsie", "oopsieanimated", "openfamily", "ourlittlesecret",
+    "oyeloca", "pacopacomama", "pansexualx", "papaloads", "partygirls", "partyof3", "passion", "passion4k",
+    "passionhd", "passportbros", "penthouse", "penthousegold", "perfectfuckingstrangersclassic", "perspective", "pervdoctor", "pervdriver",
+    "pervmassage", "pervmom", "pervtherapy", "petiteballerinasfucked", "petitehdporn", "petiteteens18", "pickinguppussy", "pinko",
+    "plumperpass", "polyfamilylife", "pornfidelity", "pornmegaload", "pornpros", "pornstarplatinumkink", "pornstarslikeitbig", "pornstarspa",
+    "pornstarspunishment", "pornstarvote", "pornstarwife", "pov4k", "povfantasy", "povlife", "povmassage", "povmasters",
+    "povpickups", "powermunch", "preggoworld", "prettydirty", "princesscum", "private", "privateblack", "privatesociety",
+    "projectdtf", "projectrv", "propertysex", "puba", "pubamedia", "publicagent", "publicbang", "publicdisgrace",
+    "publicinvasion", "publicpickups", "punishteens", "pure18", "puretaboo", "purets", "pussypatrol", "pvcbabes",
+    "queensofkink", "randysroadstop", "realbutts", "realexgirlfriends", "realfuckingcouples", "realgirlsnow", "realityjunkies", "realitykings",
+    "realitysis", "realjamvr", "realpornstarsvr", "realwifestories", "rickysroom", "rkprime", "roccosiffredi", "roundandbrown",
+    "rubateen", "russianfakeagent", "sadisticrope", "savagegangbang", "sayunclexpakinky", "scalebustinbabes", "scorehd", "scoreland",
+    "scoreland2", "secretcrush", "seducedbyacougar", "selfdesire", "sexandgrades", "sexandsubmission", "sexart", "sexbusters",
+    "sexlikereal", "sexmex", "sexselector", "sexybabes", "sexyclubbabes", "sexysandeecom", "shanedieselsbanginbabes", "shapeofbeauty",
+    "sharizelvideos", "shesbreedingmaterial", "shesnew", "shewantshim", "shoplyfter", "showersolos", "showmybf", "singlemoms",
+    "sinsvr", "sislovesme", "sisswap", "sistertrick", "slayed", "sleazystepdad", "slroriginals", "slutstepmom",
+    "slutstepsister", "sluttywhitegirls", "smashed", "sneakysex", "solointerviews", "spanish18", "spankmonster", "spermglazed",
+    "spizoo", "sportbabes", "springbreak", "stayhomepov", "stepfamilychannel", "stepmomlessons", "stepmomvideos", "stepsiblings",
+    "stepsiblingscaught", "stockingsvr", "straplez", "streetranger", "strugglingbabes", "stunning18", "submissived", "sugarbabestv",
+    "summervacation", "supersluts", "swallowbay", "sweetheartvideo", "sweetsinner", "takenrough", "teacherfucksteens", "teamskeet",
+    "teenagelesbian", "teencurves", "teenfidelity", "teenjoi", "teenoverload", "teenpies", "teenpinkvideos", "teensatwork",
+    "teensdoporn", "teenslikeitbig", "teenslikeitblack", "teensloveanal", "teensloveblackcocks", "teenslovecream", "teenslovehugecocks", "teenslovemoney",
+    "teenyblack", "telsev", "tgirlpornstar", "thebrats", "thefootinfatuation", "thegroupexperiment", "thekinkfaeriex", "thelifeerotic",
+    "theloft", "therealworkout", "thescoregroup", "thesexscout", "thespa", "thetrainingofo", "theupperfloor", "theyeslist",
+    "thickumz", "thisgirlsucks", "thundercock", "tickleaddiction", "tinysis", "titsandtugs", "tittyattack", "tokyohot",
+    "tomboyish", "tomboyz", "tonightsfuck", "tonightsgirlfriend", "tonightsts", "toywithme", "trannysurprise", "trannytemptation",
+    "transfixed", "transfixedoriginale", "transgressivefilms", "transsensual", "transsexualangel", "trophywives", "truelesbian", "truesexstories",
+    "tsdivas", "tsfactor", "tskink", "tsplayground", "tspussyhunters", "tsseduction", "tugjobs", "turningtwistys",
+    "tushy", "tushyraw", "twistys", "twistyshard", "twistysteasers", "uksoccerbabes", "ultimatesurrender", "underthebed",
+    "unrelatedx", "upclosex", "vengeancexxx", "virtualporn", "virtualrealporn", "virtualtaboo", "vivid", "vividalt",
+    "vividceleb", "vividclassic", "vivthomas", "vixen", "vixenmediagroup", "vrbangers", "vrconk", "vrcosplayx",
+    "w4b", "wankzvr", "wasteland", "watch4beauty", "watchingmydaughtergoblack", "watchingmymomgoblack", "watchyourmom", "waterbondage",
+    "wefuckblackgirls", "welivetogether", "wetforwomen", "whengirlsplay", "wheretheboysarent", "whippedass", "wicked", "wickedpictures",
+    "wifewriting", "wifey", "wiredpussy", "wivesonvacation", "wolfwagner", "womenseekingwomen", "womensworld", "woodmanentertainment",
+    "workinglatinas", "wowgirls", "wrestlingmale", "xandercorvus", "xlgirls", "xplumper", "xxxpawn", "xvideosred", "youngandcurious",
+    "youngermommy", "youngkink", "yourwifemymeat", "zebragirls", "zerotolerance", "zerotolerancefilms",
 }
 
+# Curated minimal baseline of standard studio/release-group abbreviations
+_STUDIO_ABBREVIATIONS = {
+    "prvs": "PrivateSociety",
+    "fpv": "FuckPassVR",
+    "lp": "LegalPorno",
+    "rk": "RealityKings",
+    "dp": "DigitalPlayground",
+    "ea": "EvilAngel",
+    "jj": "JulesJordan",
+    "fstv": "FamilyStrokes",
+    "mfp": "MyFamilyPies",
+    "mpf": "MyPervyFamily",
+    "bs": "BrattySis",
+    "ms": "MomSwap",
+    "ta": "TushyRaw",
+    "mfs": "MomsFamilySecrets",
+    "hmf": "HotMilfsFuck",
+}
 
 # ── Advanced Date & Site extractors for Western Adult filename parsing ─────────
 
@@ -276,33 +297,73 @@ def extract_studio(text: str) -> Optional[Tuple[str, str]]:
 
 def parse_adult_filename(title: str) -> dict:
     """
-    Parse an adult torrent name into {site, date, name}.
+    Parse an adult torrent name into {site, date, name, performer}.
     """
     stem = re.sub(r'\.(mp4|mkv|avi|mov|wmv|webm|ts)$', '', title, flags=re.I)
     
-    result = {"site": None, "date": None, "name": None, "raw": title}
+    result = {"site": None, "date": None, "name": None, "raw": title, "performer": None}
 
     # 1. Try to extract date
     date_info = extract_date(stem)
     if date_info:
         date_str, d_start, d_end = date_info
         result["date"] = date_str
-        stem = stem[:d_start] + " " + stem[d_end:]
+        stem_no_date = stem[:d_start] + " " + stem[d_end:]
+    else:
+        stem_no_date = stem
     
-    # 2. Try to extract known studio
-    studio_info = extract_studio(stem)
-    if studio_info:
-        studio_key, orig_site = studio_info
-        result["site"] = orig_site.strip(" -._")
-        stem = stem.replace(orig_site, " ")
+    # 2. Check for site - performer - scene structure (split by double hyphen ' - ')
+    parts = [p.strip() for p in re.split(r'\s+-\s+', stem_no_date)]
+    if len(parts) >= 3:
+        # e.g. Site - Performer - Title
+        site_candidate = parts[0]
+        perf_candidate = parts[1]
+        scene_candidate = " - ".join(parts[2:])
+        
+        # Clean them
+        result["site"] = name_cleaner(site_candidate).strip()
+        result["performer"] = name_cleaner(perf_candidate).strip()
+        result["name"] = name_cleaner(scene_candidate).strip()
+    elif len(parts) == 2:
+        # e.g. Site - Performer or Site - Scene
+        site_candidate = parts[0]
+        right_candidate = parts[1]
+        
+        result["site"] = name_cleaner(site_candidate).strip()
+        cleaned_right = name_cleaner(right_candidate).strip()
+        
+        # If the right side is short (<= 3 words), it's highly likely to be a performer name
+        if len(cleaned_right.split()) <= 3:
+            result["performer"] = cleaned_right
+            result["name"] = cleaned_right
+        else:
+            result["name"] = cleaned_right
+    else:
+        # Fall back to standard extraction
+        # Try to extract known studio
+        studio_info = extract_studio(stem_no_date)
+        if studio_info:
+            studio_key, orig_site = studio_info
+            result["site"] = orig_site.strip(" -._")
+            stem_no_date = stem_no_date.replace(orig_site, " ")
+            
+        # Clean up remaining stem for scene name
+        cleaned_name = name_cleaner(stem_no_date)
+        cleaned_name = re.sub(r'^[-\s._()]+', '', cleaned_name)
+        cleaned_name = re.sub(r'[-\s._()]+$', '', cleaned_name)
+        result["name"] = cleaned_name if cleaned_name else None
 
-    # 3. Clean up remaining stem for scene name
-    cleaned_name = name_cleaner(stem)
-    cleaned_name = re.sub(r'^[-\s._()]+', '', cleaned_name)
-    cleaned_name = re.sub(r'[-\s._()]+$', '', cleaned_name)
-    result["name"] = cleaned_name if cleaned_name else None
+    # Set performer in fallback cases if name is extremely short (1 to 3 words)
+    if not result["performer"] and result["name"] and len(result["name"].split()) <= 3:
+        result["performer"] = result["name"]
 
-    log(f"Parsed filename → site={result['site']!r} date={result['date']!r} name={result['name']!r}")
+    # Normalize the site name if we have abbreviations (e.g. prvs -> PrivateSociety)
+    if result["site"]:
+        site_lower = result["site"].lower().strip()
+        if site_lower in _STUDIO_ABBREVIATIONS:
+            result["site"] = _STUDIO_ABBREVIATIONS[site_lower]
+
+    log(f"Parsed filename → site={result['site']!r} date={result['date']!r} name={result['name']!r} performer={result['performer']!r}")
     return result
 
 
@@ -431,7 +492,7 @@ def tpdb_jav_lookup(code: str) -> Optional[dict]:
     url = f"{TPDB_BASE}/jav?parse={quote(code)}&limit=5"
     log(f"TPDB JAV search: {url}")
     try:
-        r = requests.get(url, headers=_TPDB_HEADERS(), timeout=5)
+        r = SESSION.get(url, headers=_TPDB_HEADERS(), timeout=5)
         r.raise_for_status()
         data = r.json().get("data") or []
         if not data:
@@ -450,38 +511,37 @@ def tpdb_jav_lookup(code: str) -> Optional[dict]:
 
 def _normalise_tpdb_jav(d: dict) -> dict:
     """Flatten TPDB JAV response."""
-    site_obj = d.get("site") or {}
-    poster = d.get("poster")
-    if not poster and isinstance(d.get("posters"), dict):
-        # Prefer vertical poster if explicitly listed in posters dict
-        poster = d["posters"].get("poster") or d["posters"].get("full") or d["posters"].get("large")
-    if not poster:
-        poster = d.get("image")
-    return {
-        "id": d.get("_id") or d.get("id"),
-        "title": d.get("title"),
-        "date": d.get("date"),
-        "site": site_obj.get("name") if isinstance(site_obj, dict) else None,
-        "description": d.get("description") or "",
-        "performers": d.get("performers") or [],
-        "tags": [t.get("name") for t in d.get("tags") or [] if t.get("name")],
-        "poster": poster,
-        "duration": d.get("duration"),
-        "rating": d.get("rating"),
-        "url": d.get("url"),
-        "_source": "tpdb_jav",
-    }
+    return _normalise_tpdb(d, source="tpdb_jav")
 
 
 # ── Fuzzy matching (namer-style) ───────────────────────────────────────────────
+def is_subsequence(sub: str, string: str) -> bool:
+    if not sub or not string:
+        return False
+    it = iter(string.lower())
+    return all(c in it for c in sub.lower())
+
 def fuzzy_score(query: Optional[str], candidate: str) -> float:
     if not query or not candidate:
         return 0.0
     if HAS_RAPIDFUZZ:
-        return rfutils.default_process(query) and fuzz.WRatio(
-            rfutils.default_process(query),
-            rfutils.default_process(candidate),
-        ) or 0.0
+        q_proc = rfutils.default_process(query)
+        c_proc = rfutils.default_process(candidate)
+        if not q_proc or not c_proc:
+            return 0.0
+        
+        base_score = fuzz.WRatio(q_proc, c_proc)
+        
+        # If candidate is very short (e.g. < 15 characters), restrict loose partial matches
+        if len(candidate) < 15:
+            # Require a decent overall ratio match to prevent matching a single word in a long query
+            ratio_score = fuzz.ratio(q_proc, c_proc)
+            partial_ratio = fuzz.partial_ratio(q_proc, c_proc)
+            # If the overall ratio and partial ratio are both low, heavily penalize WRatio
+            if ratio_score < 40 and partial_ratio < 75:
+                base_score = min(base_score, ratio_score * 1.5)
+                
+        return base_score
     # fallback: simple token overlap
     q_tokens = set(query.lower().split())
     c_tokens = set(candidate.lower().split())
@@ -501,7 +561,53 @@ def best_candidate_score(query: Optional[str], candidates: List[str]) -> float:
             best = s
     return best
 
-def score_result(parsed: dict, scene: dict) -> float:
+def is_abbreviation(abbrev: str, full_name: str) -> bool:
+    """
+    Check if a short string (abbrev) is an abbreviation of a full name (e.g. 'fpv' -> 'FuckPassVR').
+    Typically works by taking the first letters of capitalized words or space/separator-split words.
+    """
+    if not abbrev or not full_name:
+        return False
+    abbrev = abbrev.lower().strip()
+    if not abbrev or len(abbrev) > 6:
+        return False
+        
+    full_name_clean = unidecode(full_name).lower()
+    full_name_no_sep = re.sub(r'[^a-z0-9]', '', full_name_clean)
+    
+    # 1. Check direct map
+    mapped = _STUDIO_ABBREVIATIONS.get(abbrev)
+    if mapped:
+        mapped_clean = mapped.lower()
+        if mapped_clean in full_name_no_sep or full_name_no_sep in mapped_clean:
+            return True
+            
+    # Split by spaces and separators
+    words = re.findall(r'[a-z0-9]+', full_name_clean)
+    if not words:
+        return False
+        
+    # Heuristic 1: First letter of each word (e.g. 'rk' -> 'reality kings', 'fstv' -> 'family strokes')
+    first_letters = "".join(w[0] for w in words)
+    if abbrev == first_letters:
+        return True
+        
+    # Heuristic 2: Capital letters in a camelCase/PascalCase string (e.g. 'FuckPassVR' -> F, P, V, R -> fpvr or fpv)
+    caps = "".join(c.lower() for c in full_name if c.isupper())
+    if caps and abbrev in caps:
+        return True
+        
+    # Heuristic 3: Substring of first letters
+    if len(abbrev) >= 2 and abbrev in first_letters:
+        return True
+        
+    # Heuristic 4: Subsequence matching for abbreviations >= 3 characters
+    if len(abbrev) >= 3 and is_subsequence(abbrev, full_name_no_sep):
+        return True
+        
+    return False
+
+def score_result(parsed: dict, scene: dict, target_duration: Optional[float] = None) -> float:
     """
     Score a TPDB scene against parsed filename parts.
     Mirrors namer's __match_weight logic:
@@ -509,17 +615,92 @@ def score_result(parsed: dict, scene: dict) -> float:
       date match       → +100
       name fuzzy       → 0-100
       performer boost  → +150 (if a performer name is in the filename)
+      duration match   → +300 (diff < 1s) or +200 (diff < 3s)
     """
     score = 0.0
 
-    # Site match / mismatch penalty (including parent/network sites)
+    # 1. Dynamic Site Recognition if parsed["site"] is None
+    # Check if normalized candidate site/network/parent name is a substring of the raw filename
+    if not parsed.get("site"):
+        raw_clean = re.sub(r'[^a-z0-9]', '', unidecode(parsed.get("raw") or "").lower())
+        for field in ["site", "parent", "network", "studio", "brand"]:
+            val = scene.get(field)
+            if val:
+                val_clean = re.sub(r'[^a-z0-9]', '', unidecode(val).lower())
+                # Ignore very short site names to avoid false positives (must be >= 4 chars)
+                if len(val_clean) >= 4 and val_clean in raw_clean:
+                    parsed["site"] = val
+                    break
+
+    # 2. Pre-calculate Platform and Performer Match
+    scene_site_clean = re.sub(r'[^a-z0-9]', '', unidecode(scene.get("site") or "").lower())
+    parsed_site_clean = re.sub(r'[^a-z0-9]', '', unidecode(parsed.get("site") or "").lower()) if parsed.get("site") else ""
+    # Generic UGC/creator platforms where performer identity is critical for matching.
+    # Use exact match to avoid false positives (e.g. "xvideosred" is NOT "xvideos").
+    _GENERIC_PLATFORMS = {"onlyfans", "fansly", "manyvids", "fansdb", "patreon", "fans", "xvideos", "pornhub", "spankbang", "redtube", "tube"}
+    is_platform = (parsed_site_clean in _GENERIC_PLATFORMS or any(parsed_site_clean == p for p in _GENERIC_PLATFORMS)) or \
+                  any(scene_site_clean == p or scene_site_clean.startswith(p + ":") for p in _GENERIC_PLATFORMS)
+
+    perf_match = False
+    raw_title = parsed.get("raw", "").lower()
+    
+    # Check explicitly extracted performer first
+    if parsed.get("performer"):
+        parsed_perf_clean = re.sub(r'[^a-z0-9]', '', unidecode(parsed["performer"]).lower())
+        for p in scene.get("performers") or []:
+            name = p.get("name") or (p.get("performer") or {}).get("name")
+            if name:
+                name_clean = re.sub(r'[^a-z0-9]', '', unidecode(name).lower())
+                if parsed_perf_clean and (parsed_perf_clean in name_clean or name_clean in parsed_perf_clean or fuzzy_score(parsed["performer"], name) >= 85.0):
+                    perf_match = True
+                    break
+        
+        # Fallback: check if the parsed performer name is in the candidate scene title
+        if not perf_match and scene.get("title"):
+            title_clean = re.sub(r'[^a-z0-9]', '', unidecode(scene["title"]).lower())
+            if len(parsed_perf_clean) >= 4 and parsed_perf_clean in title_clean:
+                perf_match = True
+
+    if not perf_match:
+        for p in scene.get("performers") or []:
+            name = p.get("name") or (p.get("performer") or {}).get("name")
+            if name:
+                name_lower = name.lower()
+                # If the performer name is the same as the parsed site (e.g. Jules Jordan), skip it for performer boost
+                perf_clean = re.sub(r'[^a-z0-9]', '', unidecode(name_lower).lower())
+                if parsed_site_clean and (parsed_site_clean == perf_clean or perf_clean in parsed_site_clean or parsed_site_clean in perf_clean):
+                    continue
+                    
+                if name_lower in raw_title:
+                    perf_match = True
+                    break
+                cleaned_perf = re.sub(r'[^a-z0-9]', '', name_lower)
+                cleaned_raw = re.sub(r'[^a-z0-9]', '', raw_title)
+                if cleaned_perf in cleaned_raw:
+                    perf_match = True
+                    break
+
+    # Check if the query parsed name is ONLY the performer's name
+    is_only_performer = False
+    if parsed.get("name"):
+        for p in scene.get("performers") or []:
+            p_name = p.get("name") or (p.get("performer") or {}).get("name")
+            if p_name:
+                if fuzzy_score(parsed["name"], p_name) >= 90.0:
+                    is_only_performer = True
+                    break
+
+    # 3. Site match / mismatch penalty (including parent/network sites)
+    site_matched = False
     if parsed.get("site"):
         parsed_site = re.sub(r'[^a-z0-9]', '', unidecode(parsed["site"]).lower())
+        is_whitelisted = parsed_site in _NSFW_STUDIOS
         
         # Check direct site match first
         scene_site = re.sub(r'[^a-z0-9]', '', unidecode(scene.get("site") or "").lower())
-        if parsed_site and scene_site and (parsed_site in scene_site or scene_site in parsed_site):
-            score += 120  # Direct site match gets a premium boost
+        if parsed_site and scene_site and (parsed_site in scene_site or scene_site in parsed_site or is_abbreviation(parsed["site"], scene.get("site"))):
+            score += 120 if is_whitelisted else 80  # Direct site match premium boost for whitelist, moderate for dynamic
+            site_matched = True
         else:
             # Check parent/network matches
             scene_sites = []
@@ -528,32 +709,66 @@ def score_result(parsed: dict, scene: dict) -> float:
             if scene.get("network"):
                 scene_sites.append(re.sub(r'[^a-z0-9]', '', unidecode(scene["network"]).lower()))
                 
-            matched = False
             for s_name in scene_sites:
                 if s_name and (parsed_site in s_name or s_name in parsed_site):
-                    matched = True
+                    site_matched = True
                     break
                     
-            if matched:
-                score += 100  # Network/parent match fallback
+            if site_matched:
+                score += 100 if is_whitelisted else 60  # Network/parent match premium boost for whitelist, moderate for dynamic
             else:
-                # SKIP penalty if either site is a generic platform
-                _GENERIC_PLATFORMS = {"onlyfans", "fansly", "manyvids", "fansdb", "patreon", "fans"}
-                scene_site_clean = re.sub(r'[^a-z0-9]', '', unidecode(scene.get("site") or "").lower())
-                is_platform = (parsed_site in _GENERIC_PLATFORMS) or (scene_site_clean in _GENERIC_PLATFORMS)
                 if not is_platform:
-                    score -= 150  # Explicit site mismatch penalty
+                    # Hybrid site mismatch penalty:
+                    # Harsher penalty (-180) if parsed site is in the NSFw whitelist,
+                    # softer penalty (-80) if dynamically guessed.
+                    # Relieved to -80 if both performer and date match exactly!
+                    has_strong_performer_and_date = perf_match and parsed.get("date") and scene.get("date") and parsed["date"] == scene["date"][:10]
+                    score -= 180 if (is_whitelisted and not has_strong_performer_and_date) else 80
     else:
         # No site info in filename — don't penalise
         score += 50
 
-    # Date match / mismatch
+    # 3.2 Platform-compatible site matching:
+    # "OnlyFans" in filename + scene site is "FansDB: Creator (onlyfans)" → compatible, soft boost.
+    # This handles the common case where FansDB (StashDB) indexes OnlyFans/Fansly content.
+    if not site_matched and is_platform and parsed_site_clean and parsed.get("site"):
+        scene_site_raw_lower = (scene.get("site") or "").lower()
+        if parsed_site_clean in scene_site_raw_lower:
+            site_matched = True
+            score += 50  # Soft platform-compatible match (less than a direct site match)
+
+    # 3.5 Creator/Performer match validation for generic platforms
+    # If the candidate scene is on a generic platform creator page,
+    # the creator/performer's name MUST be present in the raw filename!
+    # If none of the candidate scene's performers are mentioned in the raw filename,
+    # and the site is a generic platform, apply a severe penalty of -300.
+    if is_platform and not perf_match:
+        # Check if the creator site name itself is in the raw filename (e.g. "OnlyFans - Cami Strella")
+        # FansDB scene sites look like "FansDB: CreatorName (onlyfans)" — strip the parenthetical
+        # platform suffix before extracting the creator name, otherwise we check for
+        # "creatornameonlyfans" instead of "creatorname" and always miss.
+        has_creator_in_filename = False
+        site_str = scene.get("site") or ""
+        parts = re.split(r'[:\-]', site_str)
+        if len(parts) >= 2:
+            creator_part = re.sub(r'\(.*?\)', '', parts[1]).strip()  # strip (onlyfans), (fansly) etc.
+            creator_name = re.sub(r'[^a-z0-9]', '', unidecode(creator_part).lower())
+            raw_clean = re.sub(r'[^a-z0-9]', '', unidecode(parsed.get("raw") or "").lower())
+            if len(creator_name) >= 3 and creator_name in raw_clean:
+                has_creator_in_filename = True
+                
+        if not has_creator_in_filename:
+            score -= 300.0
+
+    # 4. Date match / mismatch
     if parsed.get("date"):
         if scene.get("date"):
+            # Relieve date penalty ONLY if we have a strong performer and site match AND it's not a generic performer-name-only filename
+            has_strong_match = perf_match and site_matched and not is_only_performer
+
             try:
                 p_date_str = parsed["date"]
                 s_date_str = scene["date"][:10]
-                from datetime import datetime
                 p_date = datetime.strptime(p_date_str, "%Y-%m-%d").date()
                 s_date = datetime.strptime(s_date_str, "%Y-%m-%d").date()
                 diff_days = abs((p_date - s_date).days)
@@ -561,71 +776,47 @@ def score_result(parsed: dict, scene: dict) -> float:
                     score += 100
                 elif diff_days <= 2:
                     score += 50
+                elif diff_days <= 7:
+                    # Close enough — could be a timezone edge, delayed publish, or index lag
+                    score += 20
                 else:
-                    # If title fuzzy match is very high, and it's not performer-only, reduce date mismatch penalty
-                    t_score = fuzzy_score(parsed.get("name"), scene.get("title"))
-                    is_only_performer = False
-                    if parsed.get("name"):
-                        for p in scene.get("performers") or []:
-                            p_name = p.get("name") or (p.get("performer") or {}).get("name")
-                            if p_name:
-                                if fuzzy_score(parsed["name"], p_name) >= 90.0:
-                                    is_only_performer = True
-                                    break
-                    if t_score >= 85.0 and not is_only_performer:
-                        score -= 50  # Minor penalty for date mismatch when title is a strong match
+                    # Large date mismatch — apply tiered penalty based on match strength
+                    if perf_match and site_matched:
+                        if is_only_performer:
+                            # Performer-name-only queries: filename date is often a download/upload
+                            # date, not release date — very lenient penalty
+                            score -= 15
+                        else:
+                            score -= 50
                     else:
-                        score -= 300  # Hard penalty for date mismatch of > 2 days
+                        t_score = fuzzy_score(parsed.get("name"), scene.get("title"))
+                        if t_score >= 85.0 and not is_only_performer:
+                            score -= 50
+                        else:
+                            score -= 100
             except Exception:
                 if parsed["date"] == scene["date"][:10]:
                     score += 100
                 else:
-                    t_score = fuzzy_score(parsed.get("name"), scene.get("title"))
-                    is_only_performer = False
-                    if parsed.get("name"):
-                        for p in scene.get("performers") or []:
-                            p_name = p.get("name") or (p.get("performer") or {}).get("name")
-                            if p_name:
-                                if fuzzy_score(parsed["name"], p_name) >= 90.0:
-                                    is_only_performer = True
-                                    break
-                    if t_score >= 85.0 and not is_only_performer:
-                        score -= 50
+                    if perf_match and site_matched:
+                        score -= 15 if is_only_performer else 50
                     else:
-                        score -= 300
+                        t_score = fuzzy_score(parsed.get("name"), scene.get("title"))
+                        if t_score >= 85.0 and not is_only_performer:
+                            score -= 50
+                        else:
+                            score -= 100
         else:
             # Filename has a date but database scene does not — do not penalise, but no boost
             pass
     else:
         score += 50  # no date info — don't penalise
 
-    # Performer match boost
-    perf_match = False
-    raw_title = parsed.get("raw", "").lower()
-    parsed_site_clean = re.sub(r'[^a-z0-9]', '', unidecode(parsed.get("site") or "").lower()) if parsed.get("site") else ""
-    
-    for p in scene.get("performers") or []:
-        name = p.get("name") or (p.get("performer") or {}).get("name")
-        if name:
-            name_lower = name.lower()
-            # If the performer name is the same as the parsed site (e.g. Jules Jordan), skip it for performer boost
-            perf_clean = re.sub(r'[^a-z0-9]', '', unidecode(name_lower).lower())
-            if parsed_site_clean and (parsed_site_clean == perf_clean or perf_clean in parsed_site_clean or parsed_site_clean in perf_clean):
-                continue
-                
-            if name_lower in raw_title:
-                perf_match = True
-                break
-            cleaned_perf = re.sub(r'[^a-z0-9]', '', name_lower)
-            cleaned_raw = re.sub(r'[^a-z0-9]', '', raw_title)
-            if cleaned_perf in cleaned_raw:
-                perf_match = True
-                break
-
+    # 5. Apply performer match boost
     if perf_match:
         score += 150
 
-    # Name fuzzy match against scene title only
+    # 6. Name fuzzy match against scene title only
     if parsed.get("name") and scene.get("title"):
         title_lower = scene["title"].lower()
         
@@ -645,26 +836,173 @@ def score_result(parsed: dict, scene: dict) -> float:
             if len(extra_words) >= 2:
                 score -= 150.0  # Apply strong penalty since filename has a scene title but candidate is a performer profile
 
-        # Check for unmatched scene title words (extra words in query that are not in candidate title nor performers)
+        # Check for unmatched scene title words (extra words in query that are not in candidate title, performers, nor site/studio/network/parent names)
         if parsed.get("name") and scene.get("title"):
             q_words = set(re.findall(r'[a-z0-9]{3,}', parsed["name"].lower()))
             t_words = set(re.findall(r'[a-z0-9]{3,}', scene["title"].lower()))
+            
             p_words = set()
             for p in scene.get("performers") or []:
                 name = p.get("name") or (p.get("performer") or {}).get("name")
                 if name:
                     p_words.update(re.findall(r'[a-z0-9]{3,}', name.lower()))
             
-            # Common stop words to ignore
-            stop_words = {"the", "and", "for", "with", "you", "your", "that", "this", "from", "her", "him", "she", "his", "out", "our", "all", "its", "under"}
-            extra_words = q_words - t_words - p_words - stop_words
+            # Support matching query words against the candidate's actual site/studio/network/parent names
+            s_words = set()
+            for field in ["site", "parent", "network", "studio", "brand"]:
+                val = scene.get(field)
+                if val:
+                    s_words.update(re.findall(r'[a-z0-9]{3,}', val.lower()))
+            
+            # Common stop words, technical resolution formats, and common release group tags to ignore
+            stop_words = {
+                "the", "and", "for", "with", "you", "your", "that", "this", "from", "her", "him", "she", "his", "out", "our", "all", "its", "under",
+                "1080p", "2160p", "4096p", "4k", "8k", "hd", "fhd", "sd", "mp4", "mkv", "avi", "wmv", "mov", "webm", "ts", "vr180", "xxx", "hevc", "x264", "x265", "h264", "h265",
+                "p2p", "xc", "wrb", "vsex", "rarbg", "yify", "eztv", "fgt", "narcos", "prt", "vol", "ch", "ppv",
+                "had", "has", "have", "was", "were", "are", "is", "get", "gets", "got", "take", "takes", "took", "give", "gives", "gave", "make", "makes", "made", "come", "comes", "came", "go", "goes", "went", "do", "does", "did", "new", "old", "big", "small", "one", "two", "three", "first", "last", "just", "about", "some", "like", "how", "why", "who", "what", "where", "when", "can", "could", "would", "should", "will", "shall", "may", "might", "must", "but", "not", "too", "very", "much", "many", "more", "most", "few", "less", "least", "own", "other", "same", "different", "good", "bad", "hot", "cool", "warm", "cold", "now", "then", "once", "twice", "here", "there", "every", "each", "both", "either", "neither", "any", "some", "none", "only", "well", "done"
+            }
+            
+            # Advanced substring/compound word matching:
+            # For each word in q_words, if it is a substring of (or contains as a substring) any candidate field, ignore it!
+            all_candidate_words = t_words | p_words | s_words | stop_words
+            
+            extra_words = set()
+            for qw in q_words:
+                if qw in stop_words:
+                    continue
+                # Ignore year digits (4-digit numbers starting with 19 or 20)
+                if qw.isdigit() and len(qw) == 4 and (qw.startswith("19") or qw.startswith("20")):
+                    continue
+                matched = False
+                for cw in all_candidate_words:
+                    if qw == cw or qw in cw or cw in qw:
+                        matched = True
+                        break
+                if not matched:
+                    extra_words.add(qw)
+            
+            # Check how many actual non-stop title keywords they share outside performer/site names
+            shared_title_words = (q_words & t_words) - p_words - s_words - stop_words
+            
+            # If they share at least 2 non-stop title words, or if they share at least 1 and have a strong performer/site match,
+            # we skip the severe penalty (reducing it to a minor penalty or completely skipping it).
+            has_shared_title = len(shared_title_words) >= 2 or (len(shared_title_words) >= 1 and (perf_match or site_matched))
+            
             if len(extra_words) >= 2:
-                score -= 350.0  # Apply strong penalty for unmatched scene title words
+                if is_platform:
+                    score -= 10.0  # Very minor penalty for platforms due to descriptive raw filenames
+                elif is_only_performer and perf_match and site_matched:
+                    pass  # Performer-name-only query with confirmed site+perf match: skip word penalty
+                else:
+                    # Dynamic unmatched words penalty scaled by word count:
+                    # -60 per word, capped at -150 max. Halved if they share keywords.
+                    # Also halved when performer match is confirmed (performer name adds context).
+                    base_mult = 30.0 if (has_shared_title or perf_match) else 60.0
+                    base_cap  = 75.0 if (has_shared_title or perf_match) else 150.0
+                    word_penalty = min(base_cap, len(extra_words) * base_mult)
+                    score -= word_penalty
 
-        name_score = fuzzy_score(parsed["name"], scene["title"])
-        score += name_score
+        # Only add unique scene title fuzzy score if the query name is not purely a performer's name
+        if not is_only_performer:
+            name_score = fuzzy_score(parsed["name"], scene["title"])
+            score += name_score
+
+            # Prevent mismatches (false positives) when the scene title is specified in the query
+            # but is completely different from the candidate title.
+            # We require either:
+            # - At least one shared non-generic keyword (allowing compound/substring matches)
+            # - At least 3 shared keywords total (including generic ones)
+            # - At least 60% of the query keywords are shared
+            # - A strong duration match (diff <= 30s) if duration is available
+            q_all = set(re.findall(r'[a-z0-9]+', parsed["name"].lower()))
+            t_all = set(re.findall(r'[a-z0-9]+', scene["title"].lower()))
+
+            allowed_2_letter = {"dp", "bj", "xx", "vr"}
+            q_words = {w for w in q_all if (len(w) >= 3 or w in allowed_2_letter)} - stop_words
+            t_words = {w for w in t_all if (len(w) >= 3 or w in allowed_2_letter)} - stop_words
+
+            # Filter out year digits or pure numbers from keywords to avoid false matches on years/resolutions
+            q_words = {w for w in q_words if not (w.isdigit() and len(w) == 4)}
+            t_words = {w for w in t_words if not (w.isdigit() and len(w) == 4)}
+
+            shared_words = set()
+            for qw in q_words:
+                for cw in t_words:
+                    if qw == cw or qw in cw or cw in qw:
+                        shared_words.add(qw)
+                        break
+
+            generic_keywords = {
+                # Common verbs & action words
+                "fuck", "fucks", "fucked", "fucking", "suck", "sucks", "sucked", "sucking",
+                "blowjob", "bj", "bjs", "bj's", "anal", "creampie", "cum", "cums", "cumming", "swallow",
+                "swallows", "swallowed", "ride", "rides", "riding", "facial", "facials",
+                "fist", "fisting", "peg", "pegging", "strip", "strips", "stripping",
+                "masturbate", "masturbating", "jerk", "jerking", "squirt", "squirting",
+                "lick", "licks", "licking", "fuckboys", "fuckboy", "cuck", "cuckold", "cucks",
+                # Common descriptors and adjectives
+                "cute", "hot", "sexy", "gorgeous", "beautiful", "pretty", "busty", "petite",
+                "blonde", "brunette", "ebony", "asian", "latina", "teen", "milf", "milfs",
+                "new", "old", "first", "last", "good", "bad", "big", "small", "hard", "soft",
+                "raw", "real", "fake", "dirty", "clean", "bored", "lazy", "natural", "wild",
+                # Roles and relations
+                "step", "stepmom", "stepsis", "sister", "brother", "stepbrother", "dad", "mom",
+                "stepdaughter", "stepson", "stepsister", "daddy", "mommy", "wife", "husband",
+                "girlfriend", "boyfriend", "friend", "friends", "roommate", "roommates",
+                "landlord", "boss", "maid", "nurse", "barista", "girl", "girls", "guy", "guys",
+                # Common nouns/formats and time of day
+                "video", "videos", "scene", "scenes", "drop", "drops", "trailer", "trailers",
+                "homemade", "show", "shows", "clip", "clips", "preview", "previews",
+                "teaser", "teasers", "brand", "part", "episode", "vol", "volume", "ch", "chapter",
+                "exclusive", "exclusives", "special", "specials", "anniversary", "update",
+                "orgy", "threesome", "dp", "double", "penetration", "mmf", "ffm",
+                "sextape", "tape", "tapes", "pov", "bts", "behind", "cast", "casting",
+                "couch", "audition", "auditions", "interview", "interviews", "live", "stream",
+                "livestream", "footage", "hauls", "haul",
+                "night", "day", "morning", "afternoon", "evening", "today", "yesterday"
+            }
+
+            shared_non_generic = shared_words - generic_keywords
+
+            has_duration_match = False
+            if target_duration is not None and scene.get("duration"):
+                try:
+                    diff = abs(float(scene["duration"]) - target_duration)
+                    if diff <= 30.0:
+                        has_duration_match = True
+                except (ValueError, TypeError):
+                    pass
+
+            # Check if there is a legitimate match based on word sharing or duration
+            has_legitimate_match = False
+            if len(shared_non_generic) >= 1:
+                has_legitimate_match = True
+            elif len(shared_words) >= 3:
+                has_legitimate_match = True
+            elif len(q_words) > 0 and (len(shared_words) / len(q_words)) >= 0.6:
+                has_legitimate_match = True
+            elif has_duration_match:
+                has_legitimate_match = True
+
+            if not has_legitimate_match:
+                score -= 500.0  # Apply severe penalty to prevent mismatch
+
+    # 7. Duration match scoring (Bonus only)
+    if target_duration is not None and scene.get("duration"):
+        try:
+            scene_dur = float(scene["duration"])
+            diff = abs(scene_dur - target_duration)
+            if diff < 1.0:
+                score += 500.0
+            elif diff <= 3.0:
+                score += 300.0
+            elif diff <= 10.0:
+                score += 50.0
+        except (ValueError, TypeError):
+            pass
 
     return score
+
 
 # ── TPDB REST API ─────────────────────────────────────────────────────────────
 _TPDB_HEADERS = lambda: {
@@ -697,7 +1035,7 @@ def tpdb_search(site: Optional[str], date: Optional[str], name: Optional[str], l
     url = f"{TPDB_BASE}/scenes?parse={quote(parse_str)}&limit={limit}"
     log(f"TPDB search: {url}")
     try:
-        r = requests.get(url, headers=_TPDB_HEADERS(), timeout=5)
+        r = SESSION.get(url, headers=_TPDB_HEADERS(), timeout=5)
         r.raise_for_status()
         data = r.json().get("data") or []
         # Normalise structure
@@ -713,7 +1051,7 @@ def tpdb_search_raw_q(q: str, limit: int = 10) -> List[dict]:
     url = f"{TPDB_BASE}/scenes?q={quote(q)}&per_page={limit}"
     log(f"TPDB raw search: {url}")
     try:
-        r = requests.get(url, headers=_TPDB_HEADERS(), timeout=5)
+        r = SESSION.get(url, headers=_TPDB_HEADERS(), timeout=5)
         r.raise_for_status()
         data = r.json().get("data") or []
         return [_normalise_tpdb(d) for d in data]
@@ -721,15 +1059,38 @@ def tpdb_search_raw_q(q: str, limit: int = 10) -> List[dict]:
         log(f"TPDB raw search failed: {e}")
         return []
 
-def _normalise_tpdb(d: dict) -> dict:
+def _normalise_tpdb(d: dict, source: str = "tpdb") -> dict:
     """Flatten TPDB scene response to a common dict."""
     site_obj = d.get("site") or {}
     
-    # TPDB: Try to prioritize vertical posters if possible
-    # Note: TPDB standard API 'poster' field is usually the vertical one.
-    # 'image' or 'poster_image' might be horizontal backdrops.
-    poster = d.get("poster") or d.get("poster_image") or d.get("image")
-    
+    # Prioritize cached vertical posters over dead publisher CDNs (like digitaloceanspaces)
+    urls = []
+    if d.get("poster"):
+        urls.append(d["poster"])
+    if isinstance(d.get("posters"), dict):
+        posters_dict = d["posters"]
+        for k in ["poster", "full", "large"]:
+            val = posters_dict.get(k)
+            if val and val not in urls:
+                urls.append(val)
+    for f in ["poster_image", "image"]:
+        val = d.get(f)
+        if val and val not in urls:
+            urls.append(val)
+
+    poster = None
+    for u in urls:
+        if "theporndb.net" in u:
+            poster = u
+            break
+    if not poster and urls:
+        for u in urls:
+            if "digitaloceanspaces" not in u:
+                poster = u
+                break
+        if not poster:
+            poster = urls[0]
+            
     site_name = site_obj.get("name") if isinstance(site_obj, dict) else None
     parent_name = None
     network_name = None
@@ -748,14 +1109,14 @@ def _normalise_tpdb(d: dict) -> dict:
         "site": site_name,
         "parent": parent_name,
         "network": network_name,
-        "description": d.get("description") or d.get("details"),
+        "description": d.get("description") or d.get("details") or "",
         "performers": d.get("performers") or [],
         "tags": [t.get("name") for t in d.get("tags") or [] if t.get("name")],
         "poster": poster,
         "duration": d.get("duration"),
         "rating": d.get("rating"),
         "url": d.get("url"),
-        "_source": "tpdb",
+        "_source": source,
     }
 
 # ── StashDB GraphQL ───────────────────────────────────────────────────────────
@@ -778,7 +1139,7 @@ def stashdb_search(term: str) -> List[dict]:
         return []
     headers = {"Content-Type": "application/json", "Apikey": STASHDB_API_KEY}
     try:
-        r = requests.post(
+        r = SESSION.post(
             STASHDB_ENDPOINT,
             headers=headers,
             json={"query": _STASHDB_QUERY, "variables": {"term": term}},
@@ -798,12 +1159,20 @@ def stashdb_search(term: str) -> List[dict]:
 
 def _normalise_stashdb(s: dict) -> dict:
     images = s.get("images") or []
-    # StashDB: try to find a vertical image (height > width)
+    # StashDB: try to find a vertical image (height > width) avoiding dead digitaloceanspaces URLs
     poster = None
     for img in images:
-        if img.get("height", 0) > img.get("width", 0):
-            poster = img.get("url")
-            break
+        u = img.get("url")
+        if u and img.get("height", 0) > img.get("width", 0):
+            if "digitaloceanspaces" not in u:
+                poster = u
+                break
+    if not poster:
+        for img in images:
+            u = img.get("url")
+            if u and "digitaloceanspaces" not in u:
+                poster = u
+                break
     if not poster and images:
         poster = images[0].get("url")
     studio = s.get("studio") or {}
@@ -848,17 +1217,11 @@ def get_search_terms(name: str) -> List[str]:
     return [t for t in terms if len(t) > 2]
 
 # ── Multi-strategy NSFW lookup (namer-style passes) ───────────────────────────
-def adult_enrichment_lookup(title: str) -> Optional[dict]:
+def adult_enrichment_lookup(title: str, duration: Optional[float] = None) -> Optional[dict]:
     """
-    Namer-style multi-pass search:
+    Namer-style multi-pass search parallelized for speed:
       JAV fast-path: if title looks like a JAV code → TPDB /jav endpoint
-      Pass 1: site + date + name
-      Pass 2: site + name (skip date)
-      Pass 3: site + date (skip name)
-      Pass 4: name only
-      Pass 5: raw text search
-      Pass 6: StashDB (parallel source)
-    Each pass collects candidates → score all → pick best above threshold.
+      All other passes (site+date, site-only, fallbacks, StashDB) executed in parallel.
     """
     # ── JAV fast-path ──────────────────────────────────────────────────────────
     jav_code = extract_jav_code(title)
@@ -874,84 +1237,68 @@ def adult_enrichment_lookup(title: str) -> Optional[dict]:
     date  = parsed.get("date")
     name  = parsed.get("name")
 
-    # Build search passes (mirrors namer's __metadata_api_lookup_type)
-    passes: List[Tuple[Optional[str], Optional[str], Optional[str]]] = []
+    search_tasks = []
+
+    # ── Task Set 1: Structural Passes ──────────────────────────────────────────
     if site or date or name:
-        passes.append((site, date, name))           # Pass 1: full
+        search_tasks.append((tpdb_search, (site, date, name)))           # Pass 1: full
     if date:
-        passes.append((site, None, name))           # Pass 2: skip date
+        search_tasks.append((tpdb_search, (site, None, name)))           # Pass 2: skip date
     if name:
-        passes.append((site, date, None))           # Pass 3: skip name
+        search_tasks.append((tpdb_search, (site, date, None)))           # Pass 3: skip name
     if site:
-        passes.append((None, date, name))           # Pass 4: skip site
-    passes.append((None, None, name or title))      # Pass 5: name only
+        search_tasks.append((tpdb_search, (None, date, name)))           # Pass 4: skip site
+    search_tasks.append((tpdb_search, (None, None, name or title)))      # Pass 5: name only
 
-    all_candidates: List[dict] = []
-    seen_ids: set = set()
-
-    for s, d, n in passes:
-        results = tpdb_search(s, d, n)
-        for r in results:
-            rid = r.get("id")
-            if rid and rid not in seen_ids:
-                seen_ids.add(rid)
-                all_candidates.append(r)
-
-    # If we already have a perfect high-confidence match (site + date + performer), we can stop early
-    best = _pick_best(parsed, all_candidates)
-    if best and best[1] >= 280:
-        log(f"Perfect structured match found: '{best[0].get('title')}' score={best[1]:.1f}")
-        return _to_omdb(best[0])
-
-    # Pass 6: Fallback TPDB searches with smart terms (TPDB raw, TPDB structured by site)
+    # ── Task Set 2: Fallbacks & StashDB ────────────────────────────────────────
     clean = name_cleaner(title)
     search_terms = get_search_terms(name or clean)
+    performer = parsed.get("performer")
+    if performer:
+        if performer not in search_terms:
+            search_terms.insert(0, performer)
+        if site:
+            site_perf = f"{site} {performer}"
+            if site_perf not in search_terms:
+                search_terms.insert(0, site_perf)
+
     for term in search_terms:
         # Structured TPDB search if we have a known site
         if site:
-            log(f"TPDB structured fallback for term: '{term}' on site '{site}'")
-            site_results = tpdb_search(site, None, term, limit=25)
-            for r in site_results:
+            search_tasks.append((tpdb_search, (site, None, term, 25)))
+        # Raw TPDB search
+        search_tasks.append((tpdb_search_raw_q, (term, 25)))
+        # StashDB search
+        search_tasks.append((stashdb_search, (term,)))
+
+    log(f"Executing {len(search_tasks)} search tasks in parallel...")
+    all_candidates: List[dict] = []
+    seen_ids: set = set()
+
+    futures = [SEARCH_EXECUTOR.submit(func, *args) for func, args in search_tasks]
+    for future in futures:
+        try:
+            results = future.result()
+            if not results:
+                continue
+            for r in results:
                 rid = r.get("id")
+                if rid and r.get("_source") == "stashdb":
+                    rid = "stashdb:" + str(rid)
                 if rid and rid not in seen_ids:
                     seen_ids.add(rid)
                     all_candidates.append(r)
+        except Exception as e:
+            log(f"Search task failed: {e}")
 
-        # Raw TPDB search fallback
-        log(f"TPDB raw search fallback for term: '{term}'")
-        raw_results = tpdb_search_raw_q(term, limit=25)
-        for r in raw_results:
-            rid = r.get("id")
-            if rid and rid not in seen_ids:
-                seen_ids.add(rid)
-                all_candidates.append(r)
-
-    # Evaluate TPDB candidates first
-    best = _pick_best(parsed, all_candidates)
-    if best and best[1] >= MATCH_THRESHOLD:
-        scene, score = best
-        log(f"Best TPDB match: '{scene.get('title')}' score={score:.1f}")
-        return _to_omdb(scene)
-
-    # Only if TPDB matches are below threshold, try StashDB fallback
-    log("No high-confidence TPDB match found, falling back to StashDB")
-    stash_candidates: List[dict] = []
-    stash_seen_ids: set = set()
-    for term in search_terms:
-        stash_results = stashdb_search(term)
-        for r in stash_results:
-            rid = r.get("id")
-            if rid and rid not in stash_seen_ids:
-                stash_seen_ids.add(rid)
-                stash_candidates.append(r)
-
-    best_stash = _pick_best(parsed, stash_candidates)
-    if not best_stash:
+    # Score and pick the absolute best candidate from the entire unified pool!
+    best = _pick_best(parsed, all_candidates, duration=duration)
+    if not best:
         log(f"No candidates found for '{title}'")
         return None
 
-    scene, score = best_stash
-    log(f"Best StashDB match: '{scene.get('title')}' score={score:.1f}")
+    scene, score = best
+    log(f"Best match overall: '{scene.get('title')}' score={score:.1f} (source: {scene.get('_source')})")
 
     if score < MATCH_THRESHOLD:
         log(f"Score {score:.1f} below threshold {MATCH_THRESHOLD} — rejected")
@@ -959,13 +1306,14 @@ def adult_enrichment_lookup(title: str) -> Optional[dict]:
 
     return _to_omdb(scene)
 
-def _pick_best(parsed: dict, candidates: List[dict]) -> Optional[Tuple[dict, float]]:
+
+def _pick_best(parsed: dict, candidates: List[dict], duration: Optional[float] = None) -> Optional[Tuple[dict, float]]:
     if not candidates:
         return None
     scored = []
     q_name = parsed.get("name") or ""
     for c in candidates:
-        score = score_result(parsed, c)
+        score = score_result(parsed, c, target_duration=duration)
         
         # Calculate a tie-breaker score based on overall string similarity of the title
         c_title = c.get("title") or ""
@@ -982,7 +1330,7 @@ def _pick_best(parsed: dict, candidates: List[dict]) -> Optional[Tuple[dict, flo
             name = p.get("name") or (p.get("performer") or {}).get("name")
             if name:
                 perf_names.append(name)
-        log(f"Candidate: '{c.get('title')}' site='{c.get('site')}' date='{c.get('date')}' score={score:.1f} tie_breaker={tie_breaker:.1f} performers={perf_names}")
+        log(f"Candidate: '{c.get('title')}' site='{c.get('site')}' date='{c.get('date')}' duration={c.get('duration')} score={score:.1f} tie_breaker={tie_breaker:.1f} performers={perf_names}")
     scored.sort(key=lambda x: (x[1], x[2]), reverse=True)
     return scored[0][0], scored[0][1]
 
@@ -1064,7 +1412,7 @@ def stashdb_lookup_by_id(scene_id: str) -> Optional[dict]:
         return None
     headers = {"Content-Type": "application/json", "Apikey": STASHDB_API_KEY}
     try:
-        r = requests.post(
+        r = SESSION.post(
             STASHDB_ENDPOINT,
             headers=headers,
             json={"query": _STASHDB_FIND_SCENE_QUERY, "variables": {"id": scene_id}},
@@ -1086,7 +1434,7 @@ def tpdb_lookup_by_id(scene_id: str) -> Optional[dict]:
     url = f"{TPDB_BASE}/scenes/{scene_id}"
     log(f"TPDB ID lookup: {url}")
     try:
-        r = requests.get(url, headers=_TPDB_HEADERS(), timeout=5)
+        r = SESSION.get(url, headers=_TPDB_HEADERS(), timeout=5)
         if r.status_code == 200:
             data = r.json()
             item = data.get("data") if isinstance(data, dict) else None
@@ -1102,7 +1450,7 @@ def tpdb_jav_lookup_by_id(scene_id: str) -> Optional[dict]:
     url = f"{TPDB_BASE}/scenes/{scene_id}"
     log(f"TPDB JAV ID lookup: {url}")
     try:
-        r = requests.get(url, headers=_TPDB_HEADERS(), timeout=5)
+        r = SESSION.get(url, headers=_TPDB_HEADERS(), timeout=5)
         if r.status_code == 200:
             data = r.json()
             item = data.get("data") if isinstance(data, dict) else None
@@ -1135,6 +1483,7 @@ def metadata_proxy(
     plot: Optional[str] = Query("short"),
     sidecar_enrichment_enabled: Optional[str] = Query(None),
     porn: Optional[str] = Query(None),
+    duration: Optional[float] = Query(None),
 ):
     if not t and not i:
         return JSONResponse({"Response": "False", "Error": "No title or ID"}, status_code=400)
@@ -1145,7 +1494,7 @@ def metadata_proxy(
         sidecar_enabled = sidecar_enrichment_enabled.lower() == "true"
 
     # ── Cache check ─────────────────────────────────────────────────────────────
-    cache_key = f"{t}|{i}"
+    cache_key = f"{t}|{i}|{duration}"
     cached = _cache_get(cache_key)
     if cached is not None:
         log(f"Cache hit for {cache_key!r}")
@@ -1202,7 +1551,7 @@ def metadata_proxy(
     is_adult = (porn and porn.lower() == "true") or (t and is_adult_content(t))
     if t and sidecar_enabled and is_adult:
         log(f"Adult content detected, attempting enrichment for: {t}")
-        data = adult_enrichment_lookup(t)
+        data = adult_enrichment_lookup(t, duration=duration)
         if data:
             _cache_set(cache_key, data)
             return data

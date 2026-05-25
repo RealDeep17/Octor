@@ -208,6 +208,7 @@ func (m *Format) GetTags() map[string]string {
 // The probe request message
 type ProbeRequest struct {
 	Url                  string   `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Fast                 bool     `protobuf:"varint,2,opt,name=fast,proto3" json:"fast,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -242,6 +243,13 @@ func (m *ProbeRequest) GetUrl() string {
 		return m.Url
 	}
 	return ""
+}
+
+func (m *ProbeRequest) GetFast() bool {
+	if m != nil {
+		return m.Fast
+	}
+	return false
 }
 
 // The probe response message

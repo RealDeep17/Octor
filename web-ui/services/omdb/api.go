@@ -99,7 +99,7 @@ func New(c *cli.Context, cl *http.Client) *Api {
 	}
 }
 
-func (api *Api) SearchByTitleAndYear(ctx context.Context, title string, year *int16, omdbType OmdbType) (*OmdbResponse, error) {
+func (api *Api) SearchByTitleAndYear(ctx context.Context, title string, year *int16, omdbType OmdbType, duration *float64) (*OmdbResponse, error) {
 	isAdult, _ := ctx.Value("is_adult").(bool)
 	if isAdult {
 		if pathHint, ok := ctx.Value("path_hint").(string); ok && pathHint != "" {
@@ -126,6 +126,9 @@ func (api *Api) SearchByTitleAndYear(ctx context.Context, title string, year *in
 	if year != nil {
 		y := *year
 		q.Set("y", strconv.Itoa(int(y)))
+	}
+	if duration != nil {
+		q.Set("duration", fmt.Sprintf("%.2f", *duration))
 	}
 	if sidecar, ok := ctx.Value("sidecar_enrichment").(bool); ok {
 		q.Set("sidecar_enrichment_enabled", strconv.FormatBool(sidecar))

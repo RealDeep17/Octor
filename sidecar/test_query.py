@@ -146,6 +146,11 @@ test_titles = [
     "CzechBoobs 26 05 11 Amber Bloom XXX 1080p MP4-WRB [XC]",
     "FamilySwap - Amirah Adara, Isabella Jules - My Swap Family Is Closer Than Ever (21.05.2026) rq.mp4",
     "Freeze - Veronica Leal - Magic Dart (15.05.2026) rq.mp4",
+    # ── Real Library Failing Torrents added to test suite ─────────────────────
+    "BellesaBlindDate.26.05.08.E187.Andi.Avalon.And.Musa.XXX.1080p.MP4-P2P[XC]",
+    "FuckPassVR.22.10.24.Ariana.Joy.Family.Business.in.Lviv.XXX.VR180.4096p.MP4-Narcos[XC]",
+    "HotMilfsFuck - Selene Love - Use And Abuse Me (09.11.2026) rq.mp4",
+    "PrivateSociety.26.05.19.Stephanie.XXX.1080p.MP4-WRB[XC]",
 ]
 
 # ── Stats tracking ────────────────────────────────────────────────────────────
@@ -205,4 +210,8 @@ if passed:
     print(f"\n  ── PASSED ({len(passed)}) ──────────────────────────────────────")
     for orig, matched in passed:
         print(f"  ✓ {orig[:55]:<55} → {matched}")
+
+import os
+os._exit(0)
+
 

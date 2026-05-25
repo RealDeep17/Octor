@@ -671,10 +671,13 @@ func (s *Api) GetOpenSubtitles(ctx context.Context, u string) ([]OpenSubtitleTra
 	return subs, nil
 }
 
-func (s *Api) GetMediaProbe(ctx context.Context, u string) (*MediaProbe, error) {
+func (s *Api) GetMediaProbe(ctx context.Context, u string, fast bool) (*MediaProbe, error) {
 	req, err := s.makeTorrentHTTPProxyRequest(ctx, u)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to make new request")
+	}
+	if fast {
+		req.Header.Set("X-Probe-Fast", "true")
 	}
 	res, err := s.cl.Do(req)
 	if err != nil {

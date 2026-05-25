@@ -3,6 +3,7 @@ package enrich
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -391,6 +392,10 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 			if m.Path != nil {
 				moviePath = *m.Path
 			}
+			if m.VideoContent.ItemID != "" {
+				dur, _ := s.getDuration(ctx, hash, claims, m.VideoContent.ItemID)
+				m.VideoContent.Duration = dur
+			}
 			md, err := s.mapMetadata(ctx, m.VideoContent, m.GetContentType(), force, hintVideoID, moviePath, budget)
 			if err != nil {
 				movieResCh <- movieResult{err: errors.Wrapf(err, "failed to map metadata for movie %+v", m)}
@@ -437,6 +442,10 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 
 	for _, ser := range seriesSlice {
 		go func(ser *models.Series) {
+			if ser.VideoContent.ItemID != "" {
+				dur, _ := s.getDuration(ctx, hash, claims, ser.VideoContent.ItemID)
+				ser.VideoContent.Duration = dur
+			}
 			var md *models.VideoMetadata
 			if mt != models.MediaInfoMediaTypeSeriesCompilation && mt != models.MediaInfoMediaTypeSeriesSplitScenes {
 				seriesPath, perr := models.GetFirstEpisodePathForSeries(ctx, db, ser.SeriesID)
@@ -783,11 +792,21 @@ func (s *Enricher) lookupByHint(ctx context.Context, hintVideoID string, t model
 // only when every path ultimately fails so retry semantics
 // (`enrich --force-error`) stay intact.
 func isAdultContent(vc *models.VideoContent) bool {
-	if vc == nil || vc.Metadata == nil {
+	if vc == nil {
 		return false
 	}
-	if p, ok := vc.Metadata["porn"].(bool); ok && p {
-		return true
+	if vc.Metadata != nil {
+		if p, ok := vc.Metadata["porn"].(bool); ok && p {
+			return true
+		}
+	}
+	// Fallback to title keywords for robust NSFW detection
+	title := strings.ToLower(vc.Title)
+	keywords := []string{"fuck", "milf", "xxx", "porn", "anal", "tushy", "brazzers", "vixen", "bellesa", "fuckpass", "privatesociety", "porno"}
+	for _, kw := range keywords {
+		if strings.Contains(title, kw) {
+			return true
+		}
 	}
 	return false
 }
@@ -811,6 +830,10 @@ func (s *Enricher) searchAllMappers(ctx context.Context, vc *models.VideoContent
 		ctx = context.WithValue(ctx, "is_adult", true)
 	}
 	for i, m := range s.mappers {
+		if isAdult && m.GetName() == "TMDB" {
+			log.Debug("skipping TMDB mapper for adult content")
+			continue
+		}
 		md, err := m.Map(ctx, vc, t, f)
 		if err != nil {
 			log.WithError(err).WithField("mapper", m.GetName()).Warn("mapper failed, continuing to next")
@@ -1008,6 +1031,7 @@ func (s *Enricher) makeMovie(infos []*TorrentInfo, hash string) (*models.Movie, 
 	movie := &models.Movie{
 		VideoContent: &models.VideoContent{
 			ResourceID: hash,
+			ItemID:     ti.ListItem.ID,
 		},
 	}
 	movie.Title = ti.Title
@@ -1061,6 +1085,7 @@ func (s *Enricher) makeSeriesWithEpisodes(infos []*TorrentInfo, hash string, mt 
 	ser := &models.Series{
 		VideoContent: &models.VideoContent{
 			ResourceID: hash,
+			ItemID:     infos[0].ListItem.ID,
 		},
 		SeriesID: uuid.NewV4(),
 	}
@@ -1125,4 +1150,30 @@ func (s *Enricher) makeStandardSeriesTorrentInfo(infos []*TorrentInfo) (*Torrent
 		}
 	}
 	return nil, errors.New("no episode info in torrent list")
+}
+
+func (s *Enricher) getDuration(ctx context.Context, hash string, claims *api.Claims, itemID string) (*float64, error) {
+	exportResponse, err := s.api.ExportResourceContent(ctx, claims, hash, itemID, "")
+	if err != nil {
+		return nil, err
+	}
+	if mpItem, ok := exportResponse.ExportItems["media_probe"]; ok {
+		// Fast check for cache hit (using fast-path for duration only)
+		fastCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+		mp, err := s.api.GetMediaProbe(fastCtx, mpItem.URL, true)
+		if err == nil && mp != nil && mp.Format.Duration != "" {
+			if duration, err := strconv.ParseFloat(mp.Format.Duration, 64); err == nil {
+				return &duration, nil
+			}
+		}
+
+		// If cache miss or slow, trigger background probe to populate cache for future use
+		go func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			_, _ = s.api.GetMediaProbe(bgCtx, mpItem.URL, true)
+		}()
+	}
+	return nil, nil
 }
