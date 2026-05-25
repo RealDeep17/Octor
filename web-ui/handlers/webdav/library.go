@@ -35,3 +35,11 @@ func (s *SeriesLibrary) GetContent(ctx context.Context, db *pg.DB, uID uuid.UUID
 }
 
 var _ Library = (*SeriesLibrary)(nil)
+
+type AdultLibrary struct{}
+
+func (s *AdultLibrary) GetContent(ctx context.Context, db *pg.DB, uID uuid.UUID) ([]*models.Library, error) {
+	return models.GetLibraryAdultTorrentList(ctx, db, uID, models.SortTypeName, "")
+}
+
+var _ Library = (*AdultLibrary)(nil)

@@ -162,23 +162,26 @@ func UpdateLibraryName(ctx context.Context, db *pg.DB, l *Library) error {
 	return err
 }
 
-func GetLibraryCounts(ctx context.Context, db *pg.DB, uID uuid.UUID) (torrents, movies, series int, err error) {
+func GetLibraryCounts(ctx context.Context, db *pg.DB, uID uuid.UUID) (torrents, movies, series, adult int, err error) {
 	torrents, err = db.Model((*Library)(nil)).
 		Context(ctx).
 		Where("user_id = ?", uID).
 		Count()
 	if err != nil {
-		return 0, 0, 0, errors.Wrap(err, "failed to count torrents")
+		return 0, 0, 0, 0, errors.Wrap(err, "failed to count torrents")
 	}
 
 	movies, err = db.Model((*Movie)(nil)).
 		Context(ctx).
 		Join("join library as l").
 		JoinOn("movie.resource_id = l.resource_id").
+		Join("left join movie_metadata as mmd").
+		JoinOn("movie.movie_metadata_id = mmd.movie_metadata_id").
 		Where("l.user_id = ?", uID).
+		Where("(mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
 		Count()
 	if err != nil {
-		return 0, 0, 0, errors.Wrap(err, "failed to count movies")
+		return 0, 0, 0, 0, errors.Wrap(err, "failed to count movies")
 	}
 
 	series, err = db.Model((*Series)(nil)).
@@ -188,7 +191,20 @@ func GetLibraryCounts(ctx context.Context, db *pg.DB, uID uuid.UUID) (torrents, 
 		Where("l.user_id = ?", uID).
 		Count()
 	if err != nil {
-		return 0, 0, 0, errors.Wrap(err, "failed to count series")
+		return 0, 0, 0, 0, errors.Wrap(err, "failed to count series")
+	}
+
+	adult, err = db.Model((*Movie)(nil)).
+		Context(ctx).
+		Join("join library as l").
+		JoinOn("movie.resource_id = l.resource_id").
+		Join("left join movie_metadata as mmd").
+		JoinOn("movie.movie_metadata_id = mmd.movie_metadata_id").
+		Where("l.user_id = ?", uID).
+		Where("(mmd.video_id LIKE 'tpdb:%' OR mmd.video_id LIKE 'tpdb_jav:%' OR mmd.video_id LIKE 'stash:%') OR movie.path ~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
+		Count()
+	if err != nil {
+		return 0, 0, 0, 0, errors.Wrap(err, "failed to count adult")
 	}
 
 	return
@@ -271,7 +287,10 @@ func GetLibraryMovieTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, s
 		Context(ctx).
 		Join("join movie as m").
 		JoinOn("m.resource_id = library.resource_id").
+		Join("left join movie_metadata as mmd").
+		JoinOn("m.movie_metadata_id = mmd.movie_metadata_id").
 		Where("library.user_id = ?", uID).
+		Where("(mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
 		Relation("Torrent")
 
 	if q != "" {
@@ -343,6 +362,7 @@ func GetLibraryMovieList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort Sor
 		Join("left join movie_status as ums").
 		JoinOn("ums.user_id = l.user_id AND ums.video_id = mmd.video_id AND ums.watched = true").
 		Where("l.user_id = ?", uID).
+		Where("(mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
 		Relation("MovieMetadata")
 
 	if q != "" {
@@ -360,9 +380,9 @@ func GetLibraryMovieList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort Sor
 	case SortTypeRecentlyAdded:
 		query.OrderExpr("l.created_at DESC")
 	case SortTypeName:
-		query.OrderExpr("mmd.title ASC")
+		query.OrderExpr("COALESCE(mmd.title, movie.title) ASC")
 	case SortTypeYear:
-		query.OrderExpr("mmd.year DESC NULLS LAST")
+		query.OrderExpr("COALESCE(mmd.year, movie.year) DESC NULLS LAST")
 	case SortTypeRating:
 		query.OrderExpr("mmd.rating DESC NULLS LAST")
 	}
@@ -529,6 +549,9 @@ func GetLibraryMovieTorrentListAll(ctx context.Context, db *pg.DB, sort SortType
 		ColumnExpr("DISTINCT ON (library.resource_id) library.*").
 		Join("join movie as m").
 		JoinOn("m.resource_id = library.resource_id").
+		Join("left join movie_metadata as mmd").
+		JoinOn("m.movie_metadata_id = mmd.movie_metadata_id").
+		Where("(mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
 		Relation("Torrent")
 
 	if q != "" {
@@ -573,4 +596,131 @@ func applyAllUsersLibrarySort(query *pg.Query, sort SortType) {
 	default:
 		query.OrderExpr("library.resource_id, library.created_at DESC")
 	}
+}
+
+func GetLibraryAdultTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType, q string) ([]*Library, error) {
+	var list []*Library
+
+	query := db.Model(&list).
+		Context(ctx).
+		Join("join movie as m").
+		JoinOn("m.resource_id = library.resource_id").
+		Join("left join movie_metadata as mmd").
+		JoinOn("m.movie_metadata_id = mmd.movie_metadata_id").
+		Where("library.user_id = ?", uID).
+		Where("(mmd.video_id LIKE 'tpdb:%' OR mmd.video_id LIKE 'tpdb_jav:%' OR mmd.video_id LIKE 'stash:%') OR m.path ~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
+		Relation("Torrent")
+
+	if q != "" {
+		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
+			Where("t.name ILIKE ?", "%"+q+"%")
+	}
+
+	switch sort {
+	case SortTypeName:
+		query.OrderExpr("torrent.name ASC")
+	case SortTypeRecentlyAdded:
+		fallthrough
+	default:
+		query.OrderExpr("library.created_at DESC")
+	}
+
+	err := query.Select()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch adult torrent list")
+	}
+
+	return list, nil
+}
+
+func GetLibraryAdultList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort SortType, watchedFilter string, q string) ([]*Movie, error) {
+	var list []*Movie
+
+	query := db.Model(&list).
+		Context(ctx).
+		Join("join library as l").
+		JoinOn("movie.resource_id = l.resource_id").
+		Join("left join movie_metadata as mmd").
+		JoinOn("movie.movie_metadata_id = mmd.movie_metadata_id").
+		Join("left join movie_status as ums").
+		JoinOn("ums.user_id = l.user_id AND ums.video_id = mmd.video_id AND ums.watched = true").
+		Where("l.user_id = ?", uID).
+		Where("(mmd.video_id LIKE 'tpdb:%' OR mmd.video_id LIKE 'tpdb_jav:%' OR mmd.video_id LIKE 'stash:%') OR movie.path ~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
+		Relation("MovieMetadata")
+
+	if q != "" {
+		query.Where("mmd.title ILIKE ? OR movie.title ILIKE ?", "%"+q+"%", "%"+q+"%")
+	}
+
+	switch watchedFilter {
+	case "unwatched":
+		query.Where("ums.video_id IS NULL")
+	case "watched":
+		query.Where("ums.video_id IS NOT NULL")
+	}
+
+	switch sort {
+	case SortTypeRecentlyAdded:
+		query.OrderExpr("l.created_at DESC")
+	case SortTypeName:
+		query.OrderExpr("COALESCE(mmd.title, movie.title) ASC")
+	case SortTypeYear:
+		query.OrderExpr("COALESCE(mmd.year, movie.year) DESC NULLS LAST")
+	case SortTypeRating:
+		query.OrderExpr("mmd.rating DESC NULLS LAST")
+	}
+
+	err := query.Select()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch adult list")
+	}
+
+	if len(list) > 0 {
+		var videoIDs []string
+		for _, m := range list {
+			if m.MovieMetadata != nil && m.MovieMetadata.VideoID != "" {
+				videoIDs = append(videoIDs, m.MovieMetadata.VideoID)
+			}
+		}
+		if len(videoIDs) > 0 {
+			statusMap, err := GetMovieStatusMap(ctx, db, uID, videoIDs)
+			if err == nil {
+				for _, m := range list {
+					if m.MovieMetadata != nil {
+						if st, ok := statusMap[m.MovieMetadata.VideoID]; ok {
+							m.UserWatched = st.Watched
+							m.UserRating = st.Rating
+							m.UserPosterLayout = st.PosterLayout
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return list, nil
+}
+
+func GetLibraryAdultTorrentListAll(ctx context.Context, db *pg.DB, sort SortType, q string) ([]*Library, error) {
+	var list []*Library
+	query := db.Model(&list).
+		Context(ctx).
+		ColumnExpr("DISTINCT ON (library.resource_id) library.*").
+		Join("join movie as m").
+		JoinOn("m.resource_id = library.resource_id").
+		Join("left join movie_metadata as mmd").
+		JoinOn("m.movie_metadata_id = mmd.movie_metadata_id").
+		Where("(mmd.video_id LIKE 'tpdb:%' OR mmd.video_id LIKE 'tpdb_jav:%' OR mmd.video_id LIKE 'stash:%') OR m.path ~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
+		Relation("Torrent")
+
+	if q != "" {
+		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
+			Where("t.name ILIKE ?", "%"+q+"%")
+	}
+
+	applyAllUsersLibrarySort(query, sort)
+	if err := query.Select(); err != nil {
+		return nil, errors.Wrap(err, "failed to fetch all-user adult torrent list")
+	}
+	return list, nil
 }

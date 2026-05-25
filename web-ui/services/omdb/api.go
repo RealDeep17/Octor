@@ -185,10 +185,11 @@ func (api *Api) GetByIMDBID(ctx context.Context, imdbID string) (*OmdbResponse, 
 	q := req.URL.Query()
 	q.Set("i", imdbID)
 	q.Set("plot", "full")
+	isAdult, _ := ctx.Value("is_adult").(bool)
 	if sidecar, ok := ctx.Value("sidecar_enrichment").(bool); ok {
 		q.Set("sidecar_enrichment_enabled", strconv.FormatBool(sidecar))
 	}
-	if isAdult, ok := ctx.Value("is_adult").(bool); ok && isAdult {
+	if isAdult {
 		q.Set("porn", "true")
 	}
 	req.URL.RawQuery = q.Encode()

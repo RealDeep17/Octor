@@ -34,20 +34,26 @@ func NewSort(sortTypes ...models.SortType) Sort {
 }
 
 var videoSort = NewSort(
-	models.SortTypeRecentlyAdded, models.SortTypeYear,
-	models.SortTypeRating, models.SortTypeName,
+	models.SortTypeRecentlyAdded,
+	models.SortTypeName,
+	models.SortTypeYear,
+	models.SortTypeRating,
 )
 
 var sorts = map[shared.SectionType]Sort{
 	shared.SectionTypeTorrents: NewSort(models.SortTypeRecentlyAdded, models.SortTypeName),
 	shared.SectionTypeMovies:   videoSort,
 	shared.SectionTypeSeries:   videoSort,
+	shared.SectionTypeAdult:    videoSort,
 }
 
 func (s *SortHelper) MakeSort(args *shared.IndexArgs) *Sort {
-	sort := sorts[args.Section]
-	for k, opt := range sort {
-		sort[k].Selected = opt.SortType == args.Sort
+	options := sorts[args.Section]
+	res := make(Sort, len(options))
+	for k, opt := range options {
+		nm := opt
+		nm.Selected = opt.SortType == args.Sort
+		res[k] = nm
 	}
-	return &sort
+	return &res
 }

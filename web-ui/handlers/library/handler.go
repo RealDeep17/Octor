@@ -8,10 +8,12 @@ import (
 	"github.com/urfave/cli"
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/handlers/library/helpers"
-	"github.com/webtor-io/web-ui/jobs"
+	j "github.com/webtor-io/web-ui/jobs"
+	"github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/enrich"
 	"github.com/webtor-io/web-ui/services/template"
+	"github.com/webtor-io/web-ui/services/tpdb"
 	"github.com/webtor-io/web-ui/services/web"
 )
 
@@ -37,10 +39,12 @@ type Handler struct {
 	cl                  *http.Client
 	s3Cl                *cs.S3Client
 	enricher            *enrich.Enricher
+	admin               *admin.Admin
+	tpdb                *tpdb.Service
 	posterCacheS3Bucket string
 }
 
-func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs, cl *http.Client, s3Cl *cs.S3Client, en *enrich.Enricher) {
+func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs, cl *http.Client, s3Cl *cs.S3Client, en *enrich.Enricher, admin *admin.Admin, tpdb *tpdb.Service) {
 	h := &Handler{
 		tb: tm.MustRegisterViews("library/*").
 			WithHelper(helpers.NewStarsHelper()).
@@ -54,6 +58,8 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 		cl:                  cl,
 		s3Cl:                s3Cl,
 		enricher:            en,
+		admin:               admin,
+		tpdb:                tpdb,
 		posterCacheS3Bucket: c.String(awsPosterCacheBucket),
 	}
 	lg := r.Group("/lib")

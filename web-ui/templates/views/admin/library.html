@@ -23,6 +23,9 @@
             <a class="btn btn-sm {{ if eq .Data.Args.Section "series" }}bg-o-purple/15 border-o-purple/30 text-o-purpleL{{ else }}btn-ghost border border-o-line text-o-sub hover:border-o-purple/30 hover:text-o-purpleL{{ end }}" href="{{ langPath $.Lang "/admin/library/series" }}{{ if .Data.SelectedUser }}?user={{ .Data.SelectedUser }}{{ end }}" data-async-target="main">
               TV Series <span class="ml-0.5 text-[10px] opacity-70">{{ .Data.SeriesCount }}</span>
             </a>
+            <a class="btn btn-sm {{ if eq .Data.Args.Section "adult" }}bg-o-purple/15 border-o-purple/30 text-o-purpleL{{ else }}btn-ghost border border-o-line text-o-sub hover:border-o-purple/30 hover:text-o-purpleL{{ end }}" href="{{ langPath $.Lang "/admin/library/adult" }}{{ if .Data.SelectedUser }}?user={{ .Data.SelectedUser }}{{ end }}" data-async-target="main">
+              Adult <span class="ml-0.5 text-[10px] opacity-70">{{ .Data.AdultCount }}</span>
+            </a>
           </div>
           <div class="flex gap-1.5 sm:gap-2 sm:ml-auto">
             <a class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple/30 hover:text-o-purpleL" href="{{ langPath $.Lang "/admin/library" }}" data-async-target="main">Library</a>

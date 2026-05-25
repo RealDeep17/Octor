@@ -4,8 +4,16 @@
         {{ template "library/torrent_list" (withContext $ .Data.Items) }}
     </div>
     {{ else }}
-        <div id="list" data-async-layout="{{`{{ template "library/video_list" (withContext $ .Data.Items) }}`}}">
-            {{ template "library/video_list" (withContext $ .Data.Items) }}
+        {{ $layout := "library/video_list" }}
+        {{ if .Data.Args.GroupBy }}
+            {{ $layout = "library/grouped_video_list" }}
+        {{ end }}
+        <div id="list" data-async-layout="{{`{{ template "`}}{{ $layout }}{{`" (withContext $ .Data.Items) }}`}}">
+            {{ if .Data.Args.GroupBy }}
+                {{ template "library/grouped_video_list" (withContext $ .Data.Items) }}
+            {{ else }}
+                {{ template "library/video_list" (withContext $ .Data.Items) }}
+            {{ end }}
         </div>
         {{ if .Data.RateForm }}{{ template "library/rate_modal" (withContext $ .Data.RateForm) }}{{ end }}
     {{ end }}

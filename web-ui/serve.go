@@ -75,6 +75,7 @@ import (
 	"github.com/webtor-io/web-ui/services/claims"
 	"github.com/webtor-io/web-ui/services/job"
 	"github.com/webtor-io/web-ui/services/template"
+	"github.com/webtor-io/web-ui/services/tpdb"
 	w "github.com/webtor-io/web-ui/services/web"
 
 	stremios "github.com/webtor-io/web-ui/services/stremio"
@@ -123,6 +124,7 @@ func configureServe(c *cli.Command) {
 	c.Flags = vault.RegisterApiFlags(c.Flags)
 	c.Flags = vault.RegisterFlags(c.Flags)
 	c.Flags = usv.RegisterFlags(c.Flags)
+	c.Flags = tpdb.RegisterFlags(c.Flags)
 }
 
 func serve(c *cli.Context) error {
@@ -393,7 +395,7 @@ func serve(c *cli.Context) error {
 	donate.RegisterHandler(r)
 
 	// Setting Discover
-	discover.RegisterHandler(r, tm, pg)
+	discover.RegisterHandler(r, tm, pg, sapi)
 
 	// Setting AI Recommendations (Discover)
 	//
@@ -410,8 +412,11 @@ func serve(c *cli.Context) error {
 	// Setting Discover Watchlist
 	discover_watchlist.RegisterHandler(r, pg, en)
 
+	// Setting TPDB service
+	tpdbSvc := tpdb.New(c, cl, pg)
+
 	// Setting Library
-	library.RegisterHandler(c, r, tm, sapi, pg, jobs, cl, s3Cl, en)
+	library.RegisterHandler(c, r, tm, sapi, pg, jobs, cl, s3Cl, en, adminSvc, tpdbSvc)
 
 	// Setting UserSubtitle handler. When AWS_USER_SUBTITLE_BUCKET is not
 	// set the service is nil; RegisterHandler skips its routes and the UI

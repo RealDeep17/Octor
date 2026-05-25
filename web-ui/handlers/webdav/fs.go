@@ -34,6 +34,11 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 			TorrentDirectory: td,
 			pg:               pg,
 		},
+		"adult": &ContentDirectory{
+			Library:          &AdultLibrary{},
+			TorrentDirectory: td,
+			pg:               pg,
+		},
 	}
 
 	var root webdav.FileSystem
@@ -59,6 +64,12 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 					},
 					"tvseries": &ContentDirectory{
 						Library:          &AllUsersSeriesLibrary{},
+						TorrentDirectory: td,
+						pg:               pg,
+						AllUsers:         true,
+					},
+					"adult": &ContentDirectory{
+						Library:          &AllUsersAdultLibrary{},
 						TorrentDirectory: td,
 						pg:               pg,
 						AllUsers:         true,

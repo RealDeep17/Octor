@@ -224,15 +224,16 @@ func (b *resourceAIBudget) markExhausted() {
 	b.exhausted = true
 }
 
-// isAdultPath runs the torrent-name parser over each path segment and
+// IsAdultPath runs the torrent-name parser over each path segment and
 // returns true as soon as any segment flags adult content. Each level
 // is parsed independently so a clean episode filename under a studio
 // folder (e.g. "Blacked/lana.mp4" or "JAV_uncensored/abp-123.mp4")
 // still trips on the folder. Returns false on an empty path.
-func isAdultPath(pathStr string) bool {
+func IsAdultPath(pathStr string) (bool, string) {
 	if pathStr == "" {
-		return false
+		return false, ""
 	}
+	studio := ""
 	for _, part := range strings.Split(pathStr, "/") {
 		if part == "" {
 			continue
@@ -242,10 +243,21 @@ func isAdultPath(pathStr string) bool {
 			continue
 		}
 		if ti.Porn {
-			return true
+			if ti.Website != "" {
+				studio = ti.Website
+			}
+			return true, studio
 		}
 	}
-	return false
+	// Fallback regex for common adult studios if parser misses
+	pathLower := strings.ToLower(pathStr)
+	studios := []string{"blacked", "vixen", "tushy", "brazzers", "bangbros", "naughtyamerica", "realitykings", "babes", "digitalplayground", "mofos", "fakeagent", "joyii", "private", "publicagent", "milfed", "stushy", "passionhd", "spyfam"}
+	for _, s := range studios {
+		if strings.Contains(pathLower, s) {
+			return true, strings.Title(s)
+		}
+	}
+	return false, ""
 }
 
 func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, claims *api.Claims, force bool, hintVideoID string) (*models.MediaInfoMediaType, error) {
@@ -354,6 +366,20 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 		}
 	}
 
+	// Save ItemIDs from original movies
+	movieItemIDs := make(map[string]string)
+	for _, m := range movies {
+		if m.Path != nil && m.VideoContent != nil {
+			movieItemIDs[*m.Path] = m.VideoContent.ItemID
+		}
+	}
+
+	// Save ItemID from original series
+	var seriesItemID string
+	if series != nil && series.VideoContent != nil {
+		seriesItemID = series.VideoContent.ItemID
+	}
+
 	err = models.ReplaceMoviesForResource(ctx, db, hash, movies)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to replace movie for hash %s", hash)
@@ -369,9 +395,15 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 	}
 
 	movies, err = models.GetMoviesByResourceID(ctx, db, hash)
-
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get movies for hash %s", hash)
+	}
+	for _, m := range movies {
+		if m.Path != nil && m.VideoContent != nil {
+			if id, ok := movieItemIDs[*m.Path]; ok {
+				m.VideoContent.ItemID = id
+			}
+		}
 	}
 
 	// One AI-fallback budget shared by every movie + the series block
@@ -393,7 +425,10 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 				moviePath = *m.Path
 			}
 			if m.VideoContent.ItemID != "" {
-				dur, _ := s.getDuration(ctx, hash, claims, m.VideoContent.ItemID)
+				dur, err := s.getDuration(ctx, hash, claims, m.VideoContent.ItemID)
+				if err != nil {
+					log.WithError(err).Warn("failed to get movie duration")
+				}
 				m.VideoContent.Duration = dur
 			}
 			md, err := s.mapMetadata(ctx, m.VideoContent, m.GetContentType(), force, hintVideoID, moviePath, budget)
@@ -431,6 +466,11 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get series for hash %s", hash)
 	}
+	for _, ser := range seriesSlice {
+		if ser.VideoContent != nil && seriesItemID != "" {
+			ser.VideoContent.ItemID = seriesItemID
+		}
+	}
 
 	type seriesResult struct {
 		series     *models.Series
@@ -443,7 +483,10 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 	for _, ser := range seriesSlice {
 		go func(ser *models.Series) {
 			if ser.VideoContent.ItemID != "" {
-				dur, _ := s.getDuration(ctx, hash, claims, ser.VideoContent.ItemID)
+				dur, err := s.getDuration(ctx, hash, claims, ser.VideoContent.ItemID)
+				if err != nil {
+					log.WithError(err).Warn("failed to get series duration")
+				}
 				ser.VideoContent.Duration = dur
 			}
 			var md *models.VideoMetadata
@@ -830,10 +873,6 @@ func (s *Enricher) searchAllMappers(ctx context.Context, vc *models.VideoContent
 		ctx = context.WithValue(ctx, "is_adult", true)
 	}
 	for i, m := range s.mappers {
-		if isAdult && m.GetName() == "TMDB" {
-			log.Debug("skipping TMDB mapper for adult content")
-			continue
-		}
 		md, err := m.Map(ctx, vc, t, f)
 		if err != nil {
 			log.WithError(err).WithField("mapper", m.GetName()).Warn("mapper failed, continuing to next")
@@ -883,15 +922,6 @@ func (s *Enricher) tryAIFallback(ctx context.Context, vc *models.VideoContent, t
 	// running AI N times for an N-file pack just burns tokens.
 	if !budget.available() {
 		log.WithField("path", pathHint).Info("ai_enrich: budget exhausted for this resource, skipping AI fallback")
-		return nil
-	}
-	// Skip Claude entirely for paths flagged as adult by the torrent-name
-	// parser (studio names, JAV codes, explicit keywords). Adult content
-	// is not resolvable through TMDB/OMDB/KPU and was filling the
-	// ai_enrich.query negative cache with ~30-40% pure waste — see
-	// docs/ai_enrichment.md.
-	if isAdultPath(pathHint) {
-		log.WithField("path", pathHint).Info("ai_enrich: skipping adult path")
 		return nil
 	}
 	candidates := s.aiResolver.SuggestCandidates(ctx, pathHint, vc.Title, vc.Year, t, f)
@@ -1157,11 +1187,30 @@ func (s *Enricher) getDuration(ctx context.Context, hash string, claims *api.Cla
 	if err != nil {
 		return nil, err
 	}
+	var probeURL string
 	if mpItem, ok := exportResponse.ExportItems["media_probe"]; ok {
+		probeURL = mpItem.URL
+	} else {
+		var sourceURL string
+		if streamItem, ok := exportResponse.ExportItems["stream"]; ok {
+			sourceURL = streamItem.URL
+		} else if downloadItem, ok := exportResponse.ExportItems["download"]; ok {
+			sourceURL = downloadItem.URL
+		}
+		if sourceURL != "" {
+			if idx := strings.IndexByte(sourceURL, '?'); idx >= 0 {
+				probeURL = sourceURL[:idx] + "~cp" + sourceURL[idx:]
+			} else {
+				probeURL = sourceURL + "~cp"
+			}
+		}
+	}
+
+	if probeURL != "" {
 		// Fast check for cache hit (using fast-path for duration only)
 		fastCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 		defer cancel()
-		mp, err := s.api.GetMediaProbe(fastCtx, mpItem.URL, true)
+		mp, err := s.api.GetMediaProbe(fastCtx, probeURL, true)
 		if err == nil && mp != nil && mp.Format.Duration != "" {
 			if duration, err := strconv.ParseFloat(mp.Format.Duration, 64); err == nil {
 				return &duration, nil
@@ -1172,7 +1221,7 @@ func (s *Enricher) getDuration(ctx context.Context, hash string, claims *api.Cla
 		go func() {
 			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
-			_, _ = s.api.GetMediaProbe(bgCtx, mpItem.URL, true)
+			_, _ = s.api.GetMediaProbe(bgCtx, probeURL, true)
 		}()
 	}
 	return nil, nil

@@ -23,7 +23,7 @@
             <nav class="flex items-center gap-2 text-xs font-medium overflow-x-auto no-scrollbar py-1">
                 {{ range $i, $bc := .Data.Breadcrumbs }}
                     {{ if $i }}<span class="text-o-muted/30">/</span>{{ end }}
-                    <a href="{{ langPath $.Lang (printf "/admin/drive/%s" $bc.Path) }}" class="text-o-sub hover:text-o-cyan transition-colors whitespace-nowrap" data-async-target="main">{{ $bc.Name }}</a>
+                    <a href="{{ langPath $.Lang (printf "/admin/drive/%s" $bc.EscapedPath) }}" class="text-o-sub hover:text-o-cyan transition-colors whitespace-nowrap" data-async-target="main">{{ $bc.Name }}</a>
                 {{ end }}
             </nav>
         </div>
@@ -37,14 +37,14 @@
                         <th class="pl-4">Name</th>
                         <th>Size</th>
                         <th>Modified</th>
-                        <th class="w-10"></th>
+                        <th class="text-right pr-4">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {{ if .Data.Path }}
                     <tr class="hover:bg-base-300/30 transition-colors border-b border-o-line/10">
                         <td class="pl-4 py-3">
-                            <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .Data.ParentPath) }}" class="flex items-center gap-2 text-o-muted hover:text-o-cyan transition-colors" data-async-target="main">
+                            <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .Data.EscapedParentPath) }}" class="flex items-center gap-2 text-o-muted hover:text-o-cyan transition-colors" data-async-target="main">
                                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg>
                                 <span>..</span>
                             </a>
@@ -59,20 +59,33 @@
                     <tr class="hover:bg-base-300/30 transition-colors border-b border-o-line/10">
                         <td class="pl-4 py-3">
                             {{ if .IsDir }}
-                                <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .Path) }}" class="flex items-center gap-2 text-base-content hover:text-o-cyan transition-colors font-medium" data-async-target="main">
+                                <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .EscapedPath) }}" class="flex items-center gap-2 text-base-content hover:text-o-cyan transition-colors font-medium" data-async-target="main">
                                     <svg class="w-4 h-4 text-o-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                                     <span>{{ .Name }}</span>
                                 </a>
                             {{ else }}
-                                <div class="flex items-center gap-2 text-o-sub">
+                                <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .EscapedPath) }}" target="_blank" class="flex items-center gap-2 text-o-sub hover:text-o-cyan transition-colors">
                                     <svg class="w-4 h-4 text-o-muted/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                     <span>{{ .Name }}</span>
-                                </div>
+                                </a>
                             {{ end }}
                         </td>
                         <td class="text-o-muted tabular-nums">{{ if .IsDir }}-{{ else }}{{ .Size | bitsForHumans }}{{ end }}</td>
                         <td class="text-o-muted text-[10px]">{{ .ModTime.Format "2006-01-02 15:04" }}</td>
-                        <td></td>
+                        <td class="text-right pr-4">
+                            {{ if not .IsDir }}
+                            <div class="flex justify-end gap-2">
+                                {{ if .IsPlayable }}
+                                <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .EscapedPath) }}" target="_blank" class="btn btn-xs btn-ghost text-green-400 hover:bg-green-400/10" title="Play">
+                                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                </a>
+                                {{ end }}
+                                <a href="{{ langPath $.Lang (printf "/admin/drive/%s" .EscapedPath) }}" download="{{ .Name }}" class="btn btn-xs btn-ghost text-o-cyan hover:bg-o-cyan/10" title="Download">
+                                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                </a>
+                            </div>
+                            {{ end }}
+                        </td>
                     </tr>
                     {{ end }}
                     

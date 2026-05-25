@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -111,6 +112,7 @@ type LibraryData struct {
 	TorrentCount int
 	MovieCount   int
 	SeriesCount  int
+	AdultCount   int
 }
 
 type VaultData struct {
@@ -144,37 +146,63 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 	gr.POST("/enrichment/force-all", h.forceAllEnrichment)
 }
 
+func escapePath(p string) string {
+	parts := strings.Split(p, "/")
+	for i, part := range parts {
+		parts[i] = url.PathEscape(part)
+	}
+	return strings.Join(parts, "/")
+}
+
 type DriveItem struct {
-	Name    string
-	Path    string
-	Size    int64
-	IsDir   bool
-	ModTime time.Time
+	Name        string
+	Path        string
+	EscapedPath string
+	Size        int64
+	IsDir       bool
+	ModTime     time.Time
+}
+
+type DriveBreadcrumb struct {
+	Name        string
+	Path        string
+	EscapedPath string
 }
 
 type DriveData struct {
-	Args        *shared.IndexArgs
-	Path        string
-	ParentPath  string
-	Items       []DriveItem
-	Breadcrumbs []struct {
-		Name string
-		Path string
+	Args              *shared.IndexArgs
+	Path              string
+	ParentPath        string
+	EscapedParentPath string
+	Items             []DriveItem
+	Breadcrumbs       []DriveBreadcrumb
+}
+
+func (i DriveItem) IsPlayable() bool {
+	if i.IsDir {
+		return false
 	}
+	ext := strings.ToLower(filepath.Ext(i.Name))
+	switch ext {
+	case ".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".mp3", ".wav":
+		return true
+	}
+	return false
 }
 
 func (h *Handler) driveIndex(c *gin.Context) {
-	root := "/srv/octor/infra-data/drive-mount-vfs"
-	path := c.Param("path")
+	root := filepath.Clean("/srv/octor/infra-data/drive-mount-vfs")
+	path := strings.TrimPrefix(c.Param("path"), "/")
 	fullPath := filepath.Join(root, path)
 
 	// Security check: ensure path is within root
-	if !strings.HasPrefix(fullPath, root) {
+	rel, err := filepath.Rel(root, fullPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
 		c.Status(http.StatusForbidden)
 		return
 	}
 
-	entries, err := os.ReadDir(fullPath)
+	info, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			c.Status(http.StatusNotFound)
@@ -184,31 +212,39 @@ func (h *Handler) driveIndex(c *gin.Context) {
 		return
 	}
 
+	if !info.IsDir() {
+		// Serve file
+		c.File(fullPath)
+		return
+	}
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
 	var items []DriveItem
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
+		itemPath := filepath.Join(path, entry.Name())
 		items = append(items, DriveItem{
-			Name:    entry.Name(),
-			Path:    filepath.Join(path, entry.Name()),
-			Size:    info.Size(),
-			IsDir:   entry.IsDir(),
-			ModTime: info.ModTime(),
+			Name:        entry.Name(),
+			Path:        itemPath,
+			EscapedPath: escapePath(itemPath),
+			Size:        info.Size(),
+			IsDir:       entry.IsDir(),
+			ModTime:     info.ModTime(),
 		})
 	}
 
 	// Breadcrumbs
-	var bc []struct {
-		Name string
-		Path string
-	}
-	bc = append(bc, struct {
-		Name string
-		Path string
-	}{Name: "Root", Path: ""})
-	
+	var bc []DriveBreadcrumb
+	bc = append(bc, DriveBreadcrumb{Name: "Root", Path: "", EscapedPath: ""})
+
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	curr := ""
 	for _, p := range parts {
@@ -216,14 +252,11 @@ func (h *Handler) driveIndex(c *gin.Context) {
 			continue
 		}
 		curr = filepath.Join(curr, p)
-		bc = append(bc, struct {
-			Name string
-			Path string
-		}{Name: p, Path: curr})
+		bc = append(bc, DriveBreadcrumb{Name: p, Path: curr, EscapedPath: escapePath(curr)})
 	}
 
 	parent := ""
-	if path != "" && path != "/" {
+	if path != "" {
 		parent = filepath.Dir(strings.TrimSuffix(path, "/"))
 		if parent == "." {
 			parent = ""
@@ -231,10 +264,11 @@ func (h *Handler) driveIndex(c *gin.Context) {
 	}
 
 	h.tb.Build("admin/drive").HTML(http.StatusOK, web.NewContext(c).WithData(&DriveData{
-		Path:        path,
-		ParentPath:  parent,
-		Items:       items,
-		Breadcrumbs: bc,
+		Path:              path,
+		ParentPath:        parent,
+		EscapedParentPath: escapePath(parent),
+		Items:             items,
+		Breadcrumbs:       bc,
 	}))
 }
 
@@ -526,7 +560,7 @@ func parseSort(c *gin.Context) models.SortType {
 func parseSection(c *gin.Context) shared.SectionType {
 	s := shared.SectionType(c.Param("type"))
 	switch s {
-	case shared.SectionTypeMovies, shared.SectionTypeSeries:
+	case shared.SectionTypeMovies, shared.SectionTypeSeries, shared.SectionTypeAdult:
 		return s
 	default:
 		return shared.SectionTypeTorrents
@@ -567,7 +601,7 @@ func (h *Handler) library(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	tc, mc, sc, err := h.loadLibraryCounts(ctx, db, userID)
+	tc, mc, sc, ac, err := h.loadLibraryCounts(ctx, db, userID)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
@@ -584,6 +618,7 @@ func (h *Handler) library(c *gin.Context) {
 		TorrentCount: tc,
 		MovieCount:   mc,
 		SeriesCount:  sc,
+		AdultCount:   ac,
 	}))
 }
 
@@ -593,6 +628,8 @@ func (h *Handler) loadLibrary(ctx context.Context, db *pg.DB, userID *uuid.UUID,
 		return h.loadMovieItems(ctx, db, userID, sort, q)
 	case shared.SectionTypeSeries:
 		return h.loadSeriesItems(ctx, db, userID, sort, q)
+	case shared.SectionTypeAdult:
+		return h.loadAdultItems(ctx, db, userID, sort, q)
 	default:
 		return h.loadTorrentItems(ctx, db, userID, sort, q)
 	}
@@ -686,6 +723,7 @@ func (h *Handler) getAllUserMovies(ctx context.Context, db *pg.DB, sort models.S
 		JoinOn("movie.resource_id = l.resource_id").
 		Join("left join movie_metadata as mmd").
 		JoinOn("movie.movie_metadata_id = mmd.movie_metadata_id").
+		Where("mmd.movie_metadata_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%' AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)')").
 		Relation("MovieMetadata")
 
 	if q != "" {
@@ -829,21 +867,25 @@ func splitEmails(s string) []string {
 	return out
 }
 
-func (h *Handler) loadLibraryCounts(ctx context.Context, db *pg.DB, userID *uuid.UUID) (torrents, movies, series int, err error) {
+func (h *Handler) loadLibraryCounts(ctx context.Context, db *pg.DB, userID *uuid.UUID) (torrents, movies, series, adult int, err error) {
 	if userID != nil {
 		return models.GetLibraryCounts(ctx, db, *userID)
 	}
 	_, err = db.QueryOneContext(ctx, pg.Scan(&torrents), "select count(distinct resource_id) from library")
 	if err != nil {
-		return 0, 0, 0, errors.Wrap(err, "failed to count all-user torrents")
+		return 0, 0, 0, 0, errors.Wrap(err, "failed to count all-user torrents")
 	}
-	_, err = db.QueryOneContext(ctx, pg.Scan(&movies), "select count(distinct movie.resource_id) from movie join library as l on movie.resource_id = l.resource_id")
+	_, err = db.QueryOneContext(ctx, pg.Scan(&movies), "select count(distinct movie.resource_id) from movie join library as l on movie.resource_id = l.resource_id left join movie_metadata as mmd on movie.movie_metadata_id = mmd.movie_metadata_id where (mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'")
 	if err != nil {
-		return 0, 0, 0, errors.Wrap(err, "failed to count all-user movies")
+		return 0, 0, 0, 0, errors.Wrap(err, "failed to count all-user movies")
 	}
 	_, err = db.QueryOneContext(ctx, pg.Scan(&series), "select count(distinct series.resource_id) from series join library as l on series.resource_id = l.resource_id")
 	if err != nil {
-		return 0, 0, 0, errors.Wrap(err, "failed to count all-user series")
+		return 0, 0, 0, 0, errors.Wrap(err, "failed to count all-user series")
+	}
+	_, err = db.QueryOneContext(ctx, pg.Scan(&adult), "select count(distinct movie.resource_id) from movie join library as l on movie.resource_id = l.resource_id left join movie_metadata as mmd on movie.movie_metadata_id = mmd.movie_metadata_id where (mmd.video_id LIKE 'tpdb:%' OR mmd.video_id LIKE 'tpdb_jav:%' OR mmd.video_id LIKE 'stash:%') OR movie.path ~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'")
+	if err != nil {
+		return 0, 0, 0, 0, errors.Wrap(err, "failed to count all-user adult")
 	}
 	return
 }
@@ -1033,3 +1075,60 @@ func (h *Handler) forceAllEnrichment(c *gin.Context) {
 	web.RedirectWithSuccessAndMessage(c, "toast.forceAllEnrichmentStarted")
 }
 
+
+func (h *Handler) loadAdultItems(ctx context.Context, db *pg.DB, userID *uuid.UUID, sort models.SortType, q string) ([]any, error) {
+	var list []*models.Movie
+	var err error
+	if userID != nil {
+		list, err = models.GetLibraryAdultList(ctx, db, *userID, sort, "", q)
+	} else {
+		list, err = h.getAllUserAdults(ctx, db, sort, q)
+	}
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(list))
+	for _, item := range list {
+		ids = append(ids, item.ResourceID)
+	}
+	owners, err := h.loadOwnerSummaries(ctx, db, ids, userID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]any, 0, len(list))
+	for _, item := range list {
+		items = append(items, h.videoItem(item, item.ResourceID, item.CreatedAt, owners[item.ResourceID]))
+	}
+	return items, nil
+}
+
+func (h *Handler) getAllUserAdults(ctx context.Context, db *pg.DB, sort models.SortType, q string) ([]*models.Movie, error) {
+	var list []*models.Movie
+	query := db.Model(&list).
+		Context(ctx).
+		Join("join (select distinct resource_id from library) as l").
+		JoinOn("movie.resource_id = l.resource_id").
+		Join("left join movie_metadata as mmd").
+		JoinOn("movie.movie_metadata_id = mmd.movie_metadata_id").
+		Where("(mmd.video_id LIKE 'tpdb:%' OR mmd.video_id LIKE 'tpdb_jav:%' OR mmd.video_id LIKE 'stash:%') OR (mmd.movie_metadata_id IS NULL AND movie.path ~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)')").
+		Relation("MovieMetadata")
+
+	if q != "" {
+		query.Where("mmd.title ILIKE ? OR movie.title ILIKE ?", "%"+q+"%", "%"+q+"%")
+	}
+
+	switch sort {
+	case models.SortTypeName:
+		query.OrderExpr("mmd.title ASC NULLS LAST, movie.title ASC")
+	case models.SortTypeYear:
+		query.OrderExpr("mmd.year DESC NULLS LAST, movie.year DESC NULLS LAST")
+	case models.SortTypeRating:
+		query.OrderExpr("mmd.rating DESC NULLS LAST")
+	default:
+		query.OrderExpr("movie.created_at DESC")
+	}
+	if err := query.Select(); err != nil {
+		return nil, errors.Wrap(err, "failed to fetch all-user adult list")
+	}
+	return list, nil
+}

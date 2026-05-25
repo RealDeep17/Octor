@@ -20,6 +20,9 @@
         <div class="flex flex-col sm:flex-row sm:items-center gap-2">
           {{ template "library/menu" . }}
           <div class="flex items-center gap-2 sm:ml-auto">
+            {{ if eq .Data.Args.Section "adult" }}
+              {{ template "library/group_toggle" (withContext $ .Data.Args) }}
+            {{ end }}
             {{ template "library/watched_filter" (withContext $ .Data.Args) }}
             {{ template "library/sort" (withContext $ .Data.Args) }}
           </div>

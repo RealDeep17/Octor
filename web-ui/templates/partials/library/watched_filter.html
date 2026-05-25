@@ -7,11 +7,14 @@
     value means "show all".
 */}}
 {{ with .Data }}
-{{ if or (eq (printf "%s" .Section) "movies") (eq (printf "%s" .Section) "series") }}
+{{ if or (eq (printf "%s" .Section) "movies") (eq (printf "%s" .Section) "series") (eq (printf "%s" .Section) "adult") }}
 <form action="{{ langPath $.Ctx.Lang $.Ctx.Path }}" data-async-target="#list" class="shrink-0">
     <input type="hidden" name="sort" value="{{ .Sort }}" />
     {{ if .Query }}
     <input type="hidden" name="q" value="{{ .Query }}" />
+    {{ end }}
+    {{ if .GroupBy }}
+    <input type="hidden" name="group" value="{{ .GroupBy }}" />
     {{ end }}
     <select class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none" name="watched" onchange="this.form.requestSubmit()">
         <option value="" {{ if eq (printf "%s" .Watched) "" }}selected{{ end }}>{{ t $.Ctx.Lang "library.filterAll" }}</option>

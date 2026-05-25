@@ -1,0 +1,19 @@
+{{ define "library/group_toggle" }}
+<form action="{{ langPath $.Ctx.Lang $.Ctx.Path }}" data-async-target="#list">
+    {{ if $.Data.Query }}
+    <input type="hidden" name="q" value="{{ $.Data.Query }}" />
+    {{ end }}
+    {{ if $.Data.Sort }}
+    <input type="hidden" name="sort" value="{{ $.Data.Sort }}" />
+    {{ end }}
+    {{ if $.Data.Watched }}
+    <input type="hidden" name="watched" value="{{ $.Data.Watched }}" />
+    {{ end }}
+    <select class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none" name="group" onchange="this.nextElementSibling.click()">
+        <option value="" {{ if eq $.Data.GroupBy "" }}selected{{ end }}>{{ t $.Ctx.Lang "library.group.none" }}</option>
+        <option value="studio" {{ if eq $.Data.GroupBy "studio" }}selected{{ end }}>{{ t $.Ctx.Lang "library.group.studio" }}</option>
+        <option value="performer" {{ if eq $.Data.GroupBy "performer" }}selected{{ end }}>{{ t $.Ctx.Lang "library.group.performer" }}</option>
+    </select>
+    <button type="submit" class="hidden">Submit</button>
+</form>
+{{ end }}

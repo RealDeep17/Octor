@@ -25,6 +25,13 @@ func (s *VideoContentHelper) MakeMenu(args *shared.IndexArgs) Menu {
 		}
 		m = append(m, nm)
 	}
+	if args.IsAdmin {
+		m = append(m, MenuItem{
+			Title:     shared.SectionTypeAdult,
+			TargetURL: "/lib/adult",
+			Active:    args.Section == shared.SectionTypeAdult,
+		})
+	}
 	return m
 }
 

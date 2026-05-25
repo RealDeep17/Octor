@@ -12,9 +12,19 @@ const (
 	WatchedFilterWatched   WatchedFilter = "watched"
 )
 
+type GroupBy string
+
+const (
+	GroupByNone      GroupBy = ""
+	GroupByStudio    GroupBy = "studio"
+	GroupByPerformer GroupBy = "performer"
+)
+
 type IndexArgs struct {
 	Sort    models.SortType
 	Section SectionType
 	Watched WatchedFilter
 	Query   string
+	IsAdmin bool
+	GroupBy GroupBy
 }
