@@ -66,7 +66,7 @@
 {{ define "main" }}
 {{ with .Data }}
 <!-- Hero Section -->
-<section class="flex flex-col items-center text-center relative overflow-hidden pt-[120px] pb-16 px-3 sm:px-6">
+<section class="flex flex-col items-center text-center relative overflow-hidden pt-48 pb-24 px-3 sm:px-6">
     <div class="absolute top-[-200px] left-1/2 -translate-x-1/2 w-[800px] h-[800px] hero-glow pointer-events-none"></div>
 
     <!-- big logo -->
@@ -75,6 +75,13 @@
             Oc<span class="text-o-primary">tor</span>
         </a>
     </div>
+
+    {{ if .SearchQuery }}
+    <script>
+        window._searchQuery = {{ .SearchQuery }};
+    </script>
+    <div id="direct-search-mount" class="w-full relative z-10"></div>
+    {{ else }}
 
     {{ if .Tool }}
     <!-- Tool page hero -->
@@ -91,19 +98,13 @@
         {{ t $.Lang .Tool.Description }}
     </p>
     {{ else }}
-    <!-- Homepage hero -->
-    <div class="badge badge-lg bg-o-primary/10 border-o-primary/30 text-o-primaryL gap-2 py-3 px-5 mb-8 relative z-10 text-sm font-medium max-sm:text-xs max-sm:py-2 max-sm:px-3 max-sm:h-auto max-sm:whitespace-normal">
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        {{ t $.Lang "home.badge" }}
-    </div>
-
-    <h1 class="relative z-10 text-[clamp(2.8rem,6vw,4.5rem)] font-extrabold tracking-tighter leading-[1.1] max-w-[780px] mb-5">
+    <h1 class="relative z-10 text-[clamp(2rem,5vw,3rem)] font-extrabold tracking-tighter leading-[1.1] max-w-[780px] mb-6">
         <span class="block text-balance">{{ t $.Lang "home.heading" }}</span>
         <span class="block text-balance gradient-text">{{ t $.Lang "home.headingAccent" }}</span>
     </h1>
 
-    <p class="relative z-10 text-lg text-o-sub max-w-[560px] mb-12 leading-relaxed">
-        {{ t $.Lang "home.subtitle" }}
+    <p id="home-description" class="relative z-10 text-base text-o-sub max-w-[560px] mb-8 leading-relaxed" data-search-text="{{ t $.Lang "home.searchSubtitle" }}" data-magnet-text="{{ t $.Lang "home.subtitle" }}">
+        {{ t $.Lang "home.searchSubtitle" }}
     </p>
     {{ end }}
 
@@ -124,45 +125,95 @@
     {{ end }}
 
     <!-- input area -->
-    <div class="relative z-10 w-full max-w-[680px]">
-        <!-- search -->
-        <form action="{{ langPath $.Lang "/" }}" method="post" enctype="multipart/form-data" class="join w-full" data-async-target="main">
+    <div class="relative z-10 w-full max-w-[680px] flex flex-col items-center">
+        <!-- Tabs Header -->
+        <div class="flex justify-center gap-3 mb-6 relative z-10">
+            <button id="tab-search" type="button" class="btn btn-sm rounded-full px-5 py-2 font-medium border border-o-cyan text-o-cyan bg-o-cyan/10 hover:bg-o-cyan/20 transition-all uppercase tracking-wider text-xs">
+                🔍 Search Indexers
+            </button>
+            <button id="tab-magnet" type="button" class="btn btn-sm rounded-full px-5 py-2 font-medium border border-o-line text-o-muted bg-transparent hover:text-base-content hover:border-o-sub transition-all uppercase tracking-wider text-xs">
+                🧲 Magnet / File
+            </button>
+        </div>
+
+        <!-- 1. Search Form (Direct Search) -->
+        <form id="form-search" action="{{ langPath $.Lang "/" }}" method="get" class="join w-full" data-async-target="main">
             <div class="join-item flex items-center search-container rounded-l-[14px] flex-1 h-12 transition-all">
                 <svg class="ml-4 shrink-0 text-o-muted" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                <input type="text" name="resource" value="{{ if has . "Args" }}{{ .Args.Query }}{{ end }}" placeholder="{{ t $.Lang "home.placeholder" }}" class="input bg-transparent border-0 focus:outline-none flex-1 text-base placeholder:text-o-muted font-sans" required />
+                <input type="text" name="q" placeholder="Search torrents & indexers..." class="input bg-transparent border-0 focus:outline-none flex-1 text-base placeholder:text-o-muted font-sans" required />
             </div>
-            <input name="instruction" value="{{ .Instruction }}" type="hidden" />
-            <button type="submit" class="btn join-item btn-pink px-7 h-12 rounded-r-[14px]" data-umami-event="search">{{ t $.Lang "home.search" }}</button>
+            <button type="submit" class="btn join-item btn-pink px-7 h-12 rounded-r-[14px] uppercase tracking-wide font-medium">Search</button>
         </form>
 
-        <!-- divider -->
-        <div class="divider text-o-muted text-xs font-semibold tracking-widest uppercase my-5 before:bg-w-line after:bg-w-line">{{ t $.Lang "home.or" }}</div>
-
-        <!-- upload zone -->
-        <form action="{{ langPath $.Lang "/" }}" method="post" enctype="multipart/form-data" class="dropzone" data-async-target="main">
-            <label for="dropzone-input" class="upload-dashed rounded-2xl py-6 px-6 text-center cursor-pointer block">
-                <p class="text-[0.95rem] text-o-sub"><span class="text-o-primaryL font-semibold">{{ t $.Lang "home.dropzone" }}</span> {{ t $.Lang "home.dropzoneHint" }}</p>
-                <span class="badge badge-sm bg-white/5 border-0 text-o-muted mt-3">{{ t $.Lang "home.noSizeLimit" }}</span>
-            </label>
-            <input class="dropzone-input hidden" name="resource" type="file" />
-            <input name="instruction" value="{{ .Instruction }}" type="hidden" />
-        </form>
-
-        <!-- demo & speedtest links -->
-        <div class="flex justify-center items-center gap-4 mt-4">
-            <form action="{{ langPath $.Lang "/" }}" method="post" enctype="multipart/form-data" data-async-target="main">
-                <input type="hidden" name="resource" value="{{ demoMagnet }}" />
+        <!-- 2. Magnet / File Section -->
+        <div id="section-magnet" class="hidden w-full flex flex-col gap-5">
+            <!-- Magnet Input -->
+            <form action="{{ langPath $.Lang "/" }}" method="post" enctype="multipart/form-data" class="join w-full" data-async-target="main">
+                <div class="join-item flex items-center search-container rounded-l-[14px] flex-1 h-12 transition-all">
+                    <svg class="ml-4 shrink-0 text-o-muted" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                    <input type="text" name="resource" placeholder="{{ t $.Lang "home.placeholder" }}" class="input bg-transparent border-0 focus:outline-none flex-1 text-base placeholder:text-o-muted font-sans" required />
+                </div>
                 <input name="instruction" value="{{ .Instruction }}" type="hidden" />
-                <button type="submit" class="btn btn-ghost btn-sm text-o-muted gap-1.5 normal-case font-medium" data-umami-event="try-demo">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    {{ t $.Lang "home.tryDemo" }}
-                </button>
+                <button type="submit" class="btn join-item btn-pink px-7 h-12 rounded-r-[14px]">Stream</button>
             </form>
-            <a href="{{ langPath $.Lang "/speedtest" }}" data-async-target="main" class="btn btn-ghost btn-sm text-o-muted gap-1.5 normal-case font-medium" data-umami-event="speedtest-hero">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                {{ t $.Lang "home.speedTest" }}
-            </a>
+
+            <!-- divider -->
+            <div class="divider text-o-muted text-xs font-semibold tracking-widest uppercase my-1 before:bg-w-line after:bg-w-line">{{ t $.Lang "home.or" }}</div>
+
+            <!-- upload zone -->
+            <form action="{{ langPath $.Lang "/" }}" method="post" enctype="multipart/form-data" class="dropzone" data-async-target="main">
+                <label for="dropzone-input" class="upload-dashed rounded-2xl py-6 px-6 text-center cursor-pointer block">
+                    <p class="text-[0.95rem] text-o-sub"><span class="text-o-primaryL font-semibold">{{ t $.Lang "home.dropzone" }}</span> {{ t $.Lang "home.dropzoneHint" }}</p>
+                    <span class="badge badge-sm bg-white/5 border-0 text-o-muted mt-3">{{ t $.Lang "home.noSizeLimit" }}</span>
+                </label>
+                <input class="dropzone-input hidden" name="resource" type="file" />
+                <input name="instruction" value="{{ .Instruction }}" type="hidden" />
+            </form>
+
+            <!-- demo & speedtest links -->
+            <div class="flex justify-center items-center gap-4">
+                <form action="{{ langPath $.Lang "/" }}" method="post" enctype="multipart/form-data" data-async-target="main">
+                    <input type="hidden" name="resource" value="{{ demoMagnet }}" />
+                    <input name="instruction" value="{{ .Instruction }}" type="hidden" />
+                    <button type="submit" class="btn btn-ghost btn-sm text-o-muted gap-1.5 normal-case font-medium" data-umami-event="try-demo">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        {{ t $.Lang "home.tryDemo" }}
+                    </button>
+                </form>
+                <a href="{{ langPath $.Lang "/speedtest" }}" data-async-target="main" class="btn btn-ghost btn-sm text-o-muted gap-1.5 normal-case font-medium" data-umami-event="speedtest-hero">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    {{ t $.Lang "home.speedTest" }}
+                </a>
+            </div>
         </div>
+
+        <script>
+            (function() {
+                const btnSearch = document.getElementById('tab-search');
+                const btnMagnet = document.getElementById('tab-magnet');
+                const formSearch = document.getElementById('form-search');
+                const secMagnet = document.getElementById('section-magnet');
+                const desc = document.getElementById('home-description');
+
+                if (btnSearch && btnMagnet && formSearch && secMagnet) {
+                    btnSearch.addEventListener('click', function() {
+                        btnSearch.className = 'btn btn-sm rounded-full px-5 py-2 font-medium border border-o-cyan text-o-cyan bg-o-cyan/10 hover:bg-o-cyan/20 transition-all uppercase tracking-wider text-xs';
+                        btnMagnet.className = 'btn btn-sm rounded-full px-5 py-2 font-medium border border-o-line text-o-muted bg-transparent hover:text-base-content hover:border-o-sub transition-all uppercase tracking-wider text-xs';
+                        formSearch.classList.remove('hidden');
+                        secMagnet.classList.add('hidden');
+                        if (desc) desc.innerText = desc.getAttribute('data-search-text');
+                    });
+
+                    btnMagnet.addEventListener('click', function() {
+                        btnMagnet.className = 'btn btn-sm rounded-full px-5 py-2 font-medium border border-o-cyan text-o-cyan bg-o-cyan/10 hover:bg-o-cyan/20 transition-all uppercase tracking-wider text-xs';
+                        btnSearch.className = 'btn btn-sm rounded-full px-5 py-2 font-medium border border-o-line text-o-muted bg-transparent hover:text-base-content hover:border-o-sub transition-all uppercase tracking-wider text-xs';
+                        formSearch.classList.add('hidden');
+                        secMagnet.classList.remove('hidden');
+                        if (desc) desc.innerText = desc.getAttribute('data-magnet-text');
+                    });
+                }
+            })();
+        </script>
     </div>
 
     {{ template "continue_watching" (withContext $ .ContinueWatching) }}
@@ -172,6 +223,8 @@
     </script>
     {{ end }}
     {{ template "discover" (withContext $ .Tool) }}
+
+    {{ end }}
 </section>
 
 {{ "index.js" | asset }}

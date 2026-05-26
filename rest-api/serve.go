@@ -123,8 +123,14 @@ func serve(c *cli.Context) error {
 	// Setting SpeedTest
 	st := s.NewSpeedTest(c, ns)
 
+	// Setting Prowlarr
+	prowlarr := s.NewProwlarrClient(c)
+
+	// Setting Transmission
+	transmission := s.NewTransmissionService(c, rm)
+
 	// Setting Web
-	web := s.NewWeb(c, rm, li, ex, st)
+	web := s.NewWeb(c, rm, li, ex, st, prowlarr, transmission)
 	if web != nil {
 		services = append(services, web)
 		defer web.Close()

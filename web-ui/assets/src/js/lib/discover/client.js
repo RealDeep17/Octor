@@ -209,8 +209,10 @@ export class StremioClient {
             const res = await fetchWithTimeout(url, signal);
             if (res.ok) {
                 const data = await res.json();
-                if (data.meta?.videos?.length > 0) {
-                    return data.meta;
+                if (data.meta) {
+                    if (type === 'movie' || (data.meta.videos && data.meta.videos.length > 0)) {
+                        return data.meta;
+                    }
                 }
             }
         } catch (e) { /* fall through to user addons */ }

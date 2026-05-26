@@ -28,28 +28,31 @@ export function TypeTabs({ types, selectedType, onSelect }) {
 }
 
 export function SearchTabs({ searchResults, searchTypes, searchType, onSelect }) {
-    const tabs = useMemo(() => [
-        { key: 'all', label: t('discover.allTab'), count: searchResults.length },
-        ...searchTypes.map(st => ({
-            key: st,
-            label: typeLabel(st),
-            count: getSearchResultsForType(searchResults, st).length,
-        })),
-    ], [searchResults, searchTypes]);
+	const tabs = useMemo(() => {
+		return [
+			{ key: 'all', label: t('discover.allTab'), count: searchResults.length },
+			...searchTypes.map(st => ({
+				key: st,
+				label: typeLabel(st),
+				count: getSearchResultsForType(searchResults, st).length,
+			})),
+		];
+	}, [searchResults, searchTypes]);
 
-    return (
-        <div class="flex gap-1.5 sm:gap-2 flex-wrap">
-            {tabs.map(tab => (
-                <button
-                    key={tab.key}
-                    class={chipClass(tab.key === searchType)}
-                    onClick={() => onSelect(tab.key)}
-                >
-                    {tab.label} ({tab.count})
-                </button>
-            ))}
-        </div>
-    );
+	return (
+		<div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+			{/* Left side: All / Movie / Series / Trackers filter tabs */}
+			{tabs.map(tab => (
+				<button
+					key={tab.key}
+					class={chipClass(tab.key === searchType)}
+					onClick={() => onSelect(tab.key)}
+				>
+					{tab.label} ({tab.count})
+				</button>
+			))}
+		</div>
+	);
 }
 
 export function CatalogSelector({ catalogs, selectedCatalog, onSelect }) {

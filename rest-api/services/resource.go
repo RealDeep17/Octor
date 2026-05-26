@@ -3,6 +3,9 @@ package services
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -252,7 +255,62 @@ func (s *ResourceMap) get(ctx context.Context, r *Resource, b []byte) (*Resource
 	return nil, nil
 }
 
+func (s *ResourceMap) downloadTorrentURL(ctx context.Context, urlStr string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+	
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if strings.HasPrefix(req.URL.String(), "magnet:") || req.URL.Scheme == "magnet" {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		loc := resp.Header.Get("Location")
+		if strings.HasPrefix(loc, "magnet:") {
+			return []byte(loc), nil
+		}
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to download torrent from %s: status code %d", urlStr, resp.StatusCode)
+	}
+
+	limitReader := io.LimitReader(resp.Body, 10*1024*1024)
+	bodyBytes, err := io.ReadAll(limitReader)
+	if err != nil {
+		return nil, err
+	}
+
+	bodyStr := strings.TrimSpace(string(bodyBytes))
+	if strings.HasPrefix(bodyStr, "magnet:") {
+		return []byte(bodyStr), nil
+	}
+
+	return bodyBytes, nil
+}
+
 func (s *ResourceMap) Get(ctx context.Context, b []byte) (*Resource, error) {
+	str := string(b)
+	if strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://") {
+		downloaded, err := s.downloadTorrentURL(ctx, str)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to download torrent from URL")
+		}
+		b = downloaded
+	}
 	r, err := s.parse(b)
 	if err != nil {
 		return nil, err

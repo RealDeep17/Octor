@@ -33,28 +33,34 @@ const (
 )
 
 type Web struct {
-	host string
-	port int
-	ln   net.Listener
-	rm   *ResourceMap
-	c    *List
-	e    *Export
-	st   *SpeedTest
+	host         string
+	port         int
+	ln           net.Listener
+	rm           *ResourceMap
+	c            *List
+	e            *Export
+	st           *SpeedTest
+	prowlarr     *ProwlarrClient
+	transmission *TransmissionService
+	apiKey       string
 }
 
-func NewWeb(c *cli.Context, rm *ResourceMap, co *List, ex *Export, st *SpeedTest) *Web {
+func NewWeb(c *cli.Context, rm *ResourceMap, co *List, ex *Export, st *SpeedTest, prowlarr *ProwlarrClient, transmission *TransmissionService) *Web {
 	return &Web{
-		host: c.String(webHostFlag),
-		port: c.Int(webPortFlag),
-		rm:   rm,
-		c:    co,
-		e:    ex,
-		st:   st,
+		host:         c.String(webHostFlag),
+		port:         c.Int(webPortFlag),
+		rm:           rm,
+		c:            co,
+		e:            ex,
+		st:           st,
+		prowlarr:     prowlarr,
+		transmission: transmission,
+		apiKey:       c.String("export-api-key"),
 	}
 }
 
 func RegisterWebFlags(f []cli.Flag) []cli.Flag {
-	return append(f,
+	f = append(f,
 		cli.StringFlag{
 			Name:   webHostFlag,
 			Usage:  "listening host",
@@ -68,6 +74,9 @@ func RegisterWebFlags(f []cli.Flag) []cli.Flag {
 			EnvVar: "WEB_PORT",
 		},
 	)
+	f = RegisterProwlarrFlags(f)
+	f = RegisterTransmissionFlags(f)
+	return f
 }
 
 // @Summary Stores resource
@@ -325,11 +334,115 @@ func (s *Web) Serve() error {
 	if s.st != nil {
 		r.GET("/speedtest", s.getSpeedtest)
 	}
+
+	// Webhook Ingestion & Discovery Engine Search Endpoints
+	r.POST("/webhook/ingest", s.postWebhookIngest)
+	r.GET("/search", s.getSearch)
+
+	// Transmission RPC Emulation Endpoints
+	r.POST("/transmission/rpc", s.postTransmissionRPC)
+	r.POST("/transmission/rpc/", s.postTransmissionRPC)
+	r.GET("/transmission/rpc", s.postTransmissionRPC)
+	r.GET("/transmission/rpc/", s.postTransmissionRPC)
+
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	docs.SwaggerInfo.BasePath = "/"
 	log.Infof("serving Web at %v", addr)
 	return http.Serve(s.ln, r)
+}
+
+func (s *Web) postWebhookIngest(g *gin.Context) {
+	key := g.Request.Header.Get("X-Api-Key")
+	if key == "" {
+		key = g.Query("api_key")
+	}
+
+	authorized := false
+	if s.transmission.apiKey == "" || key == s.transmission.apiKey {
+		authorized = true
+	} else if s.apiKey != "" && key == s.apiKey {
+		authorized = true
+	}
+
+	if !authorized {
+		g.JSON(http.StatusForbidden, gin.H{"error": "invalid automation api key"})
+		return
+	}
+
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := g.BindJSON(&req); err != nil {
+		g.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
+	}
+
+	if req.URL == "" {
+		g.JSON(http.StatusBadRequest, gin.H{"error": "missing url"})
+		return
+	}
+
+	var payload []byte
+	var err error
+	if strings.HasPrefix(req.URL, "http://") || strings.HasPrefix(req.URL, "https://") {
+		payload, err = s.transmission.DownloadTorrentURL(g.Request.Context(), req.URL)
+		if err != nil {
+			g.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to download torrent URL: %v", err)})
+			return
+		}
+	} else {
+		payload = []byte(req.URL)
+	}
+
+	r, err := s.rm.Get(g.Request.Context(), payload)
+	if err != nil {
+		g.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	g.JSON(http.StatusOK, gin.H{
+		"id":        r.ID,
+		"name":      r.Name,
+		"magnet_uri": r.MagnetURI,
+	})
+}
+
+func (s *Web) getSearch(g *gin.Context) {
+	key := g.Request.Header.Get("X-Api-Key")
+	if key == "" {
+		key = g.Query("api_key")
+	}
+
+	authorized := false
+	if s.transmission.apiKey == "" || key == s.transmission.apiKey {
+		authorized = true
+	} else if s.apiKey != "" && key == s.apiKey {
+		authorized = true
+	}
+
+	if !authorized {
+		g.JSON(http.StatusForbidden, gin.H{"error": "invalid automation api key"})
+		return
+	}
+
+	query := g.Query("q")
+	if query == "" {
+		g.JSON(http.StatusBadRequest, gin.H{"error": "missing query parameter q"})
+		return
+	}
+
+	results, err := s.prowlarr.Search(query)
+	if err != nil {
+		g.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	g.JSON(http.StatusOK, results)
+}
+
+func (s *Web) postTransmissionRPC(g *gin.Context) {
+	s.transmission.HandleRPC(g)
 }
 
 func (s *Web) getSpeedtest(g *gin.Context) {

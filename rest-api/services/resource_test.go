@@ -48,7 +48,7 @@ func assertSintel(t *testing.T, r *Resource) {
 	assert.Equal("Sintel", r.Name)
 	assert.EqualValues(129368064, r.Size)
 	assert.Equal(11, len(r.Files))
-	assert.Equal([]string{"Sintel.de.srt"}, r.Files[0].Path)
+	assert.Equal([]string{"Sintel", "Sintel.de.srt"}, r.Files[0].Path)
 	assert.EqualValues(1652, r.Files[0].Size)
 }
 
@@ -188,6 +188,7 @@ func TestResourceMap_magnetNotFound(t *testing.T) {
 	m2tclm, _ := rm.m2t.Get()
 	m2tclmm := m2tclm.(*Magnet2TorrentClientMock)
 	tsclmm.On("Touch", mock.Anything, mock.Anything, mock.Anything).Return(nil, status.Error(codes.NotFound, "not found"))
+	tsclmm.On("Push", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 	m2tclmm.On("Magnet2Torrent", mock.Anything, mock.Anything, mock.Anything).Return(&m2tp.Magnet2TorrentReply{
 		Torrent: loadSintel(t),
 	}, nil)

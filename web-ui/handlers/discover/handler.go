@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/models"
+	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/i18n"
 	"github.com/webtor-io/web-ui/services/template"
@@ -40,16 +41,42 @@ type indexData struct {
 }
 
 type Handler struct {
-	tb template.Builder[*web.Context]
-	pg *cs.PG
+	tb  template.Builder[*web.Context]
+	pg  *cs.PG
+	api *api.Api
 }
 
-func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG) {
+func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, api *api.Api) {
 	h := &Handler{
-		tb: tm.MustRegisterViews("discover/*").WithLayout("main"),
-		pg: pg,
+		tb:  tm.MustRegisterViews("discover/*").WithLayout("main"),
+		pg:  pg,
+		api: api,
 	}
 	r.GET("/discover", h.index)
+	r.GET("/discover/search", h.search)
+}
+
+func (h *Handler) search(c *gin.Context) {
+	u := auth.GetUserFromContext(c)
+	if !u.HasAuth() {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	q := c.Query("q")
+	if q == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing query q"})
+		return
+	}
+
+	cl := api.GetClaimsFromContext(c)
+	res, err := h.api.Search(c.Request.Context(), cl, q)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Data(http.StatusOK, "application/json", res)
 }
 
 func (h *Handler) index(c *gin.Context) {

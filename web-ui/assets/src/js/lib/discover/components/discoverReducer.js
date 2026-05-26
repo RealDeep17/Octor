@@ -141,7 +141,6 @@ export const initialState = {
     hasMore: true,
     page: 0,
     catalogLoading: false,
-    // Search
     isSearchMode: false,
     searchQuery: '',
     searchResults: [],
