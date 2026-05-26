@@ -19,7 +19,6 @@ import (
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/models"
 )
 
@@ -81,68 +80,87 @@ func (s *Handler) still(c *gin.Context) {
 		return
 	}
 
-	b, err := s.getResizedJPEGStillWithCache(ctx, db, s.s3Cl, sa)
+	var b *bytes.Buffer
+
+	// 1. Try S3 cache if configured
+	if s.s3Cl != nil && s.posterCacheS3Bucket != "" {
+		cl := s.s3Cl.Get()
+		cacheCtx, cacheCancel := context.WithTimeout(ctx, 1*time.Second)
+		b, err = s.getStillFromCache(cacheCtx, cl, sa)
+		cacheCancel()
+		if err != nil {
+			log.WithError(err).Warn("still: S3 cache get failed, falling through")
+		}
+	}
+
+	// 2. Cache Hit -> Serve immediately
+	if b != nil {
+		etag := s.generateETag(b.Bytes())
+
+		if match := c.Request.Header.Get("If-None-Match"); match != "" && match == etag {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		c.Header("Content-Type", "image/jpeg")
+		c.Header("Content-Length", strconv.Itoa(b.Len()))
+		c.Header("ETag", etag)
+		c.Header("Cache-Control", "public, max-age=86400")
+		c.Status(http.StatusOK)
+
+		_, _ = io.Copy(c.Writer, b)
+		return
+	}
+
+	// 3. Cache Miss -> Lookup the original still URL
+	stillURL, err := s.getOriginalStillURL(ctx, db, sa)
 	if err != nil {
-		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get resized still"))
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get original still URL"))
 		return
 	}
 
-	etag := s.generateETag(b.Bytes())
+	// 4. Trigger background download, resize, and S3-caching (if S3 is configured)
+	if s.s3Cl != nil && s.posterCacheS3Bucket != "" {
+		go func(sa *StillArgs) {
+			// Detached context so caching completes even if client request is aborted
+			detachedCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
 
-	if match := c.Request.Header.Get("If-None-Match"); match != "" && match == etag {
-		c.Status(http.StatusNotModified)
-		return
+			resizedBuf, resizeErr := s.getResizedJPEGStill(detachedCtx, s.pg.Get(), sa)
+			if resizeErr != nil {
+				log.WithError(resizeErr).Warnf("still: background resize failed for episode still %s S%dE%d", sa.videoID, sa.season, sa.episode)
+				return
+			}
+			cl := s.s3Cl.Get()
+			if putErr := s.putStillToCache(detachedCtx, cl, sa, resizedBuf); putErr != nil {
+				log.WithError(putErr).Warn("still: S3 background cache put failed")
+			} else {
+				log.Infof("still: successfully cached resized still in background for episode %s S%dE%d", sa.videoID, sa.season, sa.episode)
+			}
+		}(sa)
 	}
-	c.Header("Content-Type", "image/jpeg")
-	c.Header("Content-Length", strconv.Itoa(b.Len()))
-	c.Header("ETag", etag)
-	c.Header("Cache-Control", "public, max-age=86400")
-	c.Status(http.StatusOK)
 
-	_, _ = io.Copy(c.Writer, b)
+	// 5. Instantly redirect browser to original CDN URL
+	c.Redirect(http.StatusTemporaryRedirect, stillURL)
 }
 
-func (s *Handler) getResizedJPEGStillWithCache(ctx context.Context, db *pg.DB, s3Cl *cs.S3Client, args *StillArgs) (*bytes.Buffer, error) {
-	if s3Cl == nil || s.posterCacheS3Bucket == "" {
-		return s.getResizedJPEGStill(ctx, db, args)
-	}
-	cl := s3Cl.Get()
-	// Create a timeout context for the S3 cache check so we don't block the request if S3 is slow/hanging
-	cacheCtx, cacheCancel := context.WithTimeout(ctx, 1*time.Second)
-	b, err := s.getStillFromCache(cacheCtx, cl, args)
-	cacheCancel()
+func (s *Handler) getOriginalStillURL(ctx context.Context, db *pg.DB, args *StillArgs) (string, error) {
+	emd, err := models.GetEpisodeMetadata(ctx, db, args.videoID, int16(args.season), int16(args.episode))
 	if err != nil {
-		log.WithError(err).Warn("still: S3 cache get failed, falling through to direct fetch")
-	} else if b != nil {
-		return b, nil
+		return "", errors.Wrap(err, "failed to get episode metadata")
 	}
-
-	// Create a detached context for downloading, resizing, and caching
-	// so it completes in the background and writes to S3 even if the client
-	// context gets canceled.
-	detachedCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	b, err = s.getResizedJPEGStill(detachedCtx, db, args)
-	if err != nil {
-		return nil, err
+	if emd == nil || emd.StillURL == nil || *emd.StillURL == "" {
+		return "", errors.New("no still url for episode")
 	}
-	if err = s.putStillToCache(detachedCtx, cl, args, b); err != nil {
-		log.WithError(err).Warn("still: S3 cache put failed, serving uncached")
-	}
-	return b, nil
+	return *emd.StillURL, nil
 }
 
 func (s *Handler) getResizedJPEGStill(ctx context.Context, db *pg.DB, args *StillArgs) (*bytes.Buffer, error) {
-	emd, err := models.GetEpisodeMetadata(ctx, db, args.videoID, int16(args.season), int16(args.episode))
+	stillURL, err := s.getOriginalStillURL(ctx, db, args)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get episode metadata")
-	}
-	if emd == nil || emd.StillURL == nil || *emd.StillURL == "" {
-		return nil, errors.New("no still url for episode")
+		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", *emd.StillURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", stillURL, nil)
 	if err != nil {
 		return nil, err
 	}

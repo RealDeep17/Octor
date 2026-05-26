@@ -23,7 +23,6 @@ import (
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/models"
 )
 
@@ -102,31 +101,99 @@ func (s *Handler) handlePoster(c *gin.Context, horizontal bool) {
 		return
 	}
 
-	b, err := s.getResizedJPEGPosterWithCache(ctx, db, s.s3Cl, pa)
+	var b *bytes.Buffer
 
+	// 1. Try S3 cache if configured
+	if s.s3Cl != nil && s.posterCacheS3Bucket != "" {
+		cl := s.s3Cl.Get()
+		cacheCtx, cacheCancel := context.WithTimeout(ctx, 1*time.Second)
+		b, err = s.getPosterFromCache(cacheCtx, cl, pa)
+		cacheCancel()
+		if err != nil {
+			log.WithError(err).Warn("poster: S3 cache get failed, falling through")
+		} else if b != nil {
+			// Verify aspect ratio of the cached image to prevent vertical/horizontal mismatch
+			cfg, _, decodeErr := image.DecodeConfig(bytes.NewReader(b.Bytes()))
+			if decodeErr == nil {
+				isCachedHorizontal := cfg.Width > cfg.Height
+				var hasOnlyHorizontal bool
+				md, _ := s.getPosterMetadata(ctx, db, pa.t, pa.imdbID)
+				if md != nil {
+					isAdult := strings.Contains(md.PosterURL, "theporndb.net") ||
+						strings.Contains(md.PosterURL, "stashdb.org") ||
+						strings.HasPrefix(md.VideoID, "tpdb:") ||
+						strings.HasPrefix(md.VideoID, "tpdb=") ||
+						strings.HasPrefix(md.VideoID, "tpdb_jav:") ||
+						strings.HasPrefix(md.VideoID, "tpdb_jav=") ||
+						strings.HasPrefix(md.VideoID, "stash:") ||
+						strings.HasPrefix(md.VideoID, "stash=")
+					if isAdult || (md.PosterURL == "" && md.PosterHorizontalURL != "") {
+						hasOnlyHorizontal = true
+					}
+				}
+				if pa.horizontal && !isCachedHorizontal {
+					log.Warnf("poster: Cached poster for %s is vertical but horizontal was requested, bypassing cache", pa.imdbID)
+					b = nil
+				} else if !pa.horizontal && isCachedHorizontal && !hasOnlyHorizontal {
+					log.Warnf("poster: Cached poster for %s is horizontal but vertical was requested, bypassing cache", pa.imdbID)
+					b = nil
+				}
+			}
+		}
+	}
+
+	// 2. Cache Hit -> Serve immediately
+	if b != nil {
+		etag := s.generateETag(b.Bytes())
+
+		if match := c.Request.Header.Get("If-None-Match"); match != "" && match == etag {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		c.Header("Content-Type", "image/jpeg")
+		c.Header("Content-Length", strconv.Itoa(b.Len()))
+		c.Header("ETag", etag)
+		c.Header("Cache-Control", "public, max-age=86400")
+		c.Status(http.StatusOK)
+
+		_, _ = io.Copy(c.Writer, b)
+		return
+	}
+
+	// 3. Cache Miss -> Lookup the original poster URL
+	posterURL, err := s.getOriginalPosterURL(ctx, db, pa)
 	if err != nil {
 		if errors.Is(err, errPosterNotFound) {
 			_ = c.AbortWithError(http.StatusNotFound, err)
 			return
 		}
-		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get resized image"))
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to get original poster URL"))
 		return
 	}
 
-	etag := s.generateETag(b.Bytes())
+	// 4. Trigger background download, resize, and S3-caching (if S3 is configured)
+	if s.s3Cl != nil && s.posterCacheS3Bucket != "" {
+		go func(pa *PosterArgs) {
+			// Detached context so caching completes even if client request is aborted
+			detachedCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
 
-	if match := c.Request.Header.Get("If-None-Match"); match != "" && match == etag {
-		c.Status(http.StatusNotModified)
-		return
+			resizedBuf, resizeErr := s.getResizedJPEGPoster(detachedCtx, s.pg.Get(), pa)
+			if resizeErr != nil {
+				log.WithError(resizeErr).Warnf("poster: background resize failed for %s", pa.imdbID)
+				return
+			}
+			cl := s.s3Cl.Get()
+			if putErr := s.putPosterToCache(detachedCtx, cl, pa, resizedBuf); putErr != nil {
+				log.WithError(putErr).Warn("poster: S3 background cache put failed")
+			} else {
+				log.Infof("poster: successfully cached resized poster in background for %s", pa.imdbID)
+			}
+		}(pa)
 	}
-	c.Header("Content-Type", "image/jpeg")
-	c.Header("Content-Length", strconv.Itoa(b.Len()))
-	c.Header("ETag", etag)
-	c.Header("Cache-Control", "public, max-age=86400")
-	c.Status(http.StatusOK)
 
-	_, _ = io.Copy(c.Writer, b)
-
+	// 5. Instantly redirect browser to original CDN URL
+	c.Redirect(http.StatusTemporaryRedirect, posterURL)
 }
 
 func (s *Handler) generateETag(data []byte) string {
@@ -134,13 +201,13 @@ func (s *Handler) generateETag(data []byte) string {
 	return fmt.Sprintf(`"%x"`, sum[:])
 }
 
-func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterArgs) (*image.NRGBA, error) {
+func (s *Handler) getOriginalPosterURL(ctx context.Context, db *pg.DB, args *PosterArgs) (string, error) {
 	md, err := s.getPosterMetadata(ctx, db, args.t, args.imdbID)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if md == nil {
-		return nil, errors.Wrapf(errPosterNotFound, "%s %s", args.t, args.imdbID)
+		return "", errors.Wrapf(errPosterNotFound, "%s %s", args.t, args.imdbID)
 	}
 
 	var posterURL string
@@ -173,7 +240,15 @@ func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterA
 	}
 
 	if posterURL == "" {
-		return nil, errors.Wrapf(errPosterNotFound, "%s %s", args.t, args.imdbID)
+		return "", errors.Wrapf(errPosterNotFound, "%s %s", args.t, args.imdbID)
+	}
+	return posterURL, nil
+}
+
+func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterArgs) (*image.NRGBA, error) {
+	posterURL, err := s.getOriginalPosterURL(ctx, db, args)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", posterURL, nil)
@@ -197,74 +272,6 @@ func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterA
 	resized := imaging.Resize(srcImg, args.width, 0, imaging.Linear)
 
 	return resized, nil
-}
-
-func (s *Handler) getResizedJPEGPosterWithCache(ctx context.Context, db *pg.DB, s3Cl *cs.S3Client, args *PosterArgs) (*bytes.Buffer, error) {
-	// Skip cache entirely when S3 is not configured or the bucket name is
-	// empty — an empty bucket causes MinIO to reject the request with an
-	// error that is NOT ErrCodeNoSuchKey, which previously propagated as a
-	// hard 500 and silently removed the poster from the UI.
-	if s3Cl == nil || s.posterCacheS3Bucket == "" {
-		return s.getResizedJPEGPoster(ctx, db, args)
-	}
-	cl := s3Cl.Get()
-	// Create a timeout context for the S3 cache check so we don't block the request if S3 is slow/hanging
-	cacheCtx, cacheCancel := context.WithTimeout(ctx, 1*time.Second)
-	b, err := s.getPosterFromCache(cacheCtx, cl, args)
-	cacheCancel()
-	if err != nil {
-		// Cache read failure is non-fatal: log and fall through to a
-		// direct fetch so the poster still renders.
-		log.WithError(err).Warn("poster: S3 cache get failed, falling through to direct fetch")
-	} else if b != nil {
-		// Verify aspect ratio of the cached image to prevent vertical/horizontal mismatch
-		cfg, _, decodeErr := image.DecodeConfig(bytes.NewReader(b.Bytes()))
-		if decodeErr == nil {
-			isCachedHorizontal := cfg.Width > cfg.Height
-			var hasOnlyHorizontal bool
-			md, _ := s.getPosterMetadata(ctx, db, args.t, args.imdbID)
-			if md != nil {
-				isAdult := strings.Contains(md.PosterURL, "theporndb.net") ||
-					strings.Contains(md.PosterURL, "stashdb.org") ||
-					strings.HasPrefix(md.VideoID, "tpdb:") ||
-					strings.HasPrefix(md.VideoID, "tpdb=") ||
-					strings.HasPrefix(md.VideoID, "tpdb_jav:") ||
-					strings.HasPrefix(md.VideoID, "tpdb_jav=") ||
-					strings.HasPrefix(md.VideoID, "stash:") ||
-					strings.HasPrefix(md.VideoID, "stash=")
-				if isAdult || (md.PosterURL == "" && md.PosterHorizontalURL != "") {
-					hasOnlyHorizontal = true
-				}
-			}
-			if args.horizontal && !isCachedHorizontal {
-				log.Warnf("poster: Cached poster for %s is vertical but horizontal was requested, bypassing cache", args.imdbID)
-				b = nil
-			} else if !args.horizontal && isCachedHorizontal && !hasOnlyHorizontal {
-				log.Warnf("poster: Cached poster for %s is horizontal but vertical was requested, bypassing cache", args.imdbID)
-				b = nil
-			}
-		}
-		if b != nil {
-			return b, nil
-		}
-	}
-
-	// Create a detached context for downloading, resizing, and caching
-	// so it completes in the background and writes to S3 even if the client
-	// context gets canceled (e.g. on quick user refresh / navigate away).
-	detachedCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	b, err = s.getResizedJPEGPoster(detachedCtx, db, args)
-	if err != nil {
-		return nil, err
-	}
-	// Cache write failure is also non-fatal: the image was fetched
-	// successfully, so serve it and just skip caching this time.
-	if err = s.putPosterToCache(detachedCtx, cl, args, b); err != nil {
-		log.WithError(err).Warn("poster: S3 cache put failed, serving uncached")
-	}
-	return b, nil
 }
 
 func (s *Handler) getResizedJPEGPoster(ctx context.Context, db *pg.DB, args *PosterArgs) (*bytes.Buffer, error) {
