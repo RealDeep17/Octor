@@ -723,7 +723,7 @@ func (h *Handler) getAllUserMovies(ctx context.Context, db *pg.DB, sort models.S
 		JoinOn("movie.resource_id = l.resource_id").
 		Join("left join movie_metadata as mmd").
 		JoinOn("movie.movie_metadata_id = mmd.movie_metadata_id").
-		Where("mmd.movie_metadata_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%' AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)')").
+		Where("(mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
 		Relation("MovieMetadata")
 
 	if q != "" {
@@ -1110,7 +1110,7 @@ func (h *Handler) getAllUserAdults(ctx context.Context, db *pg.DB, sort models.S
 		JoinOn("movie.resource_id = l.resource_id").
 		Join("left join movie_metadata as mmd").
 		JoinOn("movie.movie_metadata_id = mmd.movie_metadata_id").
-		Where("(mmd.video_id LIKE 'tpdb:%' OR mmd.video_id LIKE 'tpdb_jav:%' OR mmd.video_id LIKE 'stash:%') OR (mmd.movie_metadata_id IS NULL AND movie.path ~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)')").
+		Where("(mmd.video_id LIKE 'tpdb:%' OR mmd.video_id LIKE 'tpdb_jav:%' OR mmd.video_id LIKE 'stash:%') OR movie.path ~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
 		Relation("MovieMetadata")
 
 	if q != "" {
