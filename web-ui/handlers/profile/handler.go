@@ -10,6 +10,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/urfave/cli"
 	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/handlers/admin"
 	"github.com/webtor-io/web-ui/models"
 	at "github.com/webtor-io/web-ui/services/access_token"
 	"github.com/webtor-io/web-ui/services/auth"
@@ -45,6 +46,7 @@ type Data struct {
 	ErrKey                string
 	DisableWebDAV         bool
 	DisableEmbed          bool
+	AutoVaultEnabled      bool
 }
 
 type Handler struct {
@@ -74,6 +76,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	gr.Use(auth.HasAuth)
 	gr.POST("/delete", h.delete)
 	gr.POST("/skin", h.updateSkin)
+	gr.POST("/settings", h.settingsSave)
 }
 
 type skinUpdateReq struct {
@@ -232,6 +235,13 @@ func (s *Handler) get(c *gin.Context) {
 		}
 	}
 
+	// Load AutoVault settings
+	sIndex, err := admin.LoadSettings()
+	autoVault := false
+	if err == nil && sIndex.AutoVault != nil {
+		autoVault = *sIndex.AutoVault
+	}
+
 	s.tb.Build("profile/get").HTML(http.StatusOK, web.NewContext(c).WithData(&Data{
 		StremioAddonURL:       stremioURL,
 		WebDAVURL:             webdavURL,
@@ -244,5 +254,25 @@ func (s *Handler) get(c *gin.Context) {
 		ErrKey:                c.Query("err"),
 		DisableWebDAV:         s.disableWebDAV,
 		DisableEmbed:          s.disableEmbed,
+		AutoVaultEnabled:      autoVault,
 	}))
+}
+
+func (h *Handler) settingsSave(c *gin.Context) {
+	if !auth.IsAdmin(c) {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
+	s, err := admin.LoadSettings()
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	autoVault := c.PostForm("auto_vault") == "1"
+	s.AutoVault = &autoVault
+	if err := admin.SaveSettings(s); err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	web.RedirectWithSuccessAndMessage(c, "toast.settingsSaved")
 }

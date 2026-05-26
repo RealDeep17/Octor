@@ -32,6 +32,7 @@ type Data struct {
 	Tool             *common.Tool
 	ContinueWatching []*models.WatchHistory
 	Addons           []addonView
+	SearchQuery      string
 }
 
 type Handler struct {
@@ -67,6 +68,7 @@ func (s *Handler) index(c *gin.Context) {
 	data := &Data{
 		Instruction: instruction,
 		Tool:        currentTool,
+		SearchQuery: c.Query("q"),
 	}
 
 	// Fetch continue watching and addons for authenticated users

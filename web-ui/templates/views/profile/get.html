@@ -78,6 +78,34 @@
         <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">Admin Controls</h2>
         <div class="flex-1 h-px bg-o-line/50"></div>
     </div>
+    
+    <!-- Auto-Vault Toggle -->
+    <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
+        <div class="flex items-start gap-4">
+            <div class="flex-1">
+                <h3 class="text-sm font-semibold mb-1">Auto-Vault on Automation Ingest</h3>
+                <p class="text-xs text-o-muted leading-relaxed">
+                    Automatically queue torrents pushed via the Transmission RPC
+                    (<span class="font-mono bg-base-200 px-1 rounded text-[10px]">/transmission/rpc</span>)
+                    for vault storage. Also set via
+                    <span class="font-mono bg-base-200 px-1 rounded text-[10px]">AUTOMATION_AUTO_VAULT=true</span>.
+                </p>
+            </div>
+            <form method="post" action="{{ langPath $.Lang "/profile/settings" }}" data-async-target="main">
+                <label class="cursor-pointer pt-0.5 flex items-center gap-2">
+                    {{ if .Data.AutoVaultEnabled }}
+                      <span class="badge badge-sm bg-o-primaryL/10 border-o-primaryL/30 text-o-primaryL">On</span>
+                    {{ else }}
+                      <span class="badge badge-sm bg-w-muted/10 border-o-line text-o-muted">Off</span>
+                    {{ end }}
+                    <!-- Hidden input ensures value=0 when checkbox is unchecked -->
+                    <input type="hidden" name="auto_vault" value="0">
+                    <input type="checkbox" name="auto_vault" value="1" class="toggle toggle-soft toggle-primary toggle-sm" {{ if .Data.AutoVaultEnabled }}checked{{ end }} onchange="this.form.submit()" />
+                </label>
+            </form>
+        </div>
+    </div>
+
     <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
         <h3 class="text-sm font-semibold mb-1">Metadata Enrichment</h3>
 
