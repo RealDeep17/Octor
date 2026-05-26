@@ -318,13 +318,43 @@ function is4kStream(parsedInfo) {
     return parsedInfo.labels.some(l => l === '4K');
 }
 
+function isSeasonPack(title) {
+    const cleanTitle = String(title || '').toLowerCase();
+    // 1. Explicit season words/ranges: "season 1", "season 1-3", "seasons 1-5", "complete season", "complete series"
+    if (/\b(?:seasons?|temporadas?)\s*\d{1,2}(?:\s*-\s*\d{1,2})?\b/.test(cleanTitle)) return true;
+    if (/\bcomplete\s+season\b/.test(cleanTitle)) return true;
+    if (/\bcomplete\s+series\b/.test(cleanTitle)) return true;
+    if (/\bseason\s*complete\b/.test(cleanTitle)) return true;
+    
+    // 2. Season range: "s01-s03", "s01-03", "s1-3"
+    if (/\bs\d{1,2}\s*-\s*s?\d{1,2}\b/.test(cleanTitle)) return true;
+
+    // 3. Episode ranges: "s01e01-12", "s1e01-e12", "s01e01-s01e12", "s5e1-8"
+    if (/\bs\d{1,2}e\d{1,2}\s*-\s*(?:e?\d{1,2})\b/.test(cleanTitle)) return true;
+    if (/\bs\d{1,2}e\d{1,2}\s*-\s*\d{1,2}\b/.test(cleanTitle)) return true;
+    if (/\bs\d{1,2}e\d{1,2}\s*(?:of|\/)\s*\d{1,2}\b/.test(cleanTitle)) return true;
+    if (/\bs\d{1,2}\s*e\d{1,2}\s*-\s*e?\d{1,2}\b/.test(cleanTitle)) return true;
+    if (/\bs\d{1,2}\s*e\d{1,2}\s*-\s*\d{1,2}\b/.test(cleanTitle)) return true;
+    if (/\b(?:episodes?|eps?)\s*\d{1,2}\s*-\s*\d{1,2}\b/.test(cleanTitle)) return true;
+
+    // 4. "s01" or "s1" alone (without single episode "eXX" marker)
+    // E.g. "The Boys S05 2160p" but not "The Boys S05E01 2160p"
+    if (/\bs\d{1,2}\b/.test(cleanTitle)) {
+        if (!/\bs\d{1,2}\s*e\d{1,2}\b/.test(cleanTitle) && !/\bs\d{1,2}e\d{1,2}\b/.test(cleanTitle)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const EXTRA_LABEL_PATTERNS = [
     { label: '8K', re: /\b(?:4320p|8k)\b/i },
     { label: '4K', re: /\b(?:2160p|4k|uhd)\b/i },
     { label: '1080p', re: /\b1080p\b/i },
     { label: '720p', re: /\b720p\b/i },
     { label: '480p', re: /\b(?:480p|sd|576p)\b/i },
-    { label: 'Pack', re: /\b(?:season|series|complete|collection|pack|temporada)\b.*\b(?:complete|completa|pack|s\d{1,2}|season|\d+\s*(?:-|&|and|y)\s*\d+)\b/i },
+    { label: 'Season', re: /\b(?:seasons?|temporadas?)\s*\d{1,2}(?:\s*-\s*\d{1,2})?\b|\bcomplete\s+season\b|\bcomplete\s+series\b|\bseason\s*complete\b|\bs\d{1,2}\s*-\s*s?\d{1,2}\b|\bs\d{1,2}e\d{1,2}\s*-\s*(?:e?\d{1,2})\b|\bs\d{1,2}e\d{1,2}\s*(?:of|\/)\s*\d{1,2}\b|\bs\d{1,2}e\d{1,2}\s*-\s*\d{1,2}\b|\bs\d{1,2}\s*e\d{1,2}\s*-\s*e?\d{1,2}\b|\bs\d{1,2}\s*e\d{1,2}\s*-\s*\d{1,2}\b/i },
+    { label: 'Pack', re: /\b(?:pack|collection|siterip|playlist|discography|anthology|trilogy|quadrilogy|tetralogy|duology)\b|\b(?:[4-9]|\d{2,})\s*(?:videos?|files?)\b/i },
     { label: 'DV', re: /\b(?:dolby[ .-]?vision|dovi|dv)\b/i },
     { label: 'HDR10+', re: /\b(?:hdr10\+|hdr10plus)\b/i },
     { label: 'HDR10', re: /\bhdr10\b/i },
@@ -371,7 +401,7 @@ const EXTRA_LABEL_PATTERNS = [
 
 const LABEL_ORDER = [
     '8K', '4K', '1080p', '720p', '480p',
-    'Pack',
+    'Season', 'Pack',
     'DV', 'HDR10+', 'HDR10', 'HDR',
     'REMUX', 'BluRay', 'BRRip', 'BDRip', 'WEB-DL', 'WEBRip', 'HDTV', 'DVDRip', 'CAM', 'TS',
     'Multi-Audio', 'Dual-Audio', 'Dubbed', 'Subbed', 'Multi-Sub',
@@ -388,6 +418,8 @@ function canonicalLabel(label) {
     if (compact === '1080p') return '1080p';
     if (compact === '720p') return '720p';
     if (compact === '480p' || compact === 'sd' || compact === '576p') return '480p';
+    if (compact === 'season') return 'Season';
+    if (compact === 'pack') return 'Pack';
     if (compact === 'dolbyvision' || compact === 'dovi' || compact === 'dv') return 'DV';
     if (compact === 'hdr10+' || compact === 'hdr10plus') return 'HDR10+';
     if (compact === 'hdr10') return 'HDR10';
@@ -495,6 +527,34 @@ function enrichStreamInfo(stream) {
             labels.push(label);
         }
     }
+
+    const cleanTitle = text.toLowerCase();
+    const isSeason = isSeasonPack(text);
+    let isPack = false;
+
+    // Pack matches keywords or files >= 5
+    if (/\b(?:pack|collection|siterip|playlist|discography|anthology|trilogy|quadrilogy|tetralogy|duology)\b/i.test(cleanTitle)) {
+        isPack = true;
+    }
+    if (/\b(?:[4-9]|\d{2,})\s*(?:videos?|files?)\b/i.test(cleanTitle)) {
+        isPack = true;
+    }
+    if (stream.files >= 5) {
+        isPack = true;
+    }
+    if (isSeason) {
+        isPack = true; // pack is backup of season
+    }
+
+    if (isSeason && !seen.has('season')) {
+        seen.add('season');
+        labels.push('Season');
+    }
+    if (isPack && !seen.has('pack')) {
+        seen.add('pack');
+        labels.push('Pack');
+    }
+
     info.labels = sortLabels(labels);
     info.size = parseStreamSize(stream);
     info.seeds = parseStreamSeeds(stream);
@@ -549,7 +609,7 @@ function streamSearchText(stream, parsedInfo, langs) {
 
 const FILTER_GROUPS = {
     resolution: ['8K', '4K', '1080p', '720p', '480p'],
-    pack: ['Pack'],
+    seasonPack: ['Season', 'Pack'],
     videoRange: ['DV', 'HDR10+', 'HDR10', 'HDR'],
     sourceRelease: ['REMUX', 'BluRay', 'BRRip', 'BDRip', 'WEB-DL', 'WEBRip', 'HDTV', 'DVDRip', 'CAM', 'TS'],
     audioSubtitle: ['Multi-Audio', 'Dual-Audio', 'Dubbed', 'Subbed', 'Multi-Sub'],
@@ -558,7 +618,7 @@ const FILTER_GROUPS = {
     containers: ['.mkv', '.mp4', '.avi'],
 };
 
-const HIGH_VALUE_LABELS = ['8K', '4K', '1080p', '720p', '480p', 'Pack'];
+const HIGH_VALUE_LABELS = ['8K', '4K', '1080p', '720p', '480p', 'Season', 'Pack'];
 
 function getLabelGroup(label) {
     const lower = String(label || '').toLowerCase();
@@ -813,7 +873,7 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
         if (allLangs.length > 0) return true;
         return allLabels.some(lbl => {
             const group = getLabelGroup(lbl);
-            return group && group !== 'resolution' && group !== 'pack';
+            return group && group !== 'resolution' && group !== 'seasonPack';
         });
     }, [allSources, allLabels, allLangs]);
 

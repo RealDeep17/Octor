@@ -320,6 +320,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
 
         dispatch({ type: 'SEARCH_RESULTS', results: merged });
         window.umami?.track('discover-search', { query, count: merged.length });
+
         fetchUserStatuses(merged.map(m => m.id)).then(statuses => {
             if (Object.keys(statuses).length) dispatch({ type: 'USER_STATUSES_MERGED', statuses });
         });
@@ -459,15 +460,18 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
             // Fetch meta in parallel with streams to enrich modal with description/rating.
             const metaPromise = client.fetchMeta(type, id).catch(() => null);
             const streamsPromise = loadStreams(type, id, { ...item, ...cardMeta });
-            const meta = await metaPromise;
-            await streamsPromise;
-            if (meta) {
-                enrichFromMeta(meta);
-                const cur = stateRef.current?.modal;
-                if (cur && cur.metaId === id.split(':')[0]) {
-                    dispatch({ type: 'SHOW_MODAL', modal: { ...cur, ...cardMeta, title: meta.name || cur.title, poster: meta.poster || cur.poster } });
+            
+            metaPromise.then(meta => {
+                if (meta) {
+                    enrichFromMeta(meta);
+                    const cur = stateRef.current?.modal;
+                    if (cur && cur.metaId === id.split(':')[0]) {
+                        dispatch({ type: 'SHOW_MODAL', modal: { ...cur, ...cardMeta, title: meta.name || cur.title, poster: meta.poster || cur.poster } });
+                    }
                 }
-            }
+            });
+
+            await streamsPromise;
         }
     }, [client, loadStreams, ensureManifestsLoaded]);
 
@@ -523,14 +527,17 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
             // Fetch meta in parallel with stream loading so we can offer "back to episodes"
             const metaPromise = client.fetchMeta(type, id).catch(() => null);
 
-            await loadStreams(type, epId, { name: epName, poster, year: item?.year, releaseInfo: item?.releaseInfo, imdbRating: item?.imdbRating, description: item?.description }, {});
+            metaPromise.then(meta => {
+                if (meta?.videos?.length > 0) {
+                    const backToEpisodes = { title: name, poster, meta, itemId: id, itemType: type, season: ep.season, year: item?.year, releaseInfo: item?.releaseInfo, imdbRating: item?.imdbRating, description: item?.description };
+                    const cur = stateRef.current?.modal;
+                    if (cur && cur.metaId === id.split(':')[0]) {
+                        dispatch({ type: 'SHOW_MODAL', modal: { ...cur, backToEpisodes } });
+                    }
+                }
+            });
 
-            const meta = await metaPromise;
-            if (meta?.videos?.length > 0) {
-                const backToEpisodes = { title: name, poster, meta, itemId: id, itemType: type, season: ep.season, year: item?.year, releaseInfo: item?.releaseInfo, imdbRating: item?.imdbRating, description: item?.description };
-                const cur = stateRef.current?.modal;
-                if (cur) dispatch({ type: 'SHOW_MODAL', modal: { ...cur, backToEpisodes } });
-            }
+            await loadStreams(type, epId, { name: epName, poster, year: item?.year, releaseInfo: item?.releaseInfo, imdbRating: item?.imdbRating, description: item?.description }, {});
         } else if (item) {
             cardClick(item);
         } else {
@@ -569,10 +576,10 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         url.push({ season, episode: null });
     }, []);
 
-    const handleStreamClick = useCallback(async (infoHash, fileIdx) => {
+    const handleStreamClick = useCallback(async (resource, fileIdx, customTitle, customPoster) => {
         const curState = stateRef.current || state;
-        const currentTitle = curState.modal?.title;
-        const currentPoster = curState.modal?.poster;
+        const currentTitle = customTitle || curState.modal?.title || 'Loading Torrent';
+        const currentPoster = customPoster || curState.modal?.poster;
         const currentBackToEpisodes = curState.modal?.backToEpisodes;
 
         dispatch({ type: 'SHOW_MODAL', modal: {
@@ -581,7 +588,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
 
         try {
             const formData = new FormData();
-            formData.append('resource', infoHash);
+            formData.append('resource', resource);
             formData.append('_csrf', window._CSRF);
             const metaId = curState.modal?.metaId;
             if (metaId) formData.append('hint_video_id', metaId);
@@ -619,6 +626,10 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
     const selectSearchType = useCallback((searchType) => {
         url.push({ 'search-type': searchType === 'all' ? null : searchType });
         dispatch({ type: 'SELECT_SEARCH_TYPE', searchType });
+    }, []);
+
+    const toggleTrackerSection = useCallback(() => {
+        dispatch({ type: 'TOGGLE_TRACKER_SECTION' });
     }, []);
 
     // Keep refs in sync for popstate handler
@@ -1340,7 +1351,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
             {/* Sticky tab bar — stays below navbar (72px) on scroll */}
             <div class="sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 bg-w-bg/90 backdrop-blur-lg border-b border-w-line/30">
                 <AddonHealthChip addons={state.addons} onRetry={retryAddons} />
-                {state.isSearchMode ? (
+                 {state.isSearchMode ? (
                     <SearchTabs
                         searchResults={state.searchResults}
                         searchTypes={searchTypes}
