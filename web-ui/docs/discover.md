@@ -111,11 +111,16 @@ Controlled by `{{ if not .Tool }}` — hidden when the page is loaded as a tool/
 
 ## Streams & Episodes
 
-- Clicking a **movie** opens a stream modal with streams from all stream-capable addons
-- Clicking a **series** first fetches meta from Cinemeta (then falls back to user addons) to show an episode picker grouped by season, then fetches streams for the selected episode
-- Streams with an info hash link to `/{infoHash}` for playback via Octor
-- Stream filters (source, label, language) are reactive — `useMemo` recomputes the filtered list on every filter change
-- "Back to episodes" navigation available from streams view
+*   **Clicking a movie** opens a stream modal with streams from all stream-capable addons.
+*   **Clicking a series** first fetches meta from Cinemeta (then falls back to user addons) to show an episode picker grouped by season, then fetches streams for the selected episode.
+*   **Instant Metadata Modal Rendering**: Clicking a card fetches Cinemata/Stremio metadata in parallel with torrent streams. The metadata promise resolves asynchronously, instantly rendering the modal's description, IMDb rating, release year, and poster in under **300ms** without blocking sequentially on the slow 5-15s torrent swarm streams search.
+*   **Season & Pack Stream Labeling**:
+    *   Streams are automatically parsed and classified as a **Season** (for verified season releases/ranges like `S5E1-8 of 8`, `S01-03`, `Season 5`) or a **Pack** (for general Sitrips, Playlists, or torrents with a files count $\ge 5$ to prevent standard movie torrents with a few accessory files from being mislabeled).
+    *   Unified under a single `'seasonPack'` filter group inside `FILTER_GROUPS` to support logical OR filters, and promoted to high-value quick pills next to search and sorting controls.
+*   **Publish Age/Time Exposure**: Exposes the relative upload time of the torrent next to size and indexer as `📅 {ageStr}` (using relative age formats like `3d ago`, `2mo ago`, `1y ago`) inside [DirectSearchApp.jsx](file:///srv/octor/web-ui/assets/src/js/lib/discover/components/DirectSearchApp.jsx).
+*   **Streams with an info hash** link to `/{infoHash}` for playback via Octor.
+*   **Stream filters** (source, label, language) are reactive — `useMemo` recomputes the filtered list on every filter change.
+*   **"Back to episodes" navigation** is available from the streams view.
 
 ## Addon Wizard
 
