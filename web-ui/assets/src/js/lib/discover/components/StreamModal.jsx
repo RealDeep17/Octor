@@ -1180,6 +1180,7 @@ function StreamRow({ stream, info, onStreamClick }) {
     const infoHash = extractInfoHash(stream);
     const fileIdx = extractFileIdx(stream);
     const titleLines = (stream.title || '').split('\n').filter(Boolean);
+    const displayedLabels = info.labels.filter(label => !(label === 'Pack' && info.labels.includes('Season')));
 
     const content = (
         <>
@@ -1189,7 +1190,7 @@ function StreamRow({ stream, info, onStreamClick }) {
             <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="text-sm font-medium">{info.source}</span>
-                    {info.labels.map(label => (
+                    {displayedLabels.map(label => (
                         <span key={label} class="bg-w-cyan/10 text-w-cyan text-[10px] px-1.5 py-0.5 rounded font-medium">{label}</span>
                     ))}
                 </div>

@@ -366,7 +366,7 @@ function StreamRow({ stream, info, onStreamClick }) {
 		}
 	}, [onStreamClick, stream, preparing]);
 
-	const langs = extractLanguages(stream.name);
+	const displayedLabels = info.labels.filter(label => !(label === 'Pack' && info.labels.includes('Season')));
 
 	return (
 		<div
@@ -387,12 +387,12 @@ function StreamRow({ stream, info, onStreamClick }) {
 				</div>
 				{/* Line 2: Tags + Size + Indexer + Peers */}
 				<div class="flex items-center gap-2 flex-wrap text-xs text-w-sub">
-					{info.labels.map(label => (
+					{displayedLabels.map(label => (
 						<span key={label} class={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider ${getLabelBadgeClass(label)}`}>
 							{label}
 						</span>
 					))}
-					{info.labels.length > 0 && <span class="text-w-sub/40 text-[10px] select-none">|</span>}
+					{displayedLabels.length > 0 && <span class="text-w-sub/40 text-[10px] select-none">|</span>}
 					<span class="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider bg-[#374151] text-[#f3f4f6] flex items-center gap-1 font-mono">
 						👤 {seeds}
 					</span>
