@@ -67,6 +67,9 @@
 - [x] **Vault Selective Vaulting:** Implemented the ability for users to select specific files from a torrent when pledging to the vault.
 - [x] **Selective Vaulting Cleanup:** Integrated the vault worker to honor file selection and prune unselected files from storage.
 - [x] **Prowlarr Tracker — Persistent Panel Fix:** Removed tracker from tab-switching logic. "Trackers" button is now pinned far-right in the search tab bar and toggles a results panel **below** the Cinemeta poster grid — Cinemeta results are never hidden. Panel persists until search is cleared. Backed by `showTrackerSection` / `TOGGLE_TRACKER_SECTION` in `discoverReducer.js`.
+- [x] **Accurate Season & Pack Labeling:** Unified `Season` and `Pack` labels under a single `seasonPack` group for clean logical `OR` filtering. Promoted both as high-value quick pills next to search and sorting bar in both Stream Modal and Direct Search App.
+- [x] **Non-Blocking Poster & Still Caching:** Replaced slow synchronous backend resizing on cache misses with immediate `302` client redirects to raw CDN URLs, while asynchronously downloading, resizing, and caching images to S3 in a background goroutine. Removes 10-second delays across all environments.
+- [x] **Direct Search Publish Time Exposure:** Exposed relative upload/publish ages (e.g. `3d ago`, `2mo ago`) dynamically as `📅 {ageStr}` in Direct Search result rows right beside size and indexer info tags.
 
 ---
 
