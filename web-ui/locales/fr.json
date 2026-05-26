@@ -29,7 +29,7 @@
     "home.ogDescription": "Plateforme torrent web pour diffuser et télécharger vos propres torrents directement dans le navigateur. Aucun logiciel requis.",
     "home.jsonLdDescription": "Diffusez et téléchargez des torrents directement dans votre navigateur. Aucun logiciel requis.",
     "home.badge": "Open-source · Aucune installation",
-    "home.heading": "Diffusez et téléchargez",
+    "home.heading": "Recherchez, streamez et téléchargez",
     "home.headingAccent": "des torrents dans votre navigateur",
     "home.subtitle": "Collez un lien magnet ou envoyez un fichier .torrent et commencez à regarder ou télécharger instantanément. Aucun client torrent requis.",
     "home.toolBadge": "Outil en ligne gratuit",
@@ -1076,5 +1076,6 @@
     "discover.streamsPartialFailureMany": "%v addons n'ont pas répondu — la liste peut être incomplète.",
     "profile.addons.refresh": "Actualiser",
     "profile.addons.refreshed": "Addon actualisé",
-    "profile.addons.refreshFailed": "Impossible d'actualiser l'addon"
+    "profile.addons.refreshFailed": "Impossible d'actualiser l'addon",
+    "home.searchSubtitle": "Recherchez et trouvez des films, séries et torrents parmi les meilleurs indexeurs publics instantanément."
 }

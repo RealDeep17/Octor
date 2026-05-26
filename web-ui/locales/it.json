@@ -29,7 +29,7 @@
     "home.ogDescription": "Piattaforma torrent web per guardare e scaricare i tuoi torrent direttamente nel browser. Nessun software richiesto.",
     "home.jsonLdDescription": "Guarda e scarica torrent direttamente nel tuo browser. Nessun software richiesto.",
     "home.badge": "Open-source · Nessuna installazione",
-    "home.heading": "Guarda e scarica",
+    "home.heading": "Cerca, streama e scarica",
     "home.headingAccent": "torrent nel tuo browser",
     "home.subtitle": "Incolla un link magnet o carica un file .torrent e inizia subito a guardare o scaricare. Nessun client torrent necessario.",
     "home.toolBadge": "Strumento online gratuito",
@@ -1076,5 +1076,6 @@
     "discover.streamsPartialFailureMany": "%v addon non hanno risposto — la lista potrebbe essere incompleta.",
     "profile.addons.refresh": "Aggiorna",
     "profile.addons.refreshed": "Addon aggiornato",
-    "profile.addons.refreshFailed": "Impossibile aggiornare l'addon"
+    "profile.addons.refreshFailed": "Impossibile aggiornare l'addon",
+    "home.searchSubtitle": "Cerca e trova film, serie e torrent dai migliori indexer pubblici all'istante."
 }

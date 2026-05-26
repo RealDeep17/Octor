@@ -29,7 +29,7 @@
     "home.ogDescription": "Webová torrentová platforma pro streamování a stahování vlastních torrentů přímo v prohlížeči. Žádný software.",
     "home.jsonLdDescription": "Streamuj a stahuj torrenty přímo v prohlížeči. Žádný software.",
     "home.badge": "Open-source · Bez instalace",
-    "home.heading": "Streamuj a stahuj",
+    "home.heading": "Hledejte, streamujte a stahujte",
     "home.headingAccent": "torrenty v prohlížeči",
     "home.subtitle": "Vlož magnet link nebo nahraj .torrent soubor a začni okamžitě sledovat nebo stahovat. Žádný torrent klient.",
     "home.toolBadge": "Bezplatný online nástroj",
@@ -1076,5 +1076,6 @@
     "discover.streamsPartialFailureMany": "%v doplňků neodpovídalo — seznam může být neúplný.",
     "profile.addons.refresh": "Obnovit",
     "profile.addons.refreshed": "Doplněk byl obnoven",
-    "profile.addons.refreshFailed": "Doplněk se nepodařilo obnovit"
+    "profile.addons.refreshFailed": "Doplněk se nepodařilo obnovit",
+    "home.searchSubtitle": "Hledejte a najděte filmy, seriály a torrenty z nejlepších veřejných indexerů okamžitě."
 }

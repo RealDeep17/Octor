@@ -29,7 +29,7 @@
     "home.ogDescription": "Webbasierte Torrent-Plattform zum Streamen und Herunterladen Ihrer Torrents direkt im Browser. Keine Software erforderlich.",
     "home.jsonLdDescription": "Streamen und laden Sie Torrents direkt in Ihrem Browser herunter. Keine Software erforderlich.",
     "home.badge": "Open Source · Keine Installation nötig",
-    "home.heading": "Streame und lade",
+    "home.heading": "Suchen, streamen und herunterladen",
     "home.headingAccent": "Torrents in deinem Browser",
     "home.subtitle": "Füge einen Magnet-Link ein oder lade eine .torrent-Datei hoch und starte sofort mit dem Ansehen oder Herunterladen. Kein Torrent-Client erforderlich.",
     "home.toolBadge": "Kostenloses Online-Tool",
@@ -1076,5 +1076,6 @@
     "discover.streamsPartialFailureMany": "%v Addons haben nicht geantwortet — die Liste könnte unvollständig sein.",
     "profile.addons.refresh": "Aktualisieren",
     "profile.addons.refreshed": "Addon aktualisiert",
-    "profile.addons.refreshFailed": "Addon konnte nicht aktualisiert werden"
+    "profile.addons.refreshFailed": "Addon konnte nicht aktualisiert werden",
+    "home.searchSubtitle": "Suchen und finden Sie Filme, Serien und Torrents von den besten öffentlichen Indexern sofort."
 }

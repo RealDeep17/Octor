@@ -29,7 +29,7 @@
     "home.ogDescription": "Plataforma torrent web para assistir e baixar seus próprios torrents direto no navegador. Sem software.",
     "home.jsonLdDescription": "Assista e baixe torrents direto no seu navegador. Sem software.",
     "home.badge": "Open-source · Sem instalação",
-    "home.heading": "Assista e baixe",
+    "home.heading": "Pesquise, transmita e baixe",
     "home.headingAccent": "torrents no seu navegador",
     "home.subtitle": "Cole um link magnet ou envie um arquivo .torrent e comece a assistir ou baixar na hora. Sem cliente torrent.",
     "home.toolBadge": "Ferramenta online gratuita",
@@ -1076,5 +1076,6 @@
     "discover.streamsPartialFailureMany": "%v addons não responderam — a lista pode estar incompleta.",
     "profile.addons.refresh": "Atualizar",
     "profile.addons.refreshed": "Addon atualizado",
-    "profile.addons.refreshFailed": "Falha ao atualizar o addon"
+    "profile.addons.refreshFailed": "Falha ao atualizar o addon",
+    "home.searchSubtitle": "Pesquise e encontre filmes, séries e torrents dos melhores indexadores públicos instantaneamente."
 }

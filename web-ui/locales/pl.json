@@ -29,7 +29,7 @@
     "home.ogDescription": "Webowa platforma torrentowa do strumieniowania i pobierania torrentów bezpośrednio w przeglądarce. Bez oprogramowania.",
     "home.jsonLdDescription": "Strumieniuj i pobieraj torrenty bezpośrednio w przeglądarce. Bez oprogramowania.",
     "home.badge": "Open-source · Bez instalacji",
-    "home.heading": "Strumieniuj i pobieraj",
+    "home.heading": "Wyszukuj, streamuj i pobieraj",
     "home.headingAccent": "torrenty w przeglądarce",
     "home.subtitle": "Wklej link magnet lub wgraj plik .torrent i zacznij oglądać lub pobierać natychmiast. Bez klienta torrent.",
     "home.toolBadge": "Darmowe narzędzie online",
@@ -1076,5 +1076,6 @@
     "discover.streamsPartialFailureMany": "%v dodatków nie odpowiedziało — lista może być niekompletna.",
     "profile.addons.refresh": "Odśwież",
     "profile.addons.refreshed": "Dodatek odświeżony",
-    "profile.addons.refreshFailed": "Nie udało się odświeżyć dodatku"
+    "profile.addons.refreshFailed": "Nie udało się odświeżyć dodatku",
+    "home.searchSubtitle": "Wyszukuj i znajduj filmy, seriale i torrenty z najlepszych publicznych indeksatorów błyskawicznie."
 }
