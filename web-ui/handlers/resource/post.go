@@ -5,19 +5,20 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/webtor-io/web-ui/handlers/common"
 	"github.com/webtor-io/web-ui/jobs/scripts"
 	"github.com/webtor-io/web-ui/models"
-	sv "github.com/webtor-io/web-ui/services/common"
 	"github.com/webtor-io/web-ui/services/i18n"
 	"github.com/webtor-io/web-ui/services/web"
 
 	"github.com/gin-gonic/gin"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/job"
+	"net/url"
 )
 
 type PostArgs struct {
@@ -39,10 +40,7 @@ func (s *Handler) bindArgs(c *gin.Context) (*PostArgs, error) {
 		}
 	}
 	if query != "" {
-		sha1 := sv.SHA1R.Find([]byte(query))
-		if sha1 == nil {
-			return &PostArgs{Query: query}, errors.Errorf("wrong resource provided query=%v", query)
-		}
+		// Just parse and return it; let the POST handler decide if it is a search query
 	}
 
 	if file == nil && query == "" {
@@ -83,6 +81,27 @@ type PostData struct {
 	Tool             *common.Tool
 	ContinueWatching []*models.WatchHistory
 	Addons           interface{}
+	SearchQuery      string
+}
+
+var (
+	sha1HexPattern    = regexp.MustCompile(`(?i)^[0-9a-f]{40}$`)
+	sha1Base32Pattern = regexp.MustCompile(`(?i)^[2-7a-z]{32}$`)
+)
+
+func isMagnetOrTorrentOrHash(query string) bool {
+	q := strings.TrimSpace(query)
+	ql := strings.ToLower(q)
+	if strings.HasPrefix(ql, "magnet:") {
+		return true
+	}
+	if strings.HasPrefix(ql, "http://") || strings.HasPrefix(ql, "https://") {
+		return true
+	}
+	if sha1HexPattern.MatchString(q) || sha1Base32Pattern.MatchString(q) {
+		return true
+	}
+	return false
 }
 
 func (s *Handler) post(c *gin.Context) {
@@ -95,6 +114,14 @@ func (s *Handler) post(c *gin.Context) {
 	if err != nil {
 		web.RedirectWithError(c, errors.Wrap(err, "wrong args provided"))
 		return
+	}
+
+	if args.Query != "" {
+		if !isMagnetOrTorrentOrHash(args.Query) {
+			// Redirect to homepage with query parameter q
+			c.Redirect(http.StatusFound, i18n.LangPath(i18n.GetLang(c), "/?q="+url.QueryEscape(args.Query)))
+			return
+		}
 	}
 
 	loadJob, err := s.jobs.Load(web.NewContext(c), &scripts.LoadArgs{

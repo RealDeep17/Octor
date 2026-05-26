@@ -51,7 +51,6 @@ server {
     proxy_set_header Connection $connection_upgrade;
     proxy_set_header Host $http_host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
     # Disable Buffering for all Octor locations to support real-time SSE and instant media buffering
@@ -102,7 +101,6 @@ server {
         proxy_pass http://octor_s3_gateway;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Accel-Buffering no;
     }
@@ -112,7 +110,6 @@ server {
         proxy_pass http://octor_s3_gateway;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Accel-Buffering no;
     }
@@ -121,7 +118,6 @@ server {
         proxy_pass http://octor_s3_gateway;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Accel-Buffering no;
     }
@@ -180,85 +176,48 @@ server {
 
     # --- Big ARRS Stack ---
     location /radarr {
-        auth_basic "Restricted Access";
-        auth_basic_user_file /etc/nginx/.htpasswd;
         proxy_pass http://127.0.0.1:7878;
         proxy_set_header Host $host;
         proxy_set_header Authorization "";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /sonarr {
-        auth_basic "Restricted Access";
-        auth_basic_user_file /etc/nginx/.htpasswd;
         proxy_pass http://127.0.0.1:8989;
         proxy_set_header Host $host;
         proxy_set_header Authorization "";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /whisparr {
-        auth_basic "Restricted Access";
-        auth_basic_user_file /etc/nginx/.htpasswd;
         proxy_pass http://127.0.0.1:6969;
         proxy_set_header Host $host;
         proxy_set_header Authorization "";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /prowlarr {
-        auth_basic "Restricted Access";
-        auth_basic_user_file /etc/nginx/.htpasswd;
         proxy_pass http://127.0.0.1:9696;
         proxy_set_header Host $host;
         proxy_set_header Authorization "";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    location /autobrr/ {
-        auth_basic "Restricted Access";
-        auth_basic_user_file /etc/nginx/.htpasswd;
-        proxy_pass http://127.0.0.1:7474/;
-        proxy_set_header Host $host;
-        proxy_set_header Authorization "";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
 
-    location /qbittorrent/ {
-        auth_basic "Restricted Access";
-        auth_basic_user_file /etc/nginx/.htpasswd;
-        proxy_pass http://127.0.0.1:8085/;
-        proxy_set_header Host $host;
-        proxy_set_header Authorization "";
-        proxy_set_header X-Forwarded-Host $http_host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
 
     location /comet/ {
-        auth_basic "Restricted Access";
-        auth_basic_user_file /etc/nginx/.htpasswd;
         proxy_pass http://127.0.0.1:8001/;
         proxy_set_header Host $host;
         proxy_set_header Authorization "";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Prefix /comet;
         proxy_redirect / /comet/;
     }
 
     location /byparr/ {
-        auth_basic "Restricted Access";
-        auth_basic_user_file /etc/nginx/.htpasswd;
         proxy_pass http://127.0.0.1:8191/;
         proxy_set_header Host $host;
         proxy_set_header Authorization "";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-Prefix /byparr;
         proxy_redirect / /byparr/;
@@ -287,7 +246,6 @@ server {
     proxy_set_header Connection "";
     proxy_set_header Host $http_host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
     proxy_buffering off;

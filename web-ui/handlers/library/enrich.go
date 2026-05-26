@@ -14,8 +14,8 @@ import (
 func (s *Handler) enrichResource(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	wc, ok := c.MustGet("web-context").(*web.Context)
-	if !ok || wc == nil {
+	wc := web.NewContext(c)
+	if wc == nil {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}

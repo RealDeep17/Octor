@@ -3,6 +3,12 @@
     {{ if $.Data.Query }}
     <input type="hidden" name="q" value="{{ $.Data.Query }}" />
     {{ end }}
+    {{ if $.Data.GroupBy }}
+    <input type="hidden" name="group" value="{{ $.Data.GroupBy }}" />
+    {{ end }}
+    {{ if $.Data.Watched }}
+    <input type="hidden" name="watched" value="{{ $.Data.Watched }}" />
+    {{ end }}
     <select class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none" name="sort" onchange="this.nextElementSibling.click()">
         {{ range $.Data | makeSort }}
             <option class="capitalize" value="{{ .Value }}" {{if .Selected }}selected{{end}}>{{ t $.Ctx.Lang .Title }}</option>

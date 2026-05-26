@@ -3,6 +3,8 @@ package scripts
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -75,10 +77,26 @@ func (s *LoadScript) storeFile(ctx context.Context, j *job.Job, file []byte) (re
 }
 
 func (s *LoadScript) storeQuery(ctx context.Context, j *job.Job, query string) (res *ra.ResourceResponse, err error) {
+	ql := strings.ToLower(strings.TrimSpace(query))
+	if strings.HasPrefix(ql, "http://") || strings.HasPrefix(ql, "https://") {
+		// It's a torrent file URL. Do NOT rewrite to magnet or search in cache by hash,
+		// since we don't have the infohash of the torrent yet!
+		// Just store the resource directly (the backend will download it and return the correct infohash).
+		j.InProgress(s.t("job.magnetizing"))
+		apiCtx, apiCancel := context.WithTimeout(ctx, 60*time.Second)
+		defer apiCancel()
+		res, err = s.api.StoreResource(apiCtx, s.c.ApiClaims, []byte(query))
+		if err != nil || res == nil {
+			return nil, errors.Wrap(err, "failed to load torrent from URL")
+		}
+		j.Done()
+		return res, nil
+	}
+
 	j.InProgress(s.t("job.checkingMagnet"))
 	sha1Hash := common.SHA1R.Find([]byte(query))
 	if sha1Hash == nil {
-		return nil, errors.Wrap(err, "wrong resource provided")
+		return nil, errors.New("wrong resource provided")
 	}
 	hash := strings.ToLower(string(sha1Hash))
 	if !strings.HasPrefix(query, "magnet:") {
@@ -109,11 +127,18 @@ func (s *LoadScript) storeQuery(ctx context.Context, j *job.Job, query string) (
 
 func Load(api *api.Api, i18nSvc *i18n.Service, c *web.Context, args *LoadArgs) (r job.Runnable, hash string, err error) {
 	if args.Query != "" {
-		sha1Hash := common.SHA1R.Find([]byte(args.Query))
-		if sha1Hash == nil {
-			return nil, "", errors.Errorf("wrong resource provided query=%v", args.Query)
+		ql := strings.ToLower(strings.TrimSpace(args.Query))
+		if strings.HasPrefix(ql, "http://") || strings.HasPrefix(ql, "https://") {
+			// For URLs, generate a stable job ID hash based on the URL itself
+			sum := sha1.Sum([]byte(args.Query))
+			hash = fmt.Sprintf("%x", sum)
+		} else {
+			sha1Hash := common.SHA1R.Find([]byte(args.Query))
+			if sha1Hash == nil {
+				return nil, "", errors.Errorf("wrong resource provided query=%v", args.Query)
+			}
+			hash = strings.ToLower(string(sha1Hash))
 		}
-		hash = strings.ToLower(string(sha1Hash))
 	} else if args.File != nil {
 		b := io.NopCloser(bytes.NewReader(args.File))
 		mi, err := metainfo.Load(b)

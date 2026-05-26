@@ -1124,7 +1124,12 @@ _STASHDB_QUERY = """
 query ($term: String!) {
   searchScene(term: $term) {
     id title details release_date duration
-    studio { name }
+    studio {
+      name
+      parent {
+        name
+      }
+    }
     performers { performer { name } as }
     tags { name }
     images { url width height }
@@ -1176,11 +1181,17 @@ def _normalise_stashdb(s: dict) -> dict:
     if not poster and images:
         poster = images[0].get("url")
     studio = s.get("studio") or {}
+    parent_name = None
+    if isinstance(studio, dict):
+        parent_obj = studio.get("parent")
+        if isinstance(parent_obj, dict):
+            parent_name = parent_obj.get("name")
     return {
         "id": s.get("id"),
         "title": s.get("title"),
         "date": s.get("release_date"),
         "site": studio.get("name") if isinstance(studio, dict) else None,
+        "parent": parent_name,
         "description": s.get("details"),
         "performers": s.get("performers") or [],
         "tags": [t.get("name") for t in s.get("tags") or [] if t.get("name")],
@@ -1397,7 +1408,12 @@ _STASHDB_FIND_SCENE_QUERY = """
 query ($id: ID!) {
   findScene(id: $id) {
     id title details release_date duration
-    studio { name }
+    studio {
+      name
+      parent {
+        name
+      }
+    }
     performers { performer { name } as }
     tags { name }
     images { url width height }
