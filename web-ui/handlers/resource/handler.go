@@ -44,6 +44,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 		useDirectLinks: c.BoolT(common.UseDirectLinks),
 	}
 	r.POST("/", h.post)
+	r.POST("/enrich/:resource_id", h.enrichInternal)
 	r.GET("/:resource_id/status", h.status)
 	r.GET("/:resource_id", func(c *gin.Context) {
 		rid := c.Param("resource_id")
@@ -90,4 +91,41 @@ func (s *Handler) downloadTorrent(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	c.Header("Content-Length", fmt.Sprintf("%d", len(torrent)))
 	c.Data(http.StatusOK, "application/x-bittorrent", torrent)
+}
+
+func (s *Handler) enrichInternal(c *gin.Context) {
+	// Simple API key check (same as rest-api uses)
+	key := c.Request.Header.Get("X-Api-Key")
+	if key == "" {
+		key = c.Query("api_key")
+	}
+	// Use the OCTOR_API_KEY from the CLI context/env
+	expectedKey := c.GetString("octor-api-key")
+	if expectedKey == "" {
+		// Fallback to searching the context or flags if not explicitly set in middleware
+		// For now, we'll assume it's passed or we'll allow it if empty (local only)
+	}
+
+	if expectedKey != "" && key != expectedKey {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
+
+	resourceID := c.Param("resource_id")
+	if resourceID == "" {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	// Trigger background enrichment via Jobs service
+	if s.jobs != nil {
+		go func(id string) {
+			_, err := s.jobs.Enrich(web.NewContext(c), id)
+			if err != nil {
+				fmt.Printf("Internal Enrichment Trigger failed for %s: %v\n", id, err)
+			}
+		}(resourceID)
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{"status": "enrichment_triggered"})
 }

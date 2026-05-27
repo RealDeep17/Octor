@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -555,19 +554,23 @@ func (s *TransmissionService) HandleLibraryIngest(ctx context.Context, res *Reso
 	}
 
 	// 4. Trigger Metadata Enrichment
-	// We call the background enricher script to handle metadata immediately.
-	// We don't insert into media_info manually here because the enricher script
-	// handles its own locking and state transitions.
-	go func(id string) {
-		log.Infof("LibraryIngest: triggering metadata enrichment for %s", id)
-		cmd := exec.Command("/srv/octor/run.sh", "enrich", "run", "--id", id)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			log.WithError(err).Errorf("LibraryIngest: enrichment failed for %s. Output: %s", id, string(output))
-		} else {
-			log.Infof("LibraryIngest: enrichment successful for %s", id)
+	// We call the running Web UI service via an internal HTTP request.
+	// This removes the dependency on local shell scripts.
+	go func(id string, apiKey string) {
+		log.Infof("LibraryIngest: triggering metadata enrichment for %s via internal API", id)
+		url := fmt.Sprintf("http://127.0.0.1:8082/resource/enrich/%s", id)
+		if apiKey != "" {
+			url += "?api_key=" + apiKey
 		}
-	}(res.ID)
+		req, _ := http.NewRequest("POST", url, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.WithError(err).Errorf("LibraryIngest: internal enrichment trigger failed for %s", id)
+		} else {
+			defer resp.Body.Close()
+			log.Infof("LibraryIngest: internal enrichment trigger accepted for %s (status=%d)", id, resp.StatusCode)
+		}
+	}(res.ID, s.apiKey)
 
 	// 5. Vault Logic (if enabled)
 	if s.autoVaultEnabled() {
