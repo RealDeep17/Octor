@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -250,25 +251,31 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 
 	// 2. Authentication check and target user extraction
 	var targetEmails []string
+	username, password, ok := g.Request.BasicAuth()
+	log.Debugf("TransmissionRPC: BasicAuth ok=%v, username=%s", ok, username)
+
 	if s.apiKey != "" {
-		username, password, ok := g.Request.BasicAuth()
 		if !ok || password != s.apiKey {
 			// Also check standard Header
 			headerKey := g.Request.Header.Get("X-Api-Key")
 			if headerKey != s.apiKey {
+				log.Warnf("TransmissionRPC: unauthorized request from %s", g.ClientIP())
 				g.Header("WWW-Authenticate", `Basic realm="Transmission"`)
 				g.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
-		} else if username != "" {
-			// Extract emails from username field
-			for _, email := range strings.Split(username, ",") {
-				email = strings.TrimSpace(email)
-				if email != "" {
-					targetEmails = append(targetEmails, email)
-				}
+		}
+	}
+
+	if username != "" {
+		// Extract emails from username field
+		for _, email := range strings.Split(username, ",") {
+			email = strings.TrimSpace(email)
+			if email != "" {
+				targetEmails = append(targetEmails, email)
 			}
 		}
+		log.Debugf("TransmissionRPC: target emails resolved from auth: %v", targetEmails)
 	}
 
 	// 3. Parse JSON Body
@@ -277,6 +284,7 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 		g.JSON(http.StatusBadRequest, TransmissionRPCResp{Result: "invalid JSON"})
 		return
 	}
+	log.Debugf("TransmissionRPC: method=%s, targetEmails=%v", rpcReq.Method, targetEmails)
 
 	respArgs := make(map[string]interface{})
 	result := "success"
@@ -547,16 +555,19 @@ func (s *TransmissionService) HandleLibraryIngest(ctx context.Context, res *Reso
 	}
 
 	// 4. Trigger Metadata Enrichment
-	mediaInfo := map[string]interface{}{
-		"resource_id": res.ID,
-		"status":      0, // Processing
-		"updated_at":  time.Now(),
-		"created_at":  time.Now(),
-	}
-	_, err = s.db.Model(&mediaInfo).Table("media_info").OnConflict("(resource_id) DO UPDATE SET status = 0, updated_at = EXCLUDED.updated_at").Insert()
-	if err != nil {
-		log.WithError(err).Errorf("LibraryIngest: failed to trigger media_info enrichment for %s", res.ID)
-	}
+	// We call the background enricher script to handle metadata immediately.
+	// We don't insert into media_info manually here because the enricher script
+	// handles its own locking and state transitions.
+	go func(id string) {
+		log.Infof("LibraryIngest: triggering metadata enrichment for %s", id)
+		cmd := exec.Command("/srv/octor/run.sh", "enrich", "run", "--id", id)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.WithError(err).Errorf("LibraryIngest: enrichment failed for %s. Output: %s", id, string(output))
+		} else {
+			log.Infof("LibraryIngest: enrichment successful for %s", id)
+		}
+	}(res.ID)
 
 	// 5. Vault Logic (if enabled)
 	if s.autoVaultEnabled() {

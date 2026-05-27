@@ -908,16 +908,16 @@ cmd_enrich() {
             local DAYS="${2:-7}"
             echo "♻️  Smart Refresh — stale/missing metadata (>${DAYS}d)..."
             echo "    (Respects 1h cooldown on NoMetadata/Error. Skips Abandoned.)"
-            "$BIN_DIR"/web-ui enrich refresh --days "$DAYS"
+            "$BIN_DIR"/web-ui enrich refresh --days "$DAYS" "${@:3}"
             ;;
         run)
             echo "▶️  Enriching resources without metadata..."
-            "$BIN_DIR"/web-ui enrich run
+            "$BIN_DIR"/web-ui enrich run "${@:2}"
             ;;
         force-all|force)
             echo "⚡ Force All — re-enriching EVERY resource (including Abandoned)..."
             echo "    (Resets retry_count. Use after a major pipeline fix.)"
-            "$BIN_DIR"/web-ui enrich run --force
+            "$BIN_DIR"/web-ui enrich run --force "${@:2}"
             ;;
         *)
             echo "Usage:"
