@@ -126,8 +126,13 @@ func serve(c *cli.Context) error {
 	// Setting Prowlarr
 	prowlarr := s.NewProwlarrClient(c)
 
+	// Setting DB
+	pg := cs.NewPG(c)
+	defer pg.Close()
+	db := pg.Get()
+
 	// Setting Transmission
-	transmission := s.NewTransmissionService(c, rm)
+	transmission := s.NewTransmissionService(c, rm, db)
 
 	// Setting Web
 	web := s.NewWeb(c, rm, li, ex, st, prowlarr, transmission)

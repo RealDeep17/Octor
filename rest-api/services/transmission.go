@@ -15,13 +15,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	cs "github.com/webtor-io/common-services"
 )
 
 type TransmissionService struct {
 	rm             *ResourceMap
+	db             *pg.DB
 	apiKey         string
 	vaultHost      string
 	vaultPort      int
@@ -60,6 +63,7 @@ const (
 )
 
 func RegisterTransmissionFlags(f []cli.Flag) []cli.Flag {
+	f = cs.RegisterPGFlags(f)
 	return append(f,
 		cli.StringFlag{
 			Name:   automationAPIKeyFlag,
@@ -87,9 +91,10 @@ func RegisterTransmissionFlags(f []cli.Flag) []cli.Flag {
 	)
 }
 
-func NewTransmissionService(c *cli.Context, rm *ResourceMap) *TransmissionService {
+func NewTransmissionService(c *cli.Context, rm *ResourceMap, db *pg.DB) *TransmissionService {
 	s := &TransmissionService{
 		rm:             rm,
+		db:             db,
 		apiKey:         c.String(automationAPIKeyFlag),
 		autoVault:      c.Bool(automationAutoVaultFlag),
 		vaultHost:      c.String("vault-host-rpc"),
@@ -243,9 +248,10 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 		return
 	}
 
-	// 2. Authentication check
+	// 2. Authentication check and target user extraction
+	var targetEmails []string
 	if s.apiKey != "" {
-		_, password, ok := g.Request.BasicAuth()
+		username, password, ok := g.Request.BasicAuth()
 		if !ok || password != s.apiKey {
 			// Also check standard Header
 			headerKey := g.Request.Header.Get("X-Api-Key")
@@ -253,6 +259,14 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 				g.Header("WWW-Authenticate", `Basic realm="Transmission"`)
 				g.AbortWithStatus(http.StatusUnauthorized)
 				return
+			}
+		} else if username != "" {
+			// Extract emails from username field
+			for _, email := range strings.Split(username, ",") {
+				email = strings.TrimSpace(email)
+				if email != "" {
+					targetEmails = append(targetEmails, email)
+				}
 			}
 		}
 	}
@@ -272,7 +286,7 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 		respArgs["version"] = "4.0.0"
 		respArgs["rpc-version-minimum"] = 1
 		respArgs["rpc-version"] = 17
-		respArgs["download-dir"] = "/srv/octor/infra-data/drive-mount"
+		respArgs["download-dir"] = "/srv/Big ARRS/downloads"
 		respArgs["download-dir-free-space"] = int64(1099511627776) // 1 TB fake space
 
 	case "session-close":
@@ -308,7 +322,7 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 		}
 
 		// Import the torrent into Octor
-		res, err := s.rm.Get(g.Request.Context(), payload)
+		res, err := s.rm.Get(context.Background(), payload)
 		if err != nil {
 			log.WithError(err).Errorf("Failed to add resource to Octor")
 			result = err.Error()
@@ -327,6 +341,11 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 		s.torrentsLock.Unlock()
 
 		_ = s.saveTorrents()
+
+		// Octor-Native Library Ingestion
+		if len(targetEmails) > 0 && s.db != nil {
+			go s.HandleLibraryIngest(context.Background(), res, targetEmails)
+		}
 
 		// Auto-vault: fire-and-forget, non-blocking
 		if s.autoVaultEnabled() {
@@ -474,4 +493,109 @@ func (s *TransmissionService) DownloadTorrentURL(ctx context.Context, url string
 	// Limit reader to 10MB to prevent Denial of Service
 	limitReader := io.LimitReader(resp.Body, 10*1024*1024)
 	return io.ReadAll(limitReader)
+}
+
+func (s *TransmissionService) HandleLibraryIngest(ctx context.Context, res *Resource, emails []string) {
+	if s.db == nil {
+		return
+	}
+
+	// 1. Resolve users
+	var userRows []struct {
+		UserID string `pg:"user_id"`
+	}
+	err := s.db.Model().Table("user").
+		Column("user_id").
+		Where("email IN (?)", pg.In(emails)).
+		Select(&userRows)
+	if err != nil {
+		log.WithError(err).Errorf("LibraryIngest: failed to resolve user emails: %v", emails)
+		return
+	}
+
+	if len(userRows) == 0 {
+		log.Warnf("LibraryIngest: no Octor users found for emails: %v", emails)
+		return
+	}
+
+	// 2. Insert Torrent Resource
+	torrentRes := map[string]interface{}{
+		"resource_id":        res.ID,
+		"name":               res.Name,
+		"file_count":         len(res.Files),
+		"size_bytes":         res.Size,
+		"torrent_size_bytes": int64(len(res.Torrent)),
+		"created_at":         time.Now(),
+	}
+	_, err = s.db.Model(&torrentRes).Table("torrent_resource").OnConflict("DO NOTHING").Insert()
+	if err != nil {
+		log.WithError(err).Errorf("LibraryIngest: failed to insert torrent_resource for %s", res.ID)
+	}
+
+	// 3. Insert Library entries for each user
+	for _, row := range userRows {
+		libEntry := map[string]interface{}{
+			"user_id":     row.UserID,
+			"resource_id": res.ID,
+			"name":        res.Name,
+			"created_at":  time.Now(),
+		}
+		_, err = s.db.Model(&libEntry).Table("library").OnConflict("DO NOTHING").Insert()
+		if err != nil {
+			log.WithError(err).Errorf("LibraryIngest: failed to insert library entry for user %s, resource %s", row.UserID, res.ID)
+		}
+	}
+
+	// 4. Trigger Metadata Enrichment
+	mediaInfo := map[string]interface{}{
+		"resource_id": res.ID,
+		"status":      0, // Processing
+		"updated_at":  time.Now(),
+		"created_at":  time.Now(),
+	}
+	_, err = s.db.Model(&mediaInfo).Table("media_info").OnConflict("(resource_id) DO UPDATE SET status = 0, updated_at = EXCLUDED.updated_at").Insert()
+	if err != nil {
+		log.WithError(err).Errorf("LibraryIngest: failed to trigger media_info enrichment for %s", res.ID)
+	}
+
+	// 5. Vault Logic (if enabled)
+	if s.autoVaultEnabled() {
+		requiredVP := float64(res.Size) / (1024 * 1024 * 1024)
+		
+		// Ensure vault.resource exists
+		vaultRes := map[string]interface{}{
+			"resource_id": res.ID,
+			"required_vp": requiredVP,
+			"funded_vp":   0,
+			"funded":      false,
+			"vaulted":     false,
+			"name":        res.Name,
+			"created_at":  time.Now(),
+			"updated_at":  time.Now(),
+		}
+		_, err = s.db.Model(&vaultRes).Table("vault.resource").OnConflict("DO NOTHING").Insert()
+		if err != nil {
+			log.WithError(err).Errorf("LibraryIngest: failed to ensure vault.resource for %s", res.ID)
+		}
+
+		// Create pledges for each user
+		for _, row := range userRows {
+			pledge := map[string]interface{}{
+				"resource_id": res.ID,
+				"user_id":     row.UserID,
+				"amount":      requiredVP,
+				"funded":      true,
+				"frozen_at":   time.Now(),
+				"created_at":  time.Now(),
+				"updated_at":  time.Now(),
+			}
+			_, err = s.db.Model(&pledge).Table("vault.pledge").OnConflict("DO NOTHING").Insert()
+			if err != nil {
+				log.WithError(err).Errorf("LibraryIngest: failed to create vault.pledge for user %s, resource %s", row.UserID, res.ID)
+			}
+		}
+		log.Infof("LibraryIngest: successfully added %s to library and vault for %d users", res.ID, len(userRows))
+	} else {
+		log.Infof("LibraryIngest: successfully added %s to library for %d users", res.ID, len(userRows))
+	}
 }
