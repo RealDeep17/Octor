@@ -62,9 +62,9 @@ function RecsSkeleton() {
                 return (
                     <div
                         key={i}
-                        class="grid grid-cols-1 sm:grid-cols-[180px_1fr] md:grid-cols-[220px_1fr] gap-4 sm:gap-6 items-center"
+                        class={`grid grid-cols-1 ${posterFirst ? 'sm:grid-cols-[180px_1fr] md:grid-cols-[220px_1fr]' : 'sm:grid-cols-[1fr_270px] md:grid-cols-[1fr_330px]'} gap-4 sm:gap-6 items-center`}
                     >
-                        <div class={`aspect-[2/3] rounded-xl bg-w-surface/60 animate-pulse ${posterFirst ? '' : 'sm:col-start-2 sm:row-start-1'}`} />
+                        <div class={`aspect-[2/3] rounded-xl bg-w-surface/60 animate-pulse ${posterFirst ? '' : 'sm:col-start-2'}`} />
                         <div class={`space-y-3 ${posterFirst ? '' : 'sm:col-start-1 sm:row-start-1'}`}>
                             <div class="h-5 w-3/5 rounded bg-w-surface/60 animate-pulse" />
                             <div class="h-4 w-full rounded bg-w-surface/40 animate-pulse" />
@@ -345,7 +345,7 @@ export function AISection({
         refreshing;
 
     return (
-        <section class="mb-6 rounded-2xl border border-w-cyan/25 bg-gradient-to-br from-w-cyan/[0.06] via-w-bg/40 to-w-purple/[0.04] p-4 sm:p-5">
+        <section class="mb-6 rounded-2xl border border-w-cyan/25 bg-gradient-to-br from-w-cyan/[0.06] via-w-bg/40 to-w-purple/[0.04] p-4 sm:p-5 max-w-[1100px] mx-auto">
             <header class="flex items-center justify-between flex-wrap gap-2">
                 <div class="flex items-center gap-2">
                     <span class="text-xl">✨</span>

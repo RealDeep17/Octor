@@ -18,8 +18,9 @@ type User struct {
 	Password  string
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	Tier      string
-	Skin      string    `pg:"skin"`
+	Tier         string
+	Skin         string    `pg:"skin"`
+	GridDensity  string    `pg:"grid_density"`
 }
 
 // GetOrCreateUser finds or creates a user by email.
@@ -73,8 +74,15 @@ func UpdateUserTier(ctx context.Context, db *pg.DB, u *User) error {
 
 func UpdateUserSkin(ctx context.Context, db *pg.DB, userID uuid.UUID, skin string) error {
 	_, err := db.Model((*User)(nil)).
-		Context(ctx).
 		Set("skin = ?", skin).
+		Where("user_id = ?", userID).
+		Update()
+	return err
+}
+
+func UpdateUserGridDensity(ctx context.Context, db *pg.DB, userID uuid.UUID, density string) error {
+	_, err := db.Model((*User)(nil)).
+		Set("grid_density = ?", density).
 		Where("user_id = ?", userID).
 		Update()
 	return err

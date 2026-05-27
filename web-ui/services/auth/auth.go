@@ -208,6 +208,7 @@ type User struct {
 	IsNew         bool
 	Tier          string
 	Skin          string
+	GridDensity   string
 }
 
 func (s *User) HasAuth() bool {
@@ -223,6 +224,7 @@ func makeUserFromContext(c *gin.Context) *User {
 		u.Email = su.Email
 		u.Tier = su.Tier
 		u.Skin = su.Skin
+		u.GridDensity = su.GridDensity
 	}
 	inc := c.Request.Context().Value(IsNewContext{})
 	isNew, ok := inc.(bool)

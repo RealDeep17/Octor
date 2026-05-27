@@ -76,11 +76,16 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	gr.Use(auth.HasAuth)
 	gr.POST("/delete", h.delete)
 	gr.POST("/skin", h.updateSkin)
+	gr.POST("/grid-density", h.updateGridDensity)
 	gr.POST("/settings", h.settingsSave)
 }
 
 type skinUpdateReq struct {
 	Skin string `json:"skin" binding:"required"`
+}
+
+type gridDensityUpdateReq struct {
+	Density string `json:"density" binding:"required"`
 }
 
 func (s *Handler) updateSkin(c *gin.Context) {
@@ -102,6 +107,32 @@ func (s *Handler) updateSkin(c *gin.Context) {
 	}
 
 	if err := models.UpdateUserSkin(c.Request.Context(), db, u.ID, req.Skin); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func (s *Handler) updateGridDensity(c *gin.Context) {
+	var req gridDensityUpdateReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Density) > 16 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "density name too long"})
+		return
+	}
+
+	u := auth.GetUserFromContext(c)
+	db := s.pg.Get()
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "no db connection"})
+		return
+	}
+
+	if err := models.UpdateUserGridDensity(c.Request.Context(), db, u.ID, req.Density); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

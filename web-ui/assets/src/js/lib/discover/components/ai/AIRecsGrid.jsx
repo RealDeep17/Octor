@@ -95,9 +95,9 @@ export function AIRecsGrid({
                 return (
                     <article
                         key={item.video_id}
-                        class="grid grid-cols-1 sm:grid-cols-[180px_1fr] md:grid-cols-[220px_1fr] gap-4 sm:gap-6 items-center"
+                        class={`grid grid-cols-1 ${posterFirst ? 'sm:grid-cols-[180px_1fr] md:grid-cols-[220px_1fr]' : 'sm:grid-cols-[1fr_270px] md:grid-cols-[1fr_330px]'} gap-4 sm:gap-6 items-center`}
                     >
-                        <div class={posterFirst ? '' : 'sm:col-start-2 sm:row-start-1'}>
+                        <div class={posterFirst ? '' : 'sm:col-start-2'}>
                             <AIRecCard
                                 item={item}
                                 onClick={onCardClick}

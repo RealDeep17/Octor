@@ -49,8 +49,9 @@ function StarRating({ rating }) {
 export function ItemGrid({ items, showBadges, userStatuses, watchlistIds, onClick, onToggleWatched, onRate, onToggleWatchlist }) {
     if (!items.length) return null;
     return (
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 grid-flow-row-dense gap-4">
+        <div class="dynamic-grid grid-flow-row-dense gap-4">
             {items.map(item => {
+                if (!item || !item.id) return null;
                 const status = userStatuses && userStatuses[item.id];
                 const inWatchlist = !!(watchlistIds && watchlistIds.has && watchlistIds.has(item.id));
                 return (
@@ -194,16 +195,16 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
     const hasV = item.hasPoster !== undefined ? item.hasPoster : !!item.poster;
     const hasH = item.hasPosterHorizontal !== undefined ? item.hasPosterHorizontal : (!!item.posterHorizontal || !!item.background);
     
-    const initialHorizontal = layout === 'horizontal' || (layout !== 'vertical' && !hasV && hasH);
+    const initialHorizontal = layout === 'horizontal' || (layout !== 'vertical' && (item.posterShape === 'landscape' || (!hasV && hasH)));
     const [isHorizontal, setIsHorizontal] = useState(initialHorizontal);
 
     useEffect(() => {
         if (layout) {
             setIsHorizontal(layout === 'horizontal');
         } else {
-            setIsHorizontal(!hasV && hasH);
+            setIsHorizontal(item.posterShape === 'landscape' || (!hasV && hasH));
         }
-    }, [layout, hasV, hasH]);
+    }, [layout, hasV, hasH, item.posterShape]);
 
     const handleWatchedClick = useCallback((e) => {
         e.stopPropagation();
@@ -230,7 +231,7 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
         setIsHorizontal(nextHorizontal);
         
         const newLayout = nextHorizontal ? 'horizontal' : 'vertical';
-        const type = item.type === 'series' ? 'series' : 'movie';
+        const type = item.type === 'series' ? 'series' : ((item.type === 'adult' || item.type === 'porn' || item.type === 'jav') ? 'adult' : 'movie');
         
         fetch(`/library/${type}/${item.id}/layout`, {
             method: 'POST',
@@ -257,7 +258,22 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
         return undefined;
     }, [item.posterHorizontal, item.background]);
 
+    // Vertical (portrait) poster srcSet — TMDB serves /w342 by default which
+    // looks blurry on modern high-DPI screens. Request w500 + w780 instead.
+    const srcSetV = useMemo(() => {
+        const pathV = item.poster;
+        if (!pathV) return undefined;
+        if (pathV.includes('image.tmdb.org')) {
+            const w500 = pathV.replace(/\/w[0-9]+/, '/w500');
+            const w780 = pathV.replace(/\/w[0-9]+/, '/w780');
+            return `${w500} 500w, ${w780} 780w`;
+        }
+        return undefined;
+    }, [item.poster]);
+
     const isImdb = item.id && item.id.startsWith('tt');
+    const isAdult = item.id && (item.id.startsWith('tpdb') || item.id.startsWith('stash'));
+    const canInteract = isImdb || isAdult;
 
     const showFallback = isHorizontal ? (!hasH || imgErrorH) : (!hasV || imgError);
 
@@ -269,6 +285,8 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
                         <img
                             class={`vertical-img w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${isHorizontal ? 'hidden' : ''}`}
                             src={item.poster}
+                            srcSet={srcSetV}
+                            sizes="(max-width: 640px) 156px, 210px"
                             alt={item.name || ''}
                             loading="lazy"
                             onError={onImgError}
@@ -288,7 +306,7 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
                     {showFallback && (
                         <PosterGradient name={item.name} />
                     )}
-                    {isImdb && (
+                    {canInteract && (
                         <>
                             <WatchedBadge watched={watched} onClick={handleWatchedClick} />
                             <RatingBadge rating={rating} onClick={handleRateClick} />

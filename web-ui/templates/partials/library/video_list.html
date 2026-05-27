@@ -2,11 +2,11 @@
 {{/* Visual primitives (.w-card-frame, .w-card-title, .w-card-badge, .w-card-badge-ghost)
      are shared with discover/components/ItemGrid.jsx — see assets/src/styles/style.css
      and docs/uikit.html section 7 "Video Card". */}}
-<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 grid-flow-row-dense gap-4">
+<div class="dynamic-grid grid-flow-row-dense gap-4">
     {{ range $.Data }}
-    <a href="{{ langPath $.Ctx.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="library-item group flex [&:has(input:checked)]:col-span-2">
-        <div class="w-card-frame {{ if .UserWatched }}is-watched{{ end }} w-full">
-            <input type="checkbox" id="toggle-{{ .ResourceID }}" 
+    <a href="{{ langPath $.Ctx.Lang (printf "/%s" (. | getResourceID)) }}" data-async-target="main" class="library-item group flex [&:has(input:checked)]:col-span-2">
+        <div class="w-card-frame {{ if . | getUserWatched }}is-watched{{ end }} w-full">
+            <input type="checkbox" id="toggle-{{ . | getResourceID }}" 
                    class="layout-toggle-checkbox peer hidden"
                    data-video-type="{{ . | getVideoType }}"
                    data-video-id="{{ . | getVideoID }}"
@@ -32,7 +32,7 @@
                 {{ end }}
                 {{ if . | hasVideoID }}
                 {{/* Watched toggle (top-right) */}}
-                {{ if .UserWatched }}
+                {{ if . | getUserWatched }}
                 <form method="post" enctype="multipart/form-data"
                       action="{{ langPath $.Ctx.Lang (printf "/library/%s/%s/unmark" (. | getVideoType) (. | getVideoID)) }}"
                       data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
@@ -58,7 +58,7 @@
                 {{/* Grouped Actions Capsule (bottom-right) */}}
                 <div class="absolute bottom-2 right-2 flex gap-1.5 bg-black/70 backdrop-blur-[4px] rounded-full px-2 py-1 border border-white/5 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ease-out z-10" onclick="event.stopPropagation()">
                     <!-- Refresh Metadata -->
-                    <form method="post" action="{{ langPath $.Ctx.Lang (printf "/lib/%s/enrich" .ResourceID) }}"
+                    <form method="post" action="{{ langPath $.Ctx.Lang (printf "/lib/%s/enrich" (. | getResourceID)) }}"
                           data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
                           class="inline">
                         <button type="submit" class="p-0.5 text-o-muted hover:text-green-400 transition-colors" title="Refresh Metadata">
@@ -75,7 +75,7 @@
                           action="{{ langPath $.Ctx.Lang "/lib/remove" }}"
                           data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
                           class="inline">
-                        <input type="hidden" name="resource_id" value="{{ .ResourceID }}" />
+                        <input type="hidden" name="resource_id" value="{{ . | getResourceID }}" />
                         <button type="submit" class="p-0.5 text-o-muted hover:text-o-primary transition-colors" title="{{ t $.Ctx.Lang "library.remove" }}">
                             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
@@ -84,17 +84,17 @@
                     </form>
                 </div>
                 {{/* Rating badge (top-left) */}}
-                {{ if .UserRating }}
+                {{ if . | getUserRating }}
                 <form method="get" action="{{ langPath $.Ctx.Lang $.Ctx.Path }}"
                       data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
                       onclick="event.stopPropagation()">
                     <input type="hidden" name="rate-form" value="true" />
                     <input type="hidden" name="rate-video-id" value="{{ . | getVideoID }}" />
                     <input type="hidden" name="rate-type" value="{{ . | getVideoType }}" />
-                    <input type="hidden" name="rate-current" value="{{ derefInt16 .UserRating }}" />
+                    <input type="hidden" name="rate-current" value="{{ derefInt16 (. | getUserRating) }}" />
                     <button type="submit" class="w-card-badge top-2 left-2 text-yellow-400" title="{{ t $.Ctx.Lang "library.changeRating" }}">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clip-rule="evenodd" /></svg>
-                        {{ derefInt16 .UserRating }}
+                        {{ derefInt16 (. | getUserRating) }}
                     </button>
                 </form>
                 {{ else }}
@@ -116,7 +116,7 @@
                 {{ if and (. | hasPoster) (. | hasPosterHorizontal) }}
                 <button type="button" class="w-card-badge-ghost bottom-2 left-2 cursor-pointer hover:text-o-primary !opacity-100 z-10 peer-checked:[&_.vertical-icon]:hidden peer-checked:[&_.horizontal-icon]:block"
                         title="Toggle aspect ratio"
-                        onclick="togglePosterLayout(event, '{{ .ResourceID }}', '{{ . | getVideoType }}', '{{ . | getVideoID }}')">
+                        onclick="togglePosterLayout(event, '{{ . | getResourceID }}', '{{ . | getVideoType }}', '{{ . | getVideoID }}')">
                     <svg class="vertical-icon w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="6" y="3" width="12" height="18" rx="2" />
                     </svg>

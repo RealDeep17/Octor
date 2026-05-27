@@ -24,6 +24,76 @@
   --o-muted: #94a3b8;
   --o-line: rgba(255, 255, 255, 0.08);
   --o-glow-rgb: 94, 106, 210;
+
+  /* --- Grid Density Defaults (Low/Default) --- */
+  --o-grid-cols: 2;
+  --o-grid-cols-sm: 3;
+  --o-grid-cols-md: 4;
+  --o-grid-cols-lg: 4;
+  --o-grid-cols-xl: 4;
+  --o-grid-cols-2xl: 4;
+  --o-container-max: 900px;
+  --o-section-px: 1.5rem; /* px-6 */
+}
+
+/* --- Grid Density: Medium (3/6) --- */
+[data-grid-density="medium"] {
+  --o-grid-cols-lg: 5;
+  --o-grid-cols-xl: 6;
+  --o-grid-cols-2xl: 6;
+  --o-container-max: 1200px;
+}
+
+/* --- Grid Density: High (4/8 - Gorgeous) --- */
+[data-grid-density="high"] {
+  --o-grid-cols-lg: 6;
+  --o-grid-cols-xl: 8;
+  --o-grid-cols-2xl: 8;
+  --o-container-max: 1550px;
+  --o-section-px: 3rem; /* px-12 */
+}
+
+/* --- Grid Density: Ultra (5/10 - Compact) --- */
+[data-grid-density="ultra"] {
+  --o-grid-cols-sm: 4;
+  --o-grid-cols-md: 5;
+  --o-grid-cols-lg: 8;
+  --o-grid-cols-xl: 10;
+  --o-grid-cols-2xl: 10;
+  --o-container-max: 1800px;
+  --o-section-px: 5rem; /* px-20 */
+}
+
+@media (min-width: 1536px) {
+  [data-grid-density="high"] { --o-section-px: 6rem; }
+  [data-grid-density="ultra"] { --o-section-px: 8rem; }
+}
+
+.dynamic-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--o-grid-cols), minmax(0, 1fr));
+}
+@media (min-width: 640px) { .dynamic-grid { grid-template-columns: repeat(var(--o-grid-cols-sm), minmax(0, 1fr)); } }
+@media (min-width: 768px) { .dynamic-grid { grid-template-columns: repeat(var(--o-grid-cols-md), minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .dynamic-grid { grid-template-columns: repeat(var(--o-grid-cols-lg), minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .dynamic-grid { grid-template-columns: repeat(var(--o-grid-cols-xl), minmax(0, 1fr)); } }
+@media (min-width: 1536px) { .dynamic-grid { grid-template-columns: repeat(var(--o-grid-cols-2xl), minmax(0, 1fr)); } }
+
+.dynamic-container {
+  max-width: var(--o-container-max);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.dynamic-section {
+  padding-left: 0.75rem; /* px-3 default */
+  padding-right: 0.75rem;
+}
+@media (min-width: 640px) {
+  .dynamic-section {
+    padding-left: var(--o-section-px);
+    padding-right: var(--o-section-px);
+  }
 }
 
 /* --- Vercel (Minimalist Pro) --- */

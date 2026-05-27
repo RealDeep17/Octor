@@ -1,7 +1,7 @@
 {{ define "title" }}Admin Library{{ end }}
 {{ define "main" }}
-<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
-  <div class="max-w-[900px] mx-auto">
+<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 dynamic-section">
+  <div class="dynamic-container">
     <div class="hidden sm:inline-flex badge badge-lg bg-o-purple/10 border-o-purple/30 text-o-purpleL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       Admin Panel
@@ -91,7 +91,7 @@
         {{ end }}
       </div>
       {{ else }}
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 grid-flow-row-dense gap-4">
+      <div class="dynamic-grid grid-flow-row-dense gap-4">
         {{ range .Data.Items }}
         <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2">
           <div class="w-card-frame w-full">
@@ -204,7 +204,7 @@
         const emptyState = document.getElementById('admin-library-search-empty');
         
         const torrentContainer = document.querySelector('.bg-base-200\\/50.rounded-xl.divide-y.divide-w-line');
-        const cardContainer = document.querySelector('.grid.grid-cols-2.sm\\:grid-cols-3.md\\:grid-cols-4.gap-4');
+        const cardContainer = document.querySelector('.grid[class*="grid-cols-"].gap-4');
         const activeContainer = torrentContainer || cardContainer;
         
         let visibleCount = 0;
@@ -240,7 +240,7 @@
     }
 
     const observer = new MutationObserver(filterItems);
-    const observeTarget = document.querySelector('.bg-base-200\\/50.rounded-xl.divide-y.divide-w-line, .grid.grid-cols-2.sm\\:grid-cols-3.md\\:grid-cols-4.gap-4');
+    const observeTarget = document.querySelector('.bg-base-200\\/50.rounded-xl.divide-y.divide-w-line, .grid[class*="grid-cols-"].gap-4');
     if (observeTarget) {
         observer.observe(observeTarget.parentNode, { childList: true, subtree: true });
     }

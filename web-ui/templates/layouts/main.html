@@ -37,6 +37,10 @@
                 const dbSkin = "{{ if .User | hasAuth }}{{ .User.Skin }}{{ end }}";
                 const skin = dbSkin || localStorage.getItem('octor-skin') || 'linear';
                 document.documentElement.setAttribute('data-skin', skin);
+
+                const dbDensity = "{{ if .User | hasAuth }}{{ .User.GridDensity }}{{ end }}";
+                const density = dbDensity || localStorage.getItem('octor-grid-density') || 'default';
+                document.documentElement.setAttribute('data-grid-density', density);
             })();
         </script>
         {{- template "head_extra" . }}
