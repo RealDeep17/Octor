@@ -367,6 +367,7 @@ function StreamRow({ stream, info, onStreamClick }) {
 	}, [onStreamClick, stream, preparing]);
 
 	const displayedLabels = info.labels.filter(label => !(label === 'Pack' && info.labels.includes('Season')));
+	const langs = extractLanguages(`${stream.name || ''}\n${stream.title || ''}`);
 
 	return (
 		<div

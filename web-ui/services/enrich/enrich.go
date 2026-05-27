@@ -606,13 +606,30 @@ func (s *Enricher) Enrich(ctx context.Context, hash string, claims *api.Claims, 
 	}
 	log.Infof("start processing media info %+v", mi)
 	// Resolve sidecar enrichment permission:
-	//   - no claims (background job) → always enabled
+	//   - background job             → check if any admin owns the resource and has it enabled
 	//   - admin user                 → respects their toggle (fail-closed: false on error)
 	//   - regular user               → never enabled
 	sidecarEnrichment := false
 	if claims == nil || claims.Subject == "" {
-		// Background job — no user context, always allow sidecar.
-		sidecarEnrichment = true
+		// Background job — no user context. Check if any admin owns this resource.
+		var users []models.User
+		err = db.Model(&users).
+			Join("JOIN library l ON l.user_id = \"user\".user_id").
+			Where("l.resource_id = ?", hash).
+			Select()
+		if err == nil {
+			for _, u := range users {
+				if s.admin.IsAdminEmail(u.Email) {
+					settings, err := models.GetUserStremioSettingsData(ctx, db, u.UserID)
+					if err == nil && settings != nil && settings.SidecarEnrichment {
+						sidecarEnrichment = true
+						break
+					}
+				}
+			}
+		} else {
+			log.WithError(err).Warnf("sidecar: failed to lookup users for resource %s", hash)
+		}
 	} else {
 		userID, err := uuid.FromString(claims.Subject)
 		if err == nil {
