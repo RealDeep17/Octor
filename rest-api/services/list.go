@@ -70,8 +70,8 @@ func ListGetArgsFromParams(g ParamGetter) (*ListGetArgs, error) {
 		if err != nil {
 			return nil, errors.Errorf("failed to parse limit, should be integer")
 		}
-		if limit > 1000 {
-			return nil, errors.Errorf("failed to parse limit, should be less than 1000")
+		if limit > 10000 {
+			return nil, errors.Errorf("failed to parse limit, should be less than 10000")
 		}
 		if limit < 1 {
 			return nil, errors.Errorf("failed to parse limit, should be more than 1")

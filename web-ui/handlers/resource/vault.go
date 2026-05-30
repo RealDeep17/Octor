@@ -54,6 +54,7 @@ func (s *Handler) prepareVaultPledgeAddForm(c *gin.Context, args *GetArgs) (*Vau
 	// Get torrent size separately via REST API
 	list, err := s.api.ListResourceContentCached(ctx, args.Claims, args.ID, &api.ListResourceContentArgs{
 		Output: api.OutputList,
+		Limit:  10000,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list resource content for size calculation")

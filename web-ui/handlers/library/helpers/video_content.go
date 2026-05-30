@@ -118,6 +118,39 @@ func (s *VideoContentHelper) GetVideoID(m models.VideoContentWithMetadata) strin
 	return ""
 }
 
+func (s *VideoContentHelper) GetResourceID(m models.VideoContentWithMetadata) string {
+	if m == nil || m.GetContent() == nil {
+		return ""
+	}
+	return m.GetContent().ResourceID
+}
+
+func (s *VideoContentHelper) GetUserWatched(m models.VideoContentWithMetadata) bool {
+	if m == nil {
+		return false
+	}
+	switch v := m.(type) {
+	case *models.Movie:
+		return v.UserWatched
+	case *models.Series:
+		return v.UserWatched
+	}
+	return false
+}
+
+func (s *VideoContentHelper) GetUserRating(m models.VideoContentWithMetadata) *int16 {
+	if m == nil {
+		return nil
+	}
+	switch v := m.(type) {
+	case *models.Movie:
+		return v.UserRating
+	case *models.Series:
+		return v.UserRating
+	}
+	return nil
+}
+
 func (s *VideoContentHelper) GetVideoType(m models.VideoContentWithMetadata) string {
 	return string(m.GetContentType())
 }

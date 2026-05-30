@@ -61,6 +61,7 @@ func (h *Handler) createPledge(ctx context.Context, resourceID string, user *aut
 	if len(selectedFiles) > 0 {
 		list, err := h.api.ListResourceContentCached(ctx, apiClaims, resourceID, &api.ListResourceContentArgs{
 			Output: api.OutputList,
+			Limit:  10000,
 		})
 		if err == nil {
 			var selectedBytes int64
