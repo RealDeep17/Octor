@@ -56,28 +56,32 @@
 				<div class="flex items-center justify-between px-1 pb-2.5 mb-2 border-b border-o-line/30">
 					<label class="flex items-center text-xs font-semibold tracking-wider text-o-muted uppercase cursor-pointer select-none">
 						<input type="checkbox" id="vault-select-all" class="checkbox checkbox-xs checkbox-primary mr-2" {{ if not .Data.Selective }}checked{{ end }} />
-						Select All ({{ len .Data.Items }} files)
+						<span id="vault-select-all-text">Select All ({{ len .Data.Items }} files)</span>
 					</label>
 					<span id="vault-selected-count" class="text-[10px] text-o-primaryL font-bold uppercase tracking-widest">{{ len .Data.Items }} Selected</span>
 				</div>
 
+				<!-- Search Input -->
+				<div class="mb-2.5 relative isolate">
+					<input type="text" id="vault-files-search" placeholder="Search files..." class="input input-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full pl-10 text-xs" />
+					<svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-o-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+				</div>
+
 				<!-- Files Scroll Container -->
 				<div class="max-h-[200px] overflow-y-auto divide-y divide-w-line/50 pr-1" id="vault-files-checklist">
-					{{ range .Data.Items }}
-					<label class="flex items-center justify-between py-2 px-1 hover:bg-base-300/30 transition-colors rounded-lg cursor-pointer group select-none">
-						<div class="flex items-center gap-2 min-w-0 flex-1">
-							<input type="checkbox" name="selected_files[]" value="{{ .PathStr }}" data-size="{{ .Size }}" class="checkbox checkbox-xs checkbox-primary shrink-0" {{ if or (not $.Data.Selective) (inSlice $.Data.SelectedFiles .PathStr) }}checked{{ end }} />
-							
-							<!-- Standard File Icon -->
-							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4 text-o-muted group-hover:text-o-primaryL transition-colors shrink-0">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-							</svg>
-
-							<span class="text-xs truncate font-medium text-o-sub group-hover:text-base-content transition-colors" title="{{ .Name }}">{{ .Name }}</span>
-						</div>
-						<span class="text-[10px] text-o-muted font-mono shrink-0 ml-2">{{ bitsForHumans .Size }}</span>
-					</label>
-					{{ end }}
+					<!-- Loading spinner/placeholder -->
+					<div id="vault-files-loading" class="flex items-center justify-center py-8 text-o-muted gap-2">
+						<svg class="animate-spin h-4 w-4 text-o-primary" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						</svg>
+						<span class="text-xs">Loading files...</span>
+					</div>
+					<!-- Error indicator -->
+					<div id="vault-files-error" class="hidden flex flex-col items-center justify-center py-6 text-error gap-2">
+						<span class="text-xs">Failed to load files.</span>
+						<button type="button" id="vault-files-retry" class="btn btn-xs btn-outline btn-error font-medium">Retry</button>
+					</div>
 				</div>
 			</div>
 			{{ end }}
@@ -136,7 +140,11 @@
 			<!-- Hidden helper to pass Go variables to script safely without triggering JS lints -->
 			<div id="vault-limit-data" class="hidden" 
 				data-available="{{ if .Data.Available }}{{ derefFloat64 .Data.Available }}{{ else }}0{{ end }}" 
-				data-has-limit="{{ if .Data.Available }}true{{ else }}false{{ end }}">
+				data-has-limit="{{ if .Data.Available }}true{{ else }}false{{ end }}"
+				data-resource-id="{{ .Data.ResourceID }}"
+				data-selective="{{ .Data.Selective }}"
+				data-selected-files="{{ .Data.SelectedFiles | json }}"
+				data-items-url="{{ langPath .Ctx.Lang (printf "/%s/items" .Data.ResourceID) }}">
 			</div>
 		</form>
 
@@ -146,10 +154,15 @@
 			const modal = document.getElementById('pledge-modal');
 			if (!modal) return;
 
-			const checkboxes = modal.querySelectorAll('input[name="selected_files[]"]');
 			const selectAll = modal.querySelector('#vault-select-all');
+			const selectAllText = modal.querySelector('#vault-select-all-text');
 			const selectedCount = modal.querySelector('#vault-selected-count');
-			
+			const searchInput = modal.querySelector('#vault-files-search');
+			const checklistContainer = modal.querySelector('#vault-files-checklist');
+			const loadingIndicator = modal.querySelector('#vault-files-loading');
+			const errorIndicator = modal.querySelector('#vault-files-error');
+			const retryBtn = modal.querySelector('#vault-files-retry');
+
 			const sizeDisplay = modal.querySelector('#vault-display-size');
 			const vpDisplay = modal.querySelector('#vault-display-required');
 			const storeBtn = modal.querySelector('button[data-vault-store-btn]');
@@ -159,21 +172,47 @@
 			const limitData = modal.querySelector('#vault-limit-data');
 			const availableVP = parseFloat(limitData ? limitData.getAttribute('data-available') : '0');
 			const hasLimit = limitData ? limitData.getAttribute('data-has-limit') === 'true' : false;
+			const resourceId = limitData ? limitData.getAttribute('data-resource-id') : '';
+			const selective = limitData ? limitData.getAttribute('data-selective') === 'true' : false;
+			const itemsUrl = limitData ? limitData.getAttribute('data-items-url') : '';
+
+			let selectedFiles = [];
+			try {
+				selectedFiles = JSON.parse(limitData ? limitData.getAttribute('data-selected-files') : '[]') || [];
+			} catch (e) {
+				console.error("failed to parse selected files", e);
+			}
+
+			let allItems = [];
+			let checkboxes = [];
 
 			function formatBytes(bytes) {
-				if (bytes === 0) return '0.00 B';
-				const k = 1024;
-				const dm = 2;
-				const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+				if (bytes === 0) return '0 B';
+				const k = 1000;
+				const sizes = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB'];
 				const i = Math.floor(Math.log(bytes) / Math.log(k));
-				return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+				const val = bytes / Math.pow(k, i);
+				if (val === Math.round(val)) {
+					return val + ' ' + sizes[i];
+				}
+				return val.toFixed(1) + ' ' + sizes[i];
 			}
 
 			function updateVP() {
 				let totalBytes = 0;
 				let checkedCount = 0;
+				let visibleCheckedCount = 0;
+				let visibleCount = 0;
 				
 				checkboxes.forEach(cb => {
+					const label = cb.closest('label');
+					const isVisible = label && !label.classList.contains('hidden');
+					if (isVisible) {
+						visibleCount++;
+						if (cb.checked) {
+							visibleCheckedCount++;
+						}
+					}
 					if (cb.checked) {
 						totalBytes += parseInt(cb.getAttribute('data-size') || '0', 10);
 						checkedCount++;
@@ -183,6 +222,15 @@
 				// Update selected count badge
 				if (selectedCount) {
 					selectedCount.textContent = `${checkedCount} Selected`;
+				}
+
+				// Update Select All checkbox text
+				if (selectAllText) {
+					if (searchInput && searchInput.value.trim() !== '') {
+						selectAllText.textContent = `Select All (${visibleCount} filtered)`;
+					} else {
+						selectAllText.textContent = `Select All (${allItems.length} files)`;
+					}
 				}
 
 				// Calculate size in GB and required VP
@@ -197,10 +245,10 @@
 					vpDisplay.textContent = requiredVP.toFixed(2);
 				}
 
-				// Update Select All checkbox state
+				// Update Select All checkbox state (for visible ones)
 				if (selectAll) {
-					selectAll.checked = checkedCount === checkboxes.length;
-					selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+					selectAll.checked = visibleCount > 0 && visibleCheckedCount === visibleCount;
+					selectAll.indeterminate = visibleCheckedCount > 0 && visibleCheckedCount < visibleCount;
 				}
 
 				// Handle points warning and submit button states
@@ -233,22 +281,113 @@
 				}
 			}
 
-			// Event listeners
-			checkboxes.forEach(cb => {
-				cb.addEventListener('change', updateVP);
-			});
+			function renderItems(items) {
+				// Clear any previous rendered item rows or loaders, except the loading/error templates themselves
+				const children = Array.from(checklistContainer.children);
+				children.forEach(child => {
+					if (child !== loadingIndicator && child !== errorIndicator) {
+						child.remove();
+					}
+				});
 
-			if (selectAll) {
-				selectAll.addEventListener('change', function() {
-					checkboxes.forEach(cb => {
-						cb.checked = selectAll.checked;
+				const fragment = document.createDocumentFragment();
+				items.forEach(item => {
+					const isChecked = !selective || selectedFiles.includes(item.path);
+
+					const label = document.createElement('label');
+					label.className = 'flex items-center justify-between py-2 px-1 hover:bg-base-300/30 transition-colors rounded-lg cursor-pointer group select-none file-item-row';
+					label.setAttribute('data-name', item.name.toLowerCase());
+
+					label.innerHTML = `
+						<div class="flex items-center gap-2 min-w-0 flex-1">
+							<input type="checkbox" name="selected_files[]" value="${item.path}" data-size="${item.size}" class="checkbox checkbox-xs checkbox-primary shrink-0 vault-file-cb" ${isChecked ? 'checked' : ''} />
+							
+							<!-- Standard File Icon -->
+							<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4 text-o-muted group-hover:text-o-primaryL transition-colors shrink-0">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+							</svg>
+
+							<span class="text-xs truncate font-medium text-o-sub group-hover:text-base-content transition-colors" title="${item.name}">${item.name}</span>
+						</div>
+						<span class="text-[10px] text-o-muted font-mono shrink-0 ml-2">${formatBytes(item.size)}</span>
+					`;
+					
+					fragment.appendChild(label);
+				});
+
+				checklistContainer.appendChild(fragment);
+				checkboxes = checklistContainer.querySelectorAll('.vault-file-cb');
+
+				// Add change listeners to checkboxes
+				checkboxes.forEach(cb => {
+					cb.addEventListener('change', updateVP);
+				});
+
+				// Set initial update
+				updateVP();
+			}
+
+			async function fetchFiles() {
+				if (!itemsUrl) return;
+
+				if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+				if (errorIndicator) errorIndicator.classList.add('hidden');
+
+				try {
+					const res = await fetch(itemsUrl);
+					if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+					const data = await res.json();
+					if (data && data.items) {
+						allItems = data.items;
+						renderItems(allItems);
+						if (loadingIndicator) loadingIndicator.classList.add('hidden');
+					} else {
+						throw new Error("invalid json response structure");
+					}
+				} catch (err) {
+					console.error("failed to fetch resource items", err);
+					if (loadingIndicator) loadingIndicator.classList.add('hidden');
+					if (errorIndicator) errorIndicator.classList.remove('hidden');
+				}
+			}
+
+			// Search filter event
+			if (searchInput) {
+				searchInput.addEventListener('input', function() {
+					const query = searchInput.value.toLowerCase().trim();
+					const rows = checklistContainer.querySelectorAll('.file-item-row');
+					rows.forEach(row => {
+						const name = row.getAttribute('data-name');
+						if (name.includes(query)) {
+							row.classList.remove('hidden');
+						} else {
+							row.classList.add('hidden');
+						}
 					});
 					updateVP();
 				});
 			}
 
-			// Run initial update
-			updateVP();
+			// Select All event
+			if (selectAll) {
+				selectAll.addEventListener('change', function() {
+					checkboxes.forEach(cb => {
+						const label = cb.closest('label');
+						const isVisible = label && !label.classList.contains('hidden');
+						if (isVisible) {
+							cb.checked = selectAll.checked;
+						}
+					});
+					updateVP();
+				});
+			}
+
+			if (retryBtn) {
+				retryBtn.addEventListener('click', fetchFiles);
+			}
+
+			// Load files initially
+			fetchFiles();
 		})();
 		</script>
 	{{ end }}

@@ -46,6 +46,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	r.POST("/", h.post)
 	r.POST("/enrich/:resource_id", h.enrichInternal)
 	r.GET("/:resource_id/status", h.status)
+	r.GET("/:resource_id/items", h.getItems)
 	r.GET("/:resource_id", func(c *gin.Context) {
 		rid := c.Param("resource_id")
 		if strings.HasPrefix(rid, "magnet") {
