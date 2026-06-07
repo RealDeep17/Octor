@@ -123,11 +123,11 @@ func (s *Handler) handlePoster(c *gin.Context, horizontal bool) {
 						strings.Contains(md.PosterURL, "stashdb.org") ||
 						strings.HasPrefix(md.VideoID, "tpdb:") ||
 						strings.HasPrefix(md.VideoID, "tpdb=") ||
-						strings.HasPrefix(md.VideoID, "tpdb_jav:") ||
-						strings.HasPrefix(md.VideoID, "tpdb_jav=") ||
+						isJavVideoID(md.VideoID) ||
 						strings.HasPrefix(md.VideoID, "stash:") ||
 						strings.HasPrefix(md.VideoID, "stash=")
-					if isAdult || (md.PosterURL == "" && md.PosterHorizontalURL != "") {
+					isJav := isJavVideoID(md.VideoID)
+					if (isAdult && !isJav) || (md.PosterURL == "" && md.PosterHorizontalURL != "") {
 						hasOnlyHorizontal = true
 					}
 				}
@@ -171,10 +171,43 @@ func (s *Handler) handlePoster(c *gin.Context, horizontal bool) {
 		return
 	}
 
-	// 4. Trigger background download, resize, and S3-caching (if S3 is configured)
+	// 4. Trigger synchronous download, crop, and S3-caching if it's a JAV scene
+	isJav := isJavVideoID(pa.imdbID)
+	if isJav {
+		resizedBuf, resizeErr := s.getResizedJPEGPoster(ctx, db, pa)
+		if resizeErr != nil {
+			log.WithError(resizeErr).Warnf("poster: synchronous JAV resize failed for %s", pa.imdbID)
+			c.Redirect(http.StatusTemporaryRedirect, posterURL)
+			return
+		}
+
+		if s.s3Cl != nil && s.posterCacheS3Bucket != "" {
+			imgData := make([]byte, resizedBuf.Len())
+			copy(imgData, resizedBuf.Bytes())
+			go func(pa *PosterArgs, data []byte) {
+				detachedCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				cl := s.s3Cl.Get()
+				if putErr := s.putPosterToCache(detachedCtx, cl, pa, bytes.NewBuffer(data)); putErr != nil {
+					log.WithError(putErr).Warn("poster: S3 background cache put failed for JAV")
+				} else {
+					log.Infof("poster: successfully cached JAV poster in background for %s", pa.imdbID)
+				}
+			}(pa, imgData)
+		}
+
+		c.Header("Content-Type", "image/jpeg")
+		c.Header("Content-Length", strconv.Itoa(resizedBuf.Len()))
+		c.Header("ETag", s.generateETag(resizedBuf.Bytes()))
+		c.Header("Cache-Control", "public, max-age=86400")
+		c.Status(http.StatusOK)
+		_, _ = io.Copy(c.Writer, resizedBuf)
+		return
+	}
+
+	// 4. Trigger background download, resize, and S3-caching (if S3 is configured) for standard scenes
 	if s.s3Cl != nil && s.posterCacheS3Bucket != "" {
 		go func(pa *PosterArgs) {
-			// Detached context so caching completes even if client request is aborted
 			detachedCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
@@ -242,6 +275,9 @@ func (s *Handler) getOriginalPosterURL(ctx context.Context, db *pg.DB, args *Pos
 	if posterURL == "" {
 		return "", errors.Wrapf(errPosterNotFound, "%s %s", args.t, args.imdbID)
 	}
+	if strings.Contains(posterURL, "pics.dmm.co.jp") {
+		posterURL = strings.ReplaceAll(posterURL, "ps.jpg", "pl.jpg")
+	}
 	return posterURL, nil
 }
 
@@ -255,6 +291,7 @@ func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterA
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := s.cl.Do(req)
 	if err != nil {
@@ -264,14 +301,61 @@ func (s *Handler) getResizedPoster(ctx context.Context, db *pg.DB, args *PosterA
 		_ = Body.Close()
 	}(resp.Body)
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to download poster from %s, status: %d", posterURL, resp.StatusCode)
+	}
+
 	srcImg, err := imaging.Decode(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	resized := imaging.Resize(srcImg, args.width, 0, imaging.Linear)
+	bounds := srcImg.Bounds()
+	w := bounds.Dx()
+	h := bounds.Dy()
 
-	return resized, nil
+	var processed image.Image
+	isJav := isJavVideoID(args.imdbID)
+
+	if isJav {
+		if !args.horizontal {
+			// Portrait poster requested
+			if w > h {
+				// Determine if it is a full DVD jacket (front cover on right) or a generic landscape backdrop
+				urlLower := strings.ToLower(posterURL)
+				isJavJacket := strings.Contains(urlLower, "dmm.co.jp") ||
+					strings.Contains(urlLower, "jav.guru") ||
+					strings.Contains(urlLower, "javmiku") ||
+					strings.Contains(urlLower, "javnorth") ||
+					strings.Contains(urlLower, "pl.jpg")
+
+				if isJavJacket {
+					// If source is horizontal jacket cover, crop the right 50% (front cover)
+					processed = imaging.Crop(srcImg, image.Rect(w/2, 0, w, h))
+					processed = imaging.Resize(processed, args.width, 0, imaging.Lanczos)
+				} else {
+					// Generic scene screenshot / backdrop: crop center to 2:3 aspect ratio
+					processed = imaging.Fill(srcImg, args.width, int(float64(args.width)*1.5), imaging.Center, imaging.Lanczos)
+				}
+			} else {
+				// Already vertical, do not crop
+				processed = srcImg
+				processed = imaging.Resize(processed, args.width, 0, imaging.Lanczos)
+			}
+		} else {
+			// Landscape (horizontals) requested: do not crop! Just resize
+			processed = imaging.Resize(srcImg, args.width, 0, imaging.Lanczos)
+		}
+	} else {
+		if !args.horizontal && w > h {
+			// Center crop to 2:3 aspect ratio
+			processed = imaging.Fill(srcImg, args.width, int(float64(args.width)*1.5), imaging.Center, imaging.Lanczos)
+		} else {
+			processed = imaging.Resize(srcImg, args.width, 0, imaging.Lanczos)
+		}
+	}
+
+	return imaging.Clone(processed), nil
 }
 
 func (s *Handler) getResizedJPEGPoster(ctx context.Context, db *pg.DB, args *PosterArgs) (*bytes.Buffer, error) {
@@ -384,4 +468,9 @@ func (s *Handler) putPosterToCache(ctx context.Context, s3Cl *s3.S3, pa *PosterA
 			ContentMD5: s.makeAWSMD5(data),
 		})
 	return
+}
+
+func isJavVideoID(videoID string) bool {
+	idLower := strings.ToLower(videoID)
+	return strings.HasPrefix(idLower, "tpdb_jav:") || strings.HasPrefix(idLower, "tpdb_jav=") || strings.Contains(idLower, "jav.guru")
 }

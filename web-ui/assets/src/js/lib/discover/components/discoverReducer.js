@@ -1,6 +1,14 @@
 // Discover page state reducer
 
-export const TYPE_PRIORITY = ['movie', 'series'];
+export const TYPE_PRIORITY = ['movie', 'series', 'porn', 'jav', 'adult'];
+
+export function getCatalogsForMode(catalogs, isNsfw) {
+    if (isNsfw) {
+        return (catalogs || []).filter(c => c && (c.type === 'porn' || c.type === 'jav' || c.type === 'adult'));
+    } else {
+        return (catalogs || []).filter(c => c && (c.type === 'movie' || c.type === 'series'));
+    }
+}
 
 export function sortByPriority(types, priority) {
     return [...types].sort((a, b) => {
@@ -64,12 +72,12 @@ export function getCatalogsForType(catalogs, type) {
 }
 
 export function getTypes(catalogs) {
-    const types = [...new Set(catalogs.map(c => c.type))];
+    const types = [...new Set((catalogs || []).map(c => c && c.type).filter(Boolean))];
     return sortByPriority(types, TYPE_PRIORITY);
 }
 
 export function getSearchTypes(searchResults) {
-    const types = [...new Set(searchResults.map(r => r.type))];
+    const types = [...new Set((searchResults || []).map(r => r && r.type).filter(Boolean))];
     return sortByPriority(types, TYPE_PRIORITY);
 }
 
@@ -125,6 +133,7 @@ export const initialAIState = {
 export const AI_RECS_INITIAL_VISIBLE = 4;
 
 export const initialState = {
+    isNsfw: false,
     phase: 'loading', // 'loading' | 'ready' | 'error' | 'no-addons' | 'no-catalogs'
     errorMessage: '',
     manifests: [],
@@ -173,8 +182,53 @@ export const initialState = {
 export function discoverReducer(state, action) {
     switch (action.type) {
         case 'INIT_SUCCESS': {
-            const { manifests, catalogs, selectedType, selectedCatalog, addons } = action;
-            return { ...state, phase: 'ready', manifests, catalogs, addons: addons || state.addons, selectedType, selectedCatalog };
+            const { manifests, catalogs, addons, isNsfw } = action;
+            let finalNsfw = isNsfw !== undefined ? isNsfw : state.isNsfw;
+            if (!window._isAdmin) {
+                finalNsfw = false;
+            }
+            let modeCatalogs = getCatalogsForMode(catalogs, finalNsfw);
+            if (modeCatalogs.length === 0 && finalNsfw === false) {
+                const nsfwCatalogs = getCatalogsForMode(catalogs, true);
+                if (nsfwCatalogs.length > 0) {
+                    finalNsfw = true;
+                    modeCatalogs = nsfwCatalogs;
+                }
+            }
+            const types = getTypes(modeCatalogs);
+            const phase = types.length > 0 ? 'ready' : 'no-catalogs';
+            let selectedType = action.selectedType || types[0] || null;
+            if (selectedType && !types.includes(selectedType)) {
+                selectedType = types[0] || null;
+            }
+            let selectedCatalog = null;
+            if (selectedType) {
+                const typeCatalogs = getCatalogsForType(modeCatalogs, selectedType);
+                if (action.selectedCatalog && typeCatalogs.some(c => c.baseUrl === action.selectedCatalog.baseUrl && c.id === action.selectedCatalog.id)) {
+                    selectedCatalog = action.selectedCatalog;
+                } else {
+                    selectedCatalog = typeCatalogs[0] || null;
+                }
+            }
+            return { ...state, phase, manifests, catalogs, addons: addons || state.addons, isNsfw: finalNsfw, selectedType, selectedCatalog };
+        }
+        case 'TOGGLE_NSFW': {
+            const isNsfw = window._isAdmin ? !!action.isNsfw : false;
+            const modeCatalogs = getCatalogsForMode(state.catalogs, isNsfw);
+            const types = getTypes(modeCatalogs);
+            const selectedType = types[0] || null;
+            const selectedCatalog = selectedType ? getCatalogsForType(modeCatalogs, selectedType)[0] : null;
+
+            return {
+                ...state,
+                isNsfw,
+                selectedType,
+                selectedCatalog,
+                items: [],
+                skip: 0,
+                hasMore: true,
+                page: 0,
+            };
         }
         case 'ADDONS_UPDATED':
             return { ...state, addons: action.addons };
@@ -183,7 +237,8 @@ export function discoverReducer(state, action) {
         case 'SET_PHASE':
             return { ...state, phase: action.phase, errorMessage: action.message || '' };
         case 'SELECT_TYPE': {
-            const selectedCatalog = getCatalogsForType(state.catalogs, action.selectedType)[0] || null;
+            const modeCatalogs = getCatalogsForMode(state.catalogs, state.isNsfw);
+            const selectedCatalog = getCatalogsForType(modeCatalogs, action.selectedType)[0] || null;
             return { ...state, selectedType: action.selectedType, selectedCatalog, items: [], skip: 0, hasMore: true, page: 0 };
         }
         case 'SELECT_CATALOG':
@@ -202,15 +257,16 @@ export function discoverReducer(state, action) {
         case 'SEARCH_START':
             // Search always exits the watchlist filter — search runs against
             // Cinemeta + the user's catalogs, not the local saved list.
-            return { ...state, isSearchMode: true, searchQuery: action.query, searchResults: [], searchLoading: true, searchType: 'all', watchlistFilterEnabled: false };
+            return { ...state, isSearchMode: true, searchQuery: action.query, searchResults: action.append ? state.searchResults : [], searchLoading: true, searchType: 'all', watchlistFilterEnabled: false };
         case 'SEARCH_RESULTS':
-            return { ...state, searchLoading: false, searchResults: action.results };
+            return { ...state, searchLoading: false, searchResults: action.results, hasMore: action.hasMore !== undefined ? action.hasMore : true };
         case 'SELECT_SEARCH_TYPE':
             return { ...state, searchType: action.searchType };
         case 'EXIT_SEARCH': {
-            const types = getTypes(state.catalogs);
+            const modeCatalogs = getCatalogsForMode(state.catalogs, state.isNsfw);
+            const types = getTypes(modeCatalogs);
             const selectedType = types[0] || null;
-            const selectedCatalog = selectedType ? getCatalogsForType(state.catalogs, selectedType)[0] : null;
+            const selectedCatalog = selectedType ? getCatalogsForType(modeCatalogs, selectedType)[0] : null;
             return {
                 ...state,
                 isSearchMode: false, searchQuery: '', searchResults: [], searchType: 'all', searchLoading: false,

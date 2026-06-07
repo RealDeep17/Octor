@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/webtor-io/web-ui/models"
+	"github.com/webtor-io/web-ui/services/enrich"
 )
 
 type VideoContentHelper struct{}
@@ -200,4 +201,22 @@ func (s *VideoContentHelper) GetEpisodePlot(ep *models.Episode) string {
 		return *ep.EpisodeMetadata.Plot
 	}
 	return ""
+}
+
+func (s *VideoContentHelper) GetStudio(m models.VideoContentWithMetadata) string {
+	if m == nil {
+		return ""
+	}
+	studio := ""
+	if m.GetContent() != nil && m.GetContent().Metadata != nil {
+		if dir, ok := m.GetContent().Metadata["Director"].(string); ok && dir != "" && dir != "N/A" {
+			studio = dir
+		}
+	}
+	if studio == "" && m.GetPath() != nil {
+		if _, s := enrich.IsAdultPath(*m.GetPath()); s != "" {
+			studio = s
+		}
+	}
+	return studio
 }

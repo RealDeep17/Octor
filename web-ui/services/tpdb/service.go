@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -29,7 +30,7 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 	return append(f, cli.StringFlag{
 		Name:   ApiKeyFlag,
 		Usage:  "ThePornDB API key",
-		EnvVar: "TPDB_API_KEY",
+		EnvVar: "TPDB_API_KEY,THEPORNDB_API_KEY",
 	})
 }
 
@@ -155,3 +156,200 @@ func (s *Service) FetchPerformerPoster(ctx context.Context, name string) (string
 
 	return posterURL, nil
 }
+
+func (s *Service) FetchScenes(ctx context.Context, orderBy string, page int) ([]TpdbScene, error) {
+	if s == nil || s.apiKey == "" {
+		return nil, fmt.Errorf("tpdb service not configured")
+	}
+	u := fmt.Sprintf("%s/scenes?orderBy=%s&page=%d&per_page=20", BaseURL, url.QueryEscape(orderBy), page)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("tpdb api error: %d", resp.StatusCode)
+	}
+
+	var tr TpdbResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return nil, err
+	}
+	return tr.Data, nil
+}
+
+func (s *Service) FetchJavScenes(ctx context.Context, orderBy string, page int) ([]TpdbScene, error) {
+	if s == nil || s.apiKey == "" {
+		return nil, fmt.Errorf("tpdb service not configured")
+	}
+	u := fmt.Sprintf("%s/jav?orderBy=%s&page=%d&per_page=20", BaseURL, url.QueryEscape(orderBy), page)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("tpdb api error: %d", resp.StatusCode)
+	}
+
+	var tr TpdbResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return nil, err
+	}
+	return tr.Data, nil
+}
+
+func (s *Service) FetchSceneByID(ctx context.Context, id string) (*TpdbScene, error) {
+	if s == nil || s.apiKey == "" {
+		return nil, fmt.Errorf("tpdb service not configured")
+	}
+	u := fmt.Sprintf("%s/scenes/%s", BaseURL, url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("tpdb api error: %d", resp.StatusCode)
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var tr TpdbSingleResponse
+	if err := json.Unmarshal(bodyBytes, &tr); err == nil && tr.Data.ID != "" {
+		return &tr.Data, nil
+	}
+
+	var direct TpdbScene
+	if err := json.Unmarshal(bodyBytes, &direct); err == nil && direct.ID != "" {
+		return &direct, nil
+	}
+
+	return nil, fmt.Errorf("failed to decode tpdb scene response")
+}
+
+func (s *Service) FetchJavByID(ctx context.Context, id string) (*TpdbScene, error) {
+	if s == nil || s.apiKey == "" {
+		return nil, fmt.Errorf("tpdb service not configured")
+	}
+	u := fmt.Sprintf("%s/jav/%s", BaseURL, url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("tpdb api error: %d", resp.StatusCode)
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var tr TpdbSingleResponse
+	if err := json.Unmarshal(bodyBytes, &tr); err == nil && tr.Data.ID != "" {
+		return &tr.Data, nil
+	}
+
+	var direct TpdbScene
+	if err := json.Unmarshal(bodyBytes, &direct); err == nil && direct.ID != "" {
+		return &direct, nil
+	}
+
+	return nil, fmt.Errorf("failed to decode tpdb JAV response")
+}
+
+func (s *Service) SearchJavScenes(ctx context.Context, query string) ([]TpdbScene, error) {
+	if s == nil || s.apiKey == "" {
+		return nil, fmt.Errorf("tpdb service not configured")
+	}
+	u := fmt.Sprintf("%s/jav?q=%s", BaseURL, url.QueryEscape(query))
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("tpdb api error: %d", resp.StatusCode)
+	}
+
+	var tr TpdbResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return nil, err
+	}
+	return tr.Data, nil
+}
+
+func (s *Service) SearchScenes(ctx context.Context, query string) ([]TpdbScene, error) {
+	if s == nil || s.apiKey == "" {
+		return nil, fmt.Errorf("tpdb service not configured")
+	}
+	u := fmt.Sprintf("%s/scenes?q=%s", BaseURL, url.QueryEscape(query))
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("tpdb api error: %d", resp.StatusCode)
+	}
+
+	var tr TpdbResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return nil, err
+	}
+	return tr.Data, nil
+}
+

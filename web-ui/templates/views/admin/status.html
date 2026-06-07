@@ -101,6 +101,70 @@
         </div>
       </div>
     </div>
+
+    {{/* External Tools quick-links */}}
+    <div class="mt-8">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-o-muted mb-4">External Tools</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+
+        <a href="/prowlarr" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-o-purple/50 hover:bg-o-purple/5 transition-all group">
+          <div class="p-2 bg-o-purple/10 rounded-xl group-hover:bg-o-purple/20 transition-colors">
+            <svg class="w-6 h-6 text-o-purpleL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              <path d="M9 10h.01M15 10h.01M9.5 15a3.5 3.5 0 005 0"/>
+            </svg>
+          </div>
+          <span class="text-xs font-medium text-o-sub group-hover:text-base-content">Prowlarr</span>
+        </a>
+
+        <a href="/sonarr" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-o-cyan/50 hover:bg-o-cyan/5 transition-all group">
+          <div class="p-2 bg-o-cyan/10 rounded-xl group-hover:bg-o-cyan/20 transition-colors">
+            <svg class="w-6 h-6 text-o-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+            </svg>
+          </div>
+          <span class="text-xs font-medium text-o-sub group-hover:text-base-content">Sonarr</span>
+        </a>
+
+        <a href="/radarr" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-o-primary/50 hover:bg-o-primary/5 transition-all group">
+          <div class="p-2 bg-o-primary/10 rounded-xl group-hover:bg-o-primary/20 transition-colors">
+            <svg class="w-6 h-6 text-o-primaryL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M7 4v16M17 4v16M3 8h18M3 16h18"/>
+            </svg>
+          </div>
+          <span class="text-xs font-medium text-o-sub group-hover:text-base-content">Radarr</span>
+        </a>
+
+        <a href="/whisparr" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-pink-500/50 hover:bg-pink-500/5 transition-all group">
+          <div class="p-2 bg-pink-500/10 rounded-xl group-hover:bg-pink-500/20 transition-colors">
+            <svg class="w-6 h-6 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+          </div>
+          <span class="text-xs font-medium text-o-sub group-hover:text-base-content">Whisparr</span>
+        </a>
+
+        <a href="/zilean/" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-yellow-500/50 hover:bg-yellow-500/5 transition-all group">
+          <div class="p-2 bg-yellow-500/10 rounded-xl group-hover:bg-yellow-500/20 transition-colors">
+            <svg class="w-6 h-6 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"/>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+          </div>
+          <span class="text-xs font-medium text-o-sub group-hover:text-base-content">Zilean</span>
+        </a>
+
+        <a href="/byparr/" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-green-500/50 hover:bg-green-500/5 transition-all group">
+          <div class="p-2 bg-green-500/10 rounded-xl group-hover:bg-green-500/20 transition-colors">
+            <svg class="w-6 h-6 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <span class="text-xs font-medium text-o-sub group-hover:text-base-content">Byparr</span>
+        </a>
+
+      </div>
+    </div>
   </div>
 </section>
 {{ end }}

@@ -41,6 +41,14 @@ body:not([data-iframe-height]) .wt-preview-mount {
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
 }
 
+/* Hide cursor when controls are hidden on video playback */
+.wt-player--video:not(.wt-player--controls-visible) {
+    cursor: none;
+}
+.wt-player--video:not(.wt-player--controls-visible) * {
+    cursor: none !important;
+}
+
 /* In embed — no border/radius */
 body[data-iframe-height] .wt-player {
     border-radius: 0;
@@ -547,11 +555,21 @@ video::cue {
 }
 
 google-cast-launcher {
-    width: 1.5rem !important;
-    height: 1.5rem !important;
-    max-width: 1.5rem !important;
-    max-height: 1.5rem !important;
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+    max-width: 1.25rem !important;
+    max-height: 1.25rem !important;
     display: inline-block !important;
+    background-color: transparent !important;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    cursor: pointer !important;
+}
+
+/* Highlight Chromecast icon white on hover to match other player buttons */
+.wt-player-cast-inline:hover google-cast-launcher {
+    --disconnected-color: #ffffff;
 }
 
 /* Fallback to DirectPlay toast */

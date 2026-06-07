@@ -195,16 +195,17 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
     const hasV = item.hasPoster !== undefined ? item.hasPoster : !!item.poster;
     const hasH = item.hasPosterHorizontal !== undefined ? item.hasPosterHorizontal : (!!item.posterHorizontal || !!item.background);
     
-    const initialHorizontal = layout === 'horizontal' || (layout !== 'vertical' && (item.posterShape === 'landscape' || (!hasV && hasH)));
+    const isAdultItem = item.type === 'porn' || item.type === 'jav' || item.type === 'adult' || (item.id && (item.id.startsWith('tpdb') || item.id.startsWith('stash')));
+    const initialHorizontal = layout === 'horizontal' || (layout !== 'vertical' && (isAdultItem || item.posterShape === 'landscape' || (!hasV && hasH)));
     const [isHorizontal, setIsHorizontal] = useState(initialHorizontal);
 
     useEffect(() => {
         if (layout) {
             setIsHorizontal(layout === 'horizontal');
         } else {
-            setIsHorizontal(item.posterShape === 'landscape' || (!hasV && hasH));
+            setIsHorizontal(isAdultItem || item.posterShape === 'landscape' || (!hasV && hasH));
         }
-    }, [layout, hasV, hasH, item.posterShape]);
+    }, [layout, hasV, hasH, item.posterShape, isAdultItem]);
 
     const handleWatchedClick = useCallback((e) => {
         e.stopPropagation();
@@ -317,7 +318,7 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
                                 <button
                                     type="button"
                                     onClick={handleToggleLayout}
-                                    class="w-card-badge-ghost bottom-2 left-2 cursor-pointer hover:text-w-purpleL !opacity-100 z-10"
+                                    class="w-card-badge-ghost bottom-2 left-2 cursor-pointer hover:text-w-purpleL z-10"
                                     title="Toggle aspect ratio"
                                 >
                                     {isHorizontal ? (
@@ -337,7 +338,7 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
                 <div class="p-3">
                     <h3 class="w-card-title">{item.name || t('discover.unknown')}</h3>
                     <div class="flex justify-between items-center mt-1.5">
-                        <div class="flex items-center gap-1.5">
+                        <div class="flex items-center gap-1.5 flex-wrap">
                             {(item.releaseInfo || item.year) && (
                                 <span class="text-xs text-w-muted">{item.releaseInfo || item.year}</span>
                             )}
@@ -347,7 +348,12 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
                                 </span>
                             )}
                         </div>
-                        {item.imdbRating && <StarRating rating={item.imdbRating} />}
+                        <div class="flex items-center gap-2">
+                            {item.studio && (
+                                <span class="text-xs text-cyan-400 font-semibold uppercase tracking-wider">{item.studio}</span>
+                            )}
+                            {item.imdbRating && <StarRating rating={item.imdbRating} />}
+                        </div>
                     </div>
                 </div>
             </div>

@@ -12,6 +12,33 @@ import { refreshSnapshot, isSnapshotStale } from './addonsApi';
 const FETCH_TIMEOUT = 10000;
 const CACHE_MAX = 100;
 
+// Returns true if the given addon base URL needs to go through the server-side
+// proxy. This is the case when:
+//  - The URL scheme is http:// (Mixed Content — blocked by the browser on HTTPS)
+//  - The hostname is not a public internet host (e.g. a LAN address like
+//    comet-internal.local that only the server can resolve)
+function needsProxy(baseUrl) {
+    try {
+        const u = new URL(baseUrl);
+        // Any plain-HTTP URL on an HTTPS page = Mixed Content → must proxy
+        if (u.protocol === 'http:' && window.location.protocol === 'https:') return true;
+        // Unresolvable LAN hostnames (no dots, .local, .internal, .lan, etc.)
+        const host = u.hostname;
+        if (host === 'localhost') return false; // localhost is fine
+        if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) return true; // RFC1918
+        if (host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan')) return true;
+        if (!host.includes('.')) return true; // bare hostname
+    } catch {}
+    return false;
+}
+
+// Wrap an addon base URL so that HTTP/LAN URLs are fetched server-side.
+// The proxy path is:  /stremio/addon-proxy/<base64url(base)>/<rest>
+function proxyUrl(baseUrl, rest) {
+    const encoded = btoa(baseUrl).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return rest ? `/stremio/addon-proxy/${encoded}/${rest}` : `/stremio/addon-proxy/${encoded}`;
+}
+
 function fetchWithTimeout(url, signal, timeout = FETCH_TIMEOUT) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -124,7 +151,9 @@ export class StremioClient {
     }
 
     async fetchManifest(baseUrl) {
-        const url = `${baseUrl}/manifest.json`;
+        const url = needsProxy(baseUrl)
+            ? proxyUrl(baseUrl, 'manifest.json')
+            : `${baseUrl}/manifest.json`;
         let res;
         try {
             res = await fetchWithTimeout(url);
@@ -194,7 +223,8 @@ export class StremioClient {
         const cached = this.cache.get(cacheKey);
         if (cached) return cached;
 
-        const url = `${baseUrl}/catalog/${type}/${catalogId}${skip > 0 ? `/skip=${skip}` : ''}.json`;
+        const rest = `catalog/${type}/${catalogId}${skip > 0 ? `/skip=${skip}` : ''}.json`;
+        const url = needsProxy(baseUrl) ? proxyUrl(baseUrl, rest) : `${baseUrl}/${rest}`;
         const res = await fetchWithTimeout(url, signal);
         if (!res.ok) throw new Error('Failed to fetch catalog');
         const data = await res.json();
@@ -203,6 +233,21 @@ export class StremioClient {
     }
 
     async fetchMeta(type, id, { signal } = {}) {
+        // Adult-only types: go to the internal adult meta endpoint.
+        // Cinemeta only serves movie/series — never call it with porn/jav/adult.
+        if (type === 'adult' || type === 'porn' || type === 'jav') {
+            try {
+                // The server route is always /discover/adult/meta/adult/*
+                const url = `/discover/adult/meta/adult/${id}.json`;
+                const res = await fetchWithTimeout(url, signal);
+                if (res.ok) {
+                    const data = await res.json();
+                    return data.meta || null;
+                }
+            } catch (e) { /* ignore */ }
+            return null;
+        }
+
         // Always try Cinemeta first
         try {
             const url = `${CINEMETA_BASE}/meta/${type}/${id}.json`;
@@ -271,8 +316,13 @@ export class StremioClient {
         return catalogs;
     }
 
-    async searchCatalog(baseUrl, type, catalogId, query, { signal } = {}) {
-        const url = `${baseUrl}/catalog/${type}/${catalogId}/search=${encodeURIComponent(query)}.json`;
+    async searchCatalog(baseUrl, type, catalogId, query, { skip, signal } = {}) {
+        let path = `search=${encodeURIComponent(query)}`;
+        if (skip !== undefined && skip > 0) {
+            path = `skip=${skip}/search=${encodeURIComponent(query)}`;
+        }
+        const rest = `catalog/${type}/${catalogId}/${path}.json`;
+        const url = needsProxy(baseUrl) ? proxyUrl(baseUrl, rest) : `${baseUrl}/${rest}`;
         const res = await fetchWithTimeout(url, signal, 8000);
         if (!res.ok) throw new Error('Search failed');
         const data = await res.json();
@@ -291,7 +341,12 @@ export class StremioClient {
     }
 
     async fetchStreamFromAddon(addon, type, id, { signal } = {}) {
-        const url = `${addon.baseUrl}/stream/${type}/${id}.json`;
+        // Map adult-only types to 'movie' for non-adult stream addons.
+        // Cinemeta & generic addons don't know porn/jav/adult as a type.
+        const ADULT_TYPES = new Set(['adult', 'porn', 'jav']);
+        const queryType = ADULT_TYPES.has(type) ? 'movie' : type;
+        const rest = `stream/${queryType}/${id}.json`;
+        const url = needsProxy(addon.baseUrl) ? proxyUrl(addon.baseUrl, rest) : `${addon.baseUrl}/${rest}`;
         const res = await fetchWithTimeout(url, signal);
         if (!res.ok) throw new Error('Failed to fetch streams');
         const data = await res.json();

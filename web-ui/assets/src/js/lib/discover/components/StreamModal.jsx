@@ -412,7 +412,7 @@ const LABEL_ORDER = [
 
 function canonicalLabel(label) {
     const raw = String(label || '').trim();
-    const compact = raw.toLowerCase().replace(/[\s._-]+/g, '');
+    const compact = raw.toLowerCase().replace(/[\s._\-\[\]]+/g, '');
     if (compact === '4320p' || compact === '8k') return '8K';
     if (compact === '2160p' || compact === '4k' || compact === 'uhd') return '4K';
     if (compact === '1080p') return '1080p';
@@ -735,7 +735,9 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
             }
         }
 
-        const enabledResolutions = getEnabledResolutionSet(stremioSettings);
+        const videoType = modal.itemType;
+        const isAdult = videoType === 'porn' || videoType === 'jav' || videoType === 'adult';
+        const enabledResolutions = isAdult ? new Set(['8k', '4k', '1080p', '720p', 'other']) : getEnabledResolutionSet(stremioSettings);
         const hasActiveResolution = !!activeGroups['resolution'];
 
         return baseStreams.map((s, i) => {
@@ -778,7 +780,7 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
 
             return { stream: s, parsed: baseParsed[i], langs: baseLangs[i], visible: show };
         });
-    }, [baseStreams, baseParsed, baseLangs, activeSources, activeLabels, activeLang, streamQuery, stremioSettings]);
+    }, [baseStreams, baseParsed, baseLangs, activeSources, activeLabels, activeLang, streamQuery, stremioSettings, modal.itemType]);
 
     const sortedFilteredStreams = useMemo(() => {
         const items = filteredStreams.map((item, index) => ({ ...item, index }));

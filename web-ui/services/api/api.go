@@ -910,3 +910,20 @@ func (s *Api) Search(ctx context.Context, c *Claims, query string) ([]byte, erro
 	return body, nil
 }
 
+func (s *Api) SearchSFW(ctx context.Context, c *Claims, query string) ([]byte, error) {
+	u := s.url + "/search?q=" + url.QueryEscape(query) + "&sfw=true"
+	res, err := s.doRequestRaw(ctx, c, u, "GET", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API search returned status %d: %s", res.StatusCode, string(body))
+	}
+	return body, nil
+}
+

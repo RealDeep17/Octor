@@ -129,6 +129,14 @@ func (m *mockStore) GetSeriesStatusMap(_ context.Context, _ uuid.UUID, _ []strin
 	return nil, nil
 }
 
+func (m *mockStore) UpsertMoviePosterLayout(_ context.Context, _ uuid.UUID, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockStore) UpsertSeriesPosterLayout(_ context.Context, _ uuid.UUID, _ string, _ string) error {
+	return nil
+}
+
 // --- Tests ---
 
 func newTestService(store userVideoStatusStore) *Service {

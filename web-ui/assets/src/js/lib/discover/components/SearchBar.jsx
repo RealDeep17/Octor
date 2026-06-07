@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'preact/hooks';
 import { t } from '../i18n';
 
-export function SearchBar({ onSearch, onExit, isSearchMode, initialQuery }) {
+export function SearchBar({ onSearch, onExit, isSearchMode, initialQuery, isNsfw }) {
     const [value, setValue] = useState('');
     const timerRef = useRef(null);
     const inputRef = useRef(null);
@@ -50,7 +50,7 @@ export function SearchBar({ onSearch, onExit, isSearchMode, initialQuery }) {
                 <input
                     ref={inputRef}
                     type="text"
-                    placeholder={t('discover.search')}
+                    placeholder={t(isNsfw ? 'discover.searchNsfw' : 'discover.search')}
                     class="w-full bg-transparent border-none outline-none px-3 py-3 text-w-text placeholder:text-w-muted text-sm"
                     autocomplete="off"
                     value={value}

@@ -3,13 +3,13 @@ import { StremioClient, CINEMETA_BASE } from '../client';
 import {
     discoverReducer, initialState,
     getCatalogsForType, getTypes,
-    getSearchTypes, getSearchResultsForType,
+    getSearchTypes, getSearchResultsForType, getCatalogsForMode,
 } from './discoverReducer';
 import { StreamModal } from './StreamModal';
 import { AddonWizard } from './AddonWizard';
 import { loadPrefs, savePrefs } from '../prefs';
 import { useDiscoverUrl } from './useDiscoverUrl';
-import { restoreModalFromUrl, loadManifests, fetchUserStatuses, toggleWatched, rateVideo, unrateVideo, catalogChipClass, watchlistChipClass } from './discoverUtils';
+import { restoreModalFromUrl, loadManifests, fetchUserStatuses, toggleWatched, rateVideo, unrateVideo, catalogChipClass, watchlistChipClass, chipClass } from './discoverUtils';
 import { fetchWatchlistIds, fetchWatchlist, addToWatchlist, removeFromWatchlist } from '../watchlistClient';
 import { RatingDialog } from './RatingDialog';
 import { SearchBar } from './SearchBar';
@@ -19,6 +19,20 @@ import { LoadMore, LoadingSpinner, NoAddons, NoCatalogs, ErrorState, NoResults, 
 import { AddonHealthChip } from './AddonHealthChip';
 import { AISection } from './ai/AISection';
 import { t, langPath } from '../i18n';
+
+function isNsfwTitle(title) {
+    if (!title) return false;
+    const t = title.toLowerCase();
+    const nsfwKeywords = [
+        'uncensored', 'jav', 'porn', 'ssni', 'snis', 'ssis', 'mide', 'ipx', 'sone', 'abp', 'dass', 'fns', 'jur', 'gvh',
+        'vixen', 'blacked', 'tushy', 'brazzers', 'bangbros', 'naughtyamerica', 'realitykings', 'sod-create'
+    ];
+    for (const kw of nsfwKeywords) {
+        if (t.includes(kw)) return true;
+    }
+    if (/[a-z]{2,10}-\d{3,8}/i.test(t)) return true;
+    return false;
+}
 
 export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix = '/discover', modalOnly = false, stremioSettings = {} }) {
     const [state, dispatch] = useReducer(discoverReducer, initialState);
@@ -151,30 +165,37 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                 const urlCatalogId = urlParams.get('catalog-id');
 
                 const prefs = loadPrefs();
-                let selectedType = types[0];
+                let isNsfw = window._isAdmin ? (prefs.isNsfw || false) : false;
+                if (window._isAdmin && (urlType === 'porn' || urlType === 'jav')) {
+                    isNsfw = true;
+                }
+
+                const modeCatalogs = getCatalogsForMode(catalogs, isNsfw);
+                const modeTypes = getTypes(modeCatalogs);
+                let selectedType = modeTypes[0] || 'movie';
                 let selectedCatalog;
 
                 // Type: URL > localStorage > default
-                if (urlType && types.includes(urlType)) {
+                if (urlType && modeTypes.includes(urlType)) {
                     selectedType = urlType;
-                } else if (prefs.type && types.includes(prefs.type)) {
+                } else if (prefs.type && modeTypes.includes(prefs.type)) {
                     selectedType = prefs.type;
                 }
 
-                selectedCatalog = getCatalogsForType(catalogs, selectedType)[0] || null;
+                selectedCatalog = getCatalogsForType(modeCatalogs, selectedType)[0] || null;
 
                 // Catalog: URL > localStorage > default
                 if (urlCatalogBase && urlCatalogId) {
-                    const match = getCatalogsForType(catalogs, selectedType)
+                    const match = getCatalogsForType(modeCatalogs, selectedType)
                         .find(c => c.baseUrl === urlCatalogBase && c.id === urlCatalogId);
                     if (match) selectedCatalog = match;
                 } else if (prefs.catalogBase && prefs.catalogId) {
-                    const match = getCatalogsForType(catalogs, selectedType)
+                    const match = getCatalogsForType(modeCatalogs, selectedType)
                         .find(c => c.baseUrl === prefs.catalogBase && c.id === prefs.catalogId);
                     if (match) selectedCatalog = match;
                 }
 
-                dispatch({ type: 'INIT_SUCCESS', manifests, catalogs, selectedType, selectedCatalog, addons });
+                dispatch({ type: 'INIT_SUCCESS', manifests, catalogs, selectedType, selectedCatalog, addons, isNsfw });
 
                 // Store page/modal restore targets
                 if (urlPage > 0) restoredPageRef.current = urlPage;
@@ -231,14 +252,30 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
     const selectType = useCallback((type) => {
         abortCatalog();
         savePrefs({ type });
-        const catalogs = getCatalogsForType(state.catalogs, type);
+        const modeCatalogs = getCatalogsForMode(state.catalogs, state.isNsfw);
+        const catalogs = getCatalogsForType(modeCatalogs, type);
         const catalog = catalogs[0] || null;
         url.push({
             type, 'catalog-base': catalog?.baseUrl, 'catalog-id': catalog?.id,
             id: null, season: null, episode: null, search: null, 'search-type': null,
         });
         dispatch({ type: 'SELECT_TYPE', selectedType: type });
-    }, [state.catalogs]);
+    }, [state.catalogs, state.isNsfw, url]);
+
+    const toggleNsfw = useCallback((isNsfw) => {
+        abortCatalog();
+        savePrefs({ isNsfw });
+        const modeCatalogs = getCatalogsForMode(state.catalogs, isNsfw);
+        const modeTypes = getTypes(modeCatalogs);
+        const type = modeTypes[0] || null;
+        const catalog = type ? getCatalogsForType(modeCatalogs, type)[0] : null;
+        url.push({
+            type, 'catalog-base': catalog?.baseUrl, 'catalog-id': catalog?.id,
+            id: null, season: null, episode: null, search: null, 'search-type': null,
+            watchlist: null, 'watchlist-type': null,
+        });
+        dispatch({ type: 'TOGGLE_NSFW', isNsfw });
+    }, [state.catalogs, url]);
 
     const selectCatalog = useCallback((catalog) => {
         abortCatalog();
@@ -248,29 +285,25 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
             id: null, season: null, episode: null,
         });
         dispatch({ type: 'SELECT_CATALOG', catalog });
-    }, []);
-
-    // --- Load more ---
-    const loadMore = useCallback(() => {
-        loadCatalog(state.selectedCatalog, state.items.length, state.items);
-    }, [state.selectedCatalog, state.items, loadCatalog]);
+    }, [url]);
 
     // --- Search ---
     const exitSearch = useCallback(() => {
         abortCatalog();
         if (!url.isPopstate.current) {
-            const types = getTypes(state.catalogs);
+            const modeCatalogs = getCatalogsForMode(state.catalogs, state.isNsfw);
+            const types = getTypes(modeCatalogs);
             const type = types[0] || null;
-            const catalog = type ? getCatalogsForType(state.catalogs, type)[0] : null;
+            const catalog = type ? getCatalogsForType(modeCatalogs, type)[0] : null;
             url.push({
                 type, 'catalog-base': catalog?.baseUrl, 'catalog-id': catalog?.id,
                 search: null, 'search-type': null, id: null, season: null, episode: null,
             });
         }
         dispatch({ type: 'EXIT_SEARCH' });
-    }, [state.catalogs]);
+    }, [state.catalogs, state.isNsfw, url]);
 
-    const performSearch = useCallback(async (query) => {
+    const performSearch = useCallback(async (query, skip = 0) => {
         query = query.trim();
         if (query.length < 2) {
             if (state.isSearchMode) {
@@ -280,51 +313,86 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         }
 
         // Push history entry when first entering search mode (not during popstate)
-        if (!state.isSearchMode && !url.isPopstate.current) {
+        if (!state.isSearchMode && !url.isPopstate.current && skip === 0) {
             url.push({ search: query, 'search-type': null, type: null, 'catalog-base': null, 'catalog-id': null, id: null, season: null, episode: null });
         }
 
         const gen = ++searchGenRef.current;
-        dispatch({ type: 'SEARCH_START', query });
+        dispatch({ type: 'SEARCH_START', query, append: skip > 0 });
         abortCatalog();
         abortRef.current = new AbortController();
         const { signal } = abortRef.current;
 
-        const searchCatalogs = client.getSearchCatalogs();
-        const sources = [];
-        const hasCinemetaMovie = searchCatalogs.some(sc => sc.baseUrl === CINEMETA_BASE && sc.type === 'movie' && sc.id === 'top');
-        const hasCinemetaSeries = searchCatalogs.some(sc => sc.baseUrl === CINEMETA_BASE && sc.type === 'series' && sc.id === 'top');
-        if (!hasCinemetaMovie) sources.push({ baseUrl: CINEMETA_BASE, type: 'movie', id: 'top' });
-        if (!hasCinemetaSeries) sources.push({ baseUrl: CINEMETA_BASE, type: 'series', id: 'top' });
-        sources.push(...searchCatalogs);
+        let sources = [];
+        if (state.isNsfw) {
+            sources = [
+                { baseUrl: '/discover/adult', type: 'porn', id: 'trending' },
+                { baseUrl: '/discover/adult', type: 'jav', id: 'jav-trending' }
+            ];
+        } else {
+            const searchCatalogs = client.getSearchCatalogs();
+            // SFW mode: exclude any catalog that serves adult/porn/jav types —
+            // user may have adult addons installed that would pollute SFW results.
+            const ADULT_TYPES = new Set(['adult', 'porn', 'jav']);
+            const sfwCatalogs = searchCatalogs.filter(sc => !ADULT_TYPES.has(sc.type));
+            const hasCinemetaMovie = sfwCatalogs.some(sc => sc.baseUrl === CINEMETA_BASE && sc.type === 'movie' && sc.id === 'top');
+            const hasCinemetaSeries = sfwCatalogs.some(sc => sc.baseUrl === CINEMETA_BASE && sc.type === 'series' && sc.id === 'top');
+            if (!hasCinemetaMovie) sources.push({ baseUrl: CINEMETA_BASE, type: 'movie', id: 'top' });
+            if (!hasCinemetaSeries) sources.push({ baseUrl: CINEMETA_BASE, type: 'series', id: 'top' });
+            sources.push(...sfwCatalogs);
+        }
 
         const results = await Promise.allSettled(
-            sources.map(src => client.searchCatalog(src.baseUrl, src.type, src.id, query, { signal }))
+            sources.map(src => client.searchCatalog(src.baseUrl, src.type, src.id, query, { skip, signal }))
         );
 
         if (gen !== searchGenRef.current) return;
 
-        const seen = new Set();
-        const merged = [];
+        const ADULT_ITEM_TYPES = new Set(['adult', 'porn', 'jav']);
+        const seen = new Set(skip > 0 ? state.searchResults.map(r => r.id) : []);
+        const merged = skip > 0 ? [...state.searchResults] : [];
+        let newItemsCount = 0;
         for (let k = 0; k < results.length; k++) {
             if (results[k].status !== 'fulfilled') continue;
             const srcType = sources[k].type;
             for (const item of results[k].value) {
                 if (!item.type) item.type = srcType;
+                // SFW guard: drop any adult-typed item, title, or adult database source that slipped through
+                const name = item.name || item.title || '';
+                const itemId = String(item.id || '').toLowerCase();
+                if (!state.isNsfw && (ADULT_ITEM_TYPES.has(item.type) || isNsfwTitle(name) || itemId.startsWith('tpdb') || itemId.startsWith('stash'))) continue;
                 if (!seen.has(item.id)) {
                     seen.add(item.id);
                     merged.push(item);
+                    newItemsCount++;
                 }
             }
         }
 
-        dispatch({ type: 'SEARCH_RESULTS', results: merged });
+        dispatch({ type: 'SEARCH_RESULTS', results: merged, hasMore: newItemsCount > 0 });
         window.umami?.track('discover-search', { query, count: merged.length });
 
         fetchUserStatuses(merged.map(m => m.id)).then(statuses => {
             if (Object.keys(statuses).length) dispatch({ type: 'USER_STATUSES_MERGED', statuses });
         });
-    }, [client, state.isSearchMode, exitSearch]);
+    }, [client, state.isSearchMode, state.isNsfw, state.searchResults, exitSearch, url]);
+
+    // --- Load more ---
+    const loadMore = useCallback(() => {
+        if (state.isSearchMode) {
+            performSearch(state.searchQuery, state.searchResults.length);
+        } else {
+            let skip = state.items.length;
+            if (state.isNsfw) {
+                const isJav = state.selectedType === 'jav' || (state.selectedCatalog && state.selectedCatalog.id && state.selectedCatalog.id.startsWith('jav-'));
+                const perPage = isJav ? 24 : 60;
+                skip = (state.page + 1) * perPage;
+            }
+            loadCatalog(state.selectedCatalog, skip, state.items);
+        }
+    }, [state.isSearchMode, state.searchQuery, state.searchResults.length, state.isNsfw, state.selectedType, state.selectedCatalog, state.page, state.items, loadCatalog, performSearch]);
+
+
 
     // Trigger search restored from URL after init
     useEffect(() => {
@@ -368,6 +436,31 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                 return { name: a.manifest?.name || host, host, status: 'error', kind: a.status };
             });
 
+        // --- Adult/Porn/JAV: bypass Stremio addon system entirely ---
+        // Our adult stream backend lives at /discover/adult/comet-proxy/stream/movie/{id}.json
+        // and is NOT a registered Stremio addon, so getStreamAddons() returns nothing for it.
+        // We call it directly via fetch and inject the result into the streams modal.
+        const ADULT_STREAM_TYPES = new Set(['adult', 'porn', 'jav']);
+        if (ADULT_STREAM_TYPES.has(type)) {
+            dispatch({ type: 'SHOW_MODAL', modal: { view: 'fetching', title, poster, metaId, itemType, ...itemMeta,
+                addons: [{ name: '⚡ Octor', host: 'octor', status: 'fetching' }], ...modalExtra } });
+            let streams = [];
+            try {
+                // Don't encode colons — the backend expects "stash:uuid" / "tpdb_jav:code" literally in the path
+                const safePath = id.replace(/#/g, '%23').replace(/\?/g, '%3F');
+                const proxyUrl = `/discover/adult/comet-proxy/stream/movie/${safePath}.json`;
+                const res = await fetch(proxyUrl, { headers: { Accept: 'application/json' } });
+                if (res.ok) {
+                    const data = await res.json();
+                    streams = data.streams || [];
+                }
+            } catch (e) { /* network error — streams stays [] */ }
+            const addonStatuses = [{ name: '⚡ Octor', host: 'octor', status: streams.length > 0 ? 'done' : 'error', count: streams.length }];
+            dispatch({ type: 'SHOW_MODAL', modal: { view: 'streams', title, poster, metaId, itemType, ...itemMeta, streams, addons: addonStatuses, failedAddons: [], ...modalExtra } });
+            window.umami?.track('discover-streams-loaded', { type, id, count: streams.length });
+            return;
+        }
+
         if (!addons.length) {
             dispatch({ type: 'SHOW_MODAL', modal: { view: 'streams', title, poster, metaId, itemType, ...itemMeta, streams: [], failedAddons: inferredFailures, ...modalExtra } });
             return;
@@ -410,6 +503,8 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         const curState = stateRef.current || state;
         const type = item.type || curState.selectedType || 'movie';
         const id = item.id;
+        if (!id || (!id.startsWith('tt') && !id.startsWith('tpdb') && !id.startsWith('stash'))) return;
+        if (type !== 'movie' && type !== 'series' && type !== 'adult' && type !== 'porn' && type !== 'jav') return;
         const restoreSeason = modalSeasonRef.current;
         modalSeasonRef.current = null;
 
@@ -429,7 +524,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         }
 
         // Build metadata from catalog item; fetchMeta will fill in missing fields.
-        const cardMeta = { year: item.year, releaseInfo: item.releaseInfo, imdbRating: item.imdbRating, description: item.description };
+        const cardMeta = { year: item.year, releaseInfo: item.releaseInfo, imdbRating: item.imdbRating, description: item.description, studio: item.studio };
 
         // Enrich cardMeta from Stremio meta response (has description, imdbRating, etc.)
         function enrichFromMeta(meta) {
@@ -438,6 +533,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
             if (!cardMeta.imdbRating && meta.imdbRating) cardMeta.imdbRating = meta.imdbRating;
             if (!cardMeta.releaseInfo && meta.releaseInfo) cardMeta.releaseInfo = meta.releaseInfo;
             if (!cardMeta.year && meta.year) cardMeta.year = meta.year;
+            if (!cardMeta.studio && meta.studio) cardMeta.studio = meta.studio;
         }
 
         if (type === 'series') {
@@ -788,7 +884,13 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         if (restoredPageRef.current > 0 && state.hasMore) {
             restoredPageRef.current--;
             restoreInProgressRef.current = true;
-            loadCatalog(state.selectedCatalog, state.items.length, state.items);
+            let skip = state.items.length;
+            if (state.isNsfw) {
+                const isJav = state.selectedType === 'jav' || (state.selectedCatalog && state.selectedCatalog.id && state.selectedCatalog.id.startsWith('jav-'));
+                const perPage = isJav ? 24 : 60;
+                skip = (state.page + 1) * perPage;
+            }
+            loadCatalog(state.selectedCatalog, skip, state.items);
             return;
         }
 
@@ -1155,9 +1257,9 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
     const handleToggleWatchlist = useCallback(async (rawItem) => {
         if (!rawItem) return;
         const videoId = rawItem.id || rawItem.video_id;
-        if (!videoId || !videoId.startsWith('tt')) return;
+        if (!videoId || (!videoId.startsWith('tt') && !videoId.startsWith('tpdb') && !videoId.startsWith('stash'))) return;
         const type = rawItem.type || state.selectedType || 'movie';
-        if (type !== 'movie' && type !== 'series') return;
+        if (type !== 'movie' && type !== 'series' && type !== 'adult' && type !== 'porn' && type !== 'jav') return;
 
         const inList = state.watchlistIds.has(videoId);
         // Determine source bucket for analytics: AI cards have video_id,
@@ -1238,8 +1340,15 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
     }, []);
 
     // --- Derived data ---
-    const types = useMemo(() => getTypes(state.catalogs), [state.catalogs]);
-    const catalogsForType = useMemo(() => getCatalogsForType(state.catalogs, state.selectedType), [state.catalogs, state.selectedType]);
+    const types = useMemo(() => {
+        const modeCatalogs = getCatalogsForMode(state.catalogs, state.isNsfw);
+        return getTypes(modeCatalogs);
+    }, [state.catalogs, state.isNsfw]);
+
+    const catalogsForType = useMemo(() => {
+        const modeCatalogs = getCatalogsForMode(state.catalogs, state.isNsfw);
+        return getCatalogsForType(modeCatalogs, state.selectedType);
+    }, [state.catalogs, state.selectedType, state.isNsfw]);
 
     const searchTypes = useMemo(() => getSearchTypes(state.searchResults), [state.searchResults]);
     const watchlistTypes = useMemo(() => getSearchTypes(state.watchlistItems), [state.watchlistItems]);
@@ -1255,7 +1364,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         }
         return state.items;
     }, [state.isSearchMode, state.items, state.searchResults, state.searchType,
-        state.watchlistFilterEnabled, state.watchlistItems, state.watchlistType]);
+        state.watchlistFilterEnabled, state.watchlistItems, state.watchlistType, state.isNsfw]);
 
     const showBadges = useMemo(() => {
         if (state.isSearchMode) return state.searchType === 'all';
@@ -1327,25 +1436,69 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
 
     return (
         <div>
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-2 border-b border-w-line/20 pb-4">
+                <div class="flex items-center gap-3">
+                    <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-w-text">{t('discover.title')}</h1>
+                </div>
+                {window._isAdmin && (
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => toggleNsfw(false)}
+                            class={chipClass(!state.isNsfw)}
+                            title="Safe For Work"
+                            aria-label="Safe For Work"
+                        >
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+                                <line x1="7" y1="2" x2="7" y2="22" />
+                                <line x1="17" y1="2" x2="17" y2="22" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                                <line x1="2" y1="7" x2="7" y2="7" />
+                                <line x1="2" y1="17" x2="7" y2="17" />
+                                <line x1="17" y1="17" x2="22" y2="17" />
+                                <line x1="17" y1="7" x2="22" y2="7" />
+                            </svg>
+                            <span>SFW</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => toggleNsfw(true)}
+                            class={chipClass(state.isNsfw)}
+                            title="Not Safe For Work"
+                            aria-label="Not Safe For Work"
+                        >
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill={state.isNsfw ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1.5-3-1 1-1.5 1.62-1.5 3a2.5 2.5 0 0 0 2.5 2.5zM12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            </svg>
+                            <span>NSFW</span>
+                        </button>
+                    </div>
+                )}
+            </div>
+
             {/* AI recommendations section — self-contained, hides itself when
                 the feature flag is off (phase === 'disabled'). Rendered above
                 the search bar as a top-of-page spotlight. */}
-            <AISection
-                aiState={state.ai}
-                dispatch={dispatch}
-                onCardClick={handleAICardClick}
-                userStatuses={state.userStatuses}
-                watchlistIds={state.watchlistIds}
-                onToggleWatched={handleAIToggleWatched}
-                onRate={handleAIOpenRating}
-                onToggleWatchlist={handleToggleWatchlist}
-            />
+            {!state.isNsfw && (
+                <AISection
+                    aiState={state.ai}
+                    dispatch={dispatch}
+                    onCardClick={handleAICardClick}
+                    userStatuses={state.userStatuses}
+                    watchlistIds={state.watchlistIds}
+                    onToggleWatched={handleAIToggleWatched}
+                    onRate={handleAIOpenRating}
+                    onToggleWatchlist={handleToggleWatchlist}
+                />
+            )}
 
             <SearchBar
                 onSearch={performSearch}
                 onExit={exitSearch}
                 isSearchMode={state.isSearchMode}
                 initialQuery={state.searchQuery}
+                isNsfw={state.isNsfw}
             />
 
             {/* Sticky tab bar — stays below navbar (72px) on scroll */}
@@ -1378,34 +1531,37 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                                     <TypeTabs types={types} selectedType={state.selectedType} onSelect={selectType} />
                                 )}
                             </div>
-                            <div class="join ml-auto">
-                                <button
-                                    type="button"
-                                    onClick={() => setMode('catalog')}
-                                    class={catalogChipClass(!state.watchlistFilterEnabled)}
-                                    title={t('discover.modeCatalog')}
-                                    aria-label={t('discover.modeCatalog')}
-                                >
-                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
-                                    </svg>
-                                    <span class="hidden sm:inline">{t('discover.modeCatalog')}</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setMode('watchlist')}
-                                    class={watchlistChipClass(state.watchlistFilterEnabled)}
-                                    title={t('discover.watchlist.label')}
-                                    aria-label={t('discover.watchlist.label')}
-                                >
-                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill={state.watchlistFilterEnabled ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
-                                    </svg>
-                                    <span class="hidden sm:inline">{t('discover.watchlist.label')}</span>
-                                    {state.watchlistIds.size > 0 && (
-                                        <span class="text-xs opacity-70 ml-1 tabular-nums">{state.watchlistIds.size}</span>
-                                    )}
-                                </button>
+                            <div class="flex items-center gap-2 ml-auto">
+
+                                <div class="join">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMode('catalog')}
+                                        class={catalogChipClass(!state.watchlistFilterEnabled)}
+                                        title={t('discover.modeCatalog')}
+                                        aria-label={t('discover.modeCatalog')}
+                                    >
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                                        </svg>
+                                        <span class="hidden sm:inline">{t('discover.modeCatalog')}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMode('watchlist')}
+                                        class={watchlistChipClass(state.watchlistFilterEnabled)}
+                                        title={t('discover.watchlist.label')}
+                                        aria-label={t('discover.watchlist.label')}
+                                    >
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill={state.watchlistFilterEnabled ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+                                        </svg>
+                                        <span class="hidden sm:inline">{t('discover.watchlist.label')}</span>
+                                        {state.watchlistIds.size > 0 && (
+                                            <span class="text-xs opacity-70 ml-1 tabular-nums">{state.watchlistIds.size}</span>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         {!state.watchlistFilterEnabled && (
@@ -1452,7 +1608,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                 onToggleWatchlist={handleToggleWatchlist}
             />
 
-            {!state.isSearchMode && !state.watchlistFilterEnabled && !state.catalogLoading && state.hasMore && state.items.length > 0 && (
+            {(state.isSearchMode || (!state.isSearchMode && !state.watchlistFilterEnabled)) && !state.catalogLoading && !state.searchLoading && state.hasMore && displayItems.length > 0 && (
                 <LoadMore onLoadMore={loadMore} />
             )}
 

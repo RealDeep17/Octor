@@ -57,6 +57,15 @@ export function restoreModalFromUrl(id, url, openModalById, modalEpisodeRef) {
 export async function loadManifests(client) {
     const addonStatuses = await client.fetchAllManifests();
     const catalogs = buildCatalogs(addonStatuses);
+    if (window._isAdmin) {
+        catalogs.push(
+            { id: 'trending', type: 'porn', name: 'Trending', addonName: 'Discovery', baseUrl: '/discover/adult', disabled: false },
+            { id: 'new', type: 'porn', name: 'New Releases', addonName: 'Discovery', baseUrl: '/discover/adult', disabled: false },
+            { id: 'jav-trending', type: 'jav', name: 'Trending', addonName: 'Discovery', baseUrl: '/discover/adult', disabled: false },
+            { id: 'jav-recent', type: 'jav', name: 'Recent Releases', addonName: 'Discovery', baseUrl: '/discover/adult', disabled: false },
+            { id: 'jav-subbed', type: 'jav', name: 'English Subbed', addonName: 'Discovery', baseUrl: '/discover/adult', disabled: false }
+        );
+    }
     const types = getTypes(catalogs);
     const addons = buildAddons(addonStatuses);
     // manifests kept for backward-compat with anything still reading the
@@ -124,7 +133,11 @@ export async function unrateVideo(videoID, type) {
 }
 
 export async function fetchUserStatuses(ids) {
-    const titleIds = (ids || []).filter(id => typeof id === 'string' && id.startsWith('tt') && !id.includes(':'));
+    const titleIds = (ids || []).filter(id => {
+        if (typeof id !== 'string') return false;
+        if (id.startsWith('tt')) return !id.includes(':');
+        return id.startsWith('tpdb:') || id.startsWith('stash:');
+    });
     if (titleIds.length === 0) return {};
     try {
         const res = await fetch(langPath('/library/status'), {

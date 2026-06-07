@@ -1,19 +1,25 @@
 package discover
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/models"
+	"github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
+	"github.com/webtor-io/web-ui/services/enrich"
 	"github.com/webtor-io/web-ui/services/i18n"
 	"github.com/webtor-io/web-ui/services/template"
+	"github.com/webtor-io/web-ui/services/tpdb"
 	"github.com/webtor-io/web-ui/services/web"
+	"github.com/webtor-io/web-ui/services/javguru"
 )
 
 // addonView is the per-addon shape we serialize into the page bootstrap
@@ -38,25 +44,30 @@ type addonView struct {
 type indexData struct {
 	Addons          []addonView
 	StremioSettings *models.StremioSettingsData
+	IsAdmin         bool
 }
 
 type Handler struct {
-	tb  template.Builder[*web.Context]
-	pg  *cs.PG
-	api *api.Api
+	tb    template.Builder[*web.Context]
+	pg    *cs.PG
+	api   *api.Api
+	admin *admin.Admin
 }
 
-func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, api *api.Api) {
+func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, api *api.Api, tpdbSvc *tpdb.Service, adminSvc *admin.Admin, redis *cs.RedisClient, javGuruSvc *javguru.Service) {
 	h := &Handler{
-		tb:  tm.MustRegisterViews("discover/*").WithLayout("main"),
-		pg:  pg,
-		api: api,
+		tb:    tm.MustRegisterViews("discover/*").WithLayout("main"),
+		pg:    pg,
+		api:   api,
+		admin: adminSvc,
 	}
 	r.GET("/discover", h.index)
 	r.GET("/discover/search", h.search)
+	RegisterAdultRoutes(r, tpdbSvc, adminSvc, redis, javGuruSvc)
 }
 
 func (h *Handler) search(c *gin.Context) {
+	c.Header("Cache-Control", "public, max-age=14400")
 	u := auth.GetUserFromContext(c)
 	if !u.HasAuth() {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -70,10 +81,36 @@ func (h *Handler) search(c *gin.Context) {
 	}
 
 	cl := api.GetClaimsFromContext(c)
-	res, err := h.api.Search(c.Request.Context(), cl, q)
+	res, err := h.api.SearchSFW(c.Request.Context(), cl, q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// SFW guard: filter out adult/NSFW results from search output
+	var items []map[string]interface{}
+	if err := json.Unmarshal(res, &items); err == nil {
+		var filtered []map[string]interface{}
+		for _, item := range items {
+			id, _ := item["id"].(string)
+			if id != "" {
+				idLower := strings.ToLower(id)
+				if strings.HasPrefix(idLower, "tpdb") || strings.HasPrefix(idLower, "stash") {
+					continue
+				}
+			}
+			title, _ := item["title"].(string)
+			if title != "" {
+				isAdult, _ := enrich.IsAdultPath(title)
+				if isAdult {
+					continue
+				}
+			}
+			filtered = append(filtered, item)
+		}
+		if filteredRes, errMarshal := json.Marshal(filtered); errMarshal == nil {
+			res = filteredRes
+		}
 	}
 
 	c.Data(http.StatusOK, "application/json", res)
@@ -131,9 +168,11 @@ func (h *Handler) index(c *gin.Context) {
 		}
 	}
 
-	h.tb.Build("discover/index").HTML(http.StatusOK, web.NewContext(c).WithData(&indexData{
+	wctx := web.NewContext(c)
+	h.tb.Build("discover/index").HTML(http.StatusOK, wctx.WithData(&indexData{
 		Addons:          views,
 		StremioSettings: stremioSettings,
+		IsAdmin:         wctx.IsAdmin || h.admin.HasAdmin(c),
 	}))
 }
 

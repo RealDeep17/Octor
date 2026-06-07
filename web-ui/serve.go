@@ -62,6 +62,7 @@ import (
 	usv "github.com/webtor-io/web-ui/services/user_subtitle"
 	uvss "github.com/webtor-io/web-ui/services/user_video_status"
 	"github.com/webtor-io/web-ui/services/vault"
+	"github.com/webtor-io/web-ui/services/javguru"
 
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-gonic/gin"
@@ -394,8 +395,12 @@ func serve(c *cli.Context) error {
 	// Setting Donate
 	donate.RegisterHandler(r)
 
+	// Setting TPDB service
+	tpdbSvc := tpdb.New(c, cl, pg)
+
 	// Setting Discover
-	discover.RegisterHandler(r, tm, pg, sapi)
+	javGuruSvc := javguru.New(cl, redis)
+	discover.RegisterHandler(r, tm, pg, sapi, tpdbSvc, adminSvc, redis, javGuruSvc)
 
 	// Setting AI Recommendations (Discover)
 	//
@@ -411,9 +416,6 @@ func serve(c *cli.Context) error {
 
 	// Setting Discover Watchlist
 	discover_watchlist.RegisterHandler(r, pg, en)
-
-	// Setting TPDB service
-	tpdbSvc := tpdb.New(c, cl, pg)
 
 	// Setting Library
 	library.RegisterHandler(c, r, tm, sapi, pg, jobs, cl, s3Cl, en, adminSvc, tpdbSvc)

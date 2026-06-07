@@ -95,7 +95,9 @@
         {{ range .Data.Items }}
         <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2">
           <div class="w-card-frame w-full">
-            <input type="checkbox" id="toggle-{{ .ResourceID }}" class="peer hidden"
+            <input type="checkbox" id="toggle-{{ .ResourceID }}" class="layout-toggle-checkbox peer hidden"
+                   data-video-type="{{ .Content | getVideoType }}"
+                   data-video-id="{{ .Content | getVideoID }}"
                    {{ if eq (.Content | getPosterLayout) "horizontal" }}checked{{ end }}
                    {{ if not (and (.Content | hasPoster) (.Content | hasPosterHorizontal)) }}disabled{{ end }} />
             <figure class="aspect-[2/3] peer-checked:aspect-[3/2] overflow-hidden relative transition-all duration-300 peer-checked:[&_.vertical-img]:hidden peer-checked:[&_.horizontal-img]:block">
@@ -146,9 +148,9 @@
                   </form>
               </div>              {{/* Layout toggle (bottom-left) */}}
               {{ if and (.Content | hasPoster) (.Content | hasPosterHorizontal) }}
-              <button type="button" class="w-card-badge-ghost bottom-2 left-2 cursor-pointer hover:text-o-primary !opacity-100 z-10 peer-checked:[&_.vertical-icon]:hidden peer-checked:[&_.horizontal-icon]:block"
+              <button type="button" class="w-card-badge-ghost bottom-2 left-2 cursor-pointer hover:text-o-primary z-10 peer-checked:[&_.vertical-icon]:hidden peer-checked:[&_.horizontal-icon]:block"
                       title="Toggle aspect ratio"
-                      onclick="event.preventDefault(); event.stopPropagation(); const cb = document.getElementById('toggle-{{ .ResourceID }}'); if (cb) cb.checked = !cb.checked;">
+                      onclick="togglePosterLayout(event, '{{ .ResourceID }}', '{{ .Content | getVideoType }}', '{{ .Content | getVideoID }}')">
                   <svg class="vertical-icon w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="6" y="3" width="12" height="18" rx="2" />
                   </svg>
@@ -161,13 +163,20 @@
             <div class="p-2.5 flex flex-col flex-1">
               <h3 class="w-card-title text-sm group-hover:text-o-primaryL">{{ .Content | getTitle }}</h3>
               <div class="flex justify-between items-center mt-1.5">
-                <span class="text-xs text-o-muted">{{ if .Content | hasYear }}{{ .Content | getYear }}{{ else }}{{ timeAgoLang $.Lang .CreatedAt }}{{ end }}</span>
-                {{ if .Content | getRating }}
-                  <div class="flex items-center gap-1">
-                    <svg class="w-2.5 h-2.5 text-yellow-400 fill-current" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                    <span class="text-[10px] text-o-muted">{{ .Content | getRating | float1 }}</span>
-                  </div>
-                {{ end }}
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-xs text-o-muted">{{ if .Content | hasYear }}{{ .Content | getYear }}{{ else }}{{ timeAgoLang $.Lang .CreatedAt }}{{ end }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  {{ if .Content | getStudio }}
+                    <span class="text-xs text-cyan-400 font-semibold uppercase tracking-wider">{{ .Content | getStudio }}</span>
+                  {{ end }}
+                  {{ if .Content | getRating }}
+                    <div class="flex items-center gap-1">
+                      <svg class="w-2.5 h-2.5 text-yellow-400 fill-current" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                      <span class="text-[10px] text-o-muted">{{ .Content | getRating | float1 }}</span>
+                    </div>
+                  {{ end }}
+                </div>
               </div>
             </div>
           </div>
@@ -244,6 +253,55 @@
     if (observeTarget) {
         observer.observe(observeTarget.parentNode, { childList: true, subtree: true });
     }
+})();
+
+if (typeof window.togglePosterLayout !== 'function') {
+    window.togglePosterLayout = function(event, resourceId, videoType, videoId) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        if (!videoType || !videoId) return;
+        
+        const checkbox = document.getElementById('toggle-' + resourceId);
+        if (!checkbox) return;
+        
+        checkbox.checked = !checkbox.checked;
+        const newLayout = checkbox.checked ? 'horizontal' : 'vertical';
+        
+        // Save to localStorage
+        localStorage.setItem('octor-layout-' + videoType + '-' + videoId, newLayout);
+        
+        fetch('/library/' + videoType + '/' + videoId + '/layout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': window._CSRF || ''
+            },
+            body: JSON.stringify({ layout: newLayout })
+        }).catch(err => console.error('Failed to save poster layout preference:', err));
+    };
+}
+
+// Auto-apply from localStorage on load
+(function() {
+    const hasAuth = "{{ if $.User | hasAuth }}true{{ else }}false{{ end }}" === "true";
+    document.querySelectorAll('.layout-toggle-checkbox').forEach(cb => {
+        const type = cb.getAttribute('data-video-type');
+        const id = cb.getAttribute('data-video-id');
+        if (type && id) {
+            if (hasAuth) {
+                // Sync localStorage with DB preference which is already rendered
+                localStorage.setItem('octor-layout-' + type + '-' + id, cb.checked ? 'horizontal' : 'vertical');
+            } else {
+                const local = localStorage.getItem('octor-layout-' + type + '-' + id);
+                if (local === 'horizontal') {
+                    cb.checked = true;
+                } else if (local === 'vertical') {
+                    cb.checked = false;
+                }
+            }
+        }
+    });
 })();
 </script>
 {{ end }}
