@@ -7,7 +7,7 @@ import { loadPrefs, savePrefs } from '../prefs';
 import { chipClass } from './discoverUtils';
 import { t, tf } from '../i18n';
 
-export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, onBackToEpisodes, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings = {} }) {
+export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, onBackToEpisodes, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, onLoadMore, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings = {} }) {
     const dialogRef = useRef(null);
 
     useEffect(() => {
@@ -55,7 +55,7 @@ export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, on
                     </button>
                 </div>
                 <div class="overflow-y-auto px-3 sm:px-6 pb-4 sm:pb-6">
-                    <ModalBody modal={modal} onClose={handleClose} onEpisodeSelect={onEpisodeSelect} onStreamClick={onStreamClick} onSeasonChange={onSeasonChange} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} userStatuses={userStatuses} watchlistIds={watchlistIds} onToggleWatched={onToggleWatched} onRate={onRate} onToggleWatchlist={onToggleWatchlist} stremioSettings={stremioSettings} />
+                    <ModalBody modal={modal} onClose={handleClose} onEpisodeSelect={onEpisodeSelect} onStreamClick={onStreamClick} onSeasonChange={onSeasonChange} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} onLoadMore={onLoadMore} userStatuses={userStatuses} watchlistIds={watchlistIds} onToggleWatched={onToggleWatched} onRate={onRate} onToggleWatchlist={onToggleWatchlist} stremioSettings={stremioSettings} />
                 </div>
             </div>
             <form method="dialog" class="modal-backdrop">
@@ -65,7 +65,7 @@ export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, on
     );
 }
 
-function ModalBody({ modal, onClose, onEpisodeSelect, onStreamClick, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings }) {
+function ModalBody({ modal, onClose, onEpisodeSelect, onStreamClick, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, onLoadMore, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings }) {
     const videoId = modal.metaId || modal.itemId;
     const videoType = modal.itemType;
     const isImdb = videoId && videoId.startsWith('tt') && !videoId.includes(':');
@@ -107,7 +107,7 @@ function ModalBody({ modal, onClose, onEpisodeSelect, onStreamClick, onSeasonCha
     }
 
     if (modal.view === 'streams') {
-        return <StreamContent modal={modal} onStreamClick={onStreamClick} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} statusButtons={statusButtons} headerMeta={headerMeta} stremioSettings={stremioSettings} />;
+        return <StreamContent modal={modal} onStreamClick={onStreamClick} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} onLoadMore={onLoadMore} statusButtons={statusButtons} headerMeta={headerMeta} stremioSettings={stremioSettings} />;
     }
 
     return null;
@@ -630,13 +630,14 @@ function getLabelGroup(label) {
     return null;
 }
 
-function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, onRetryStreams, statusButtons, headerMeta, stremioSettings = {} }) {
+function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, onRetryStreams, onLoadMore, statusButtons, headerMeta, stremioSettings = {} }) {
     const { title, poster, streams, error, failedAddons } = modal;
     const failed = failedAddons || [];
     const [retrying, setRetrying] = useState(false);
     const [streamQuery, setStreamQuery] = useState('');
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [sortBy, setSortBy] = useState('default');
+    const isAdult = modal.itemType === 'porn' || modal.itemType === 'jav' || modal.itemType === 'adult';
 
     const handleRetry = useCallback(async (e) => {
         e?.stopPropagation?.();
@@ -735,8 +736,6 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
             }
         }
 
-        const videoType = modal.itemType;
-        const isAdult = videoType === 'porn' || videoType === 'jav' || videoType === 'adult';
         const enabledResolutions = isAdult ? new Set(['8k', '4k', '1080p', '720p', 'other']) : getEnabledResolutionSet(stremioSettings);
         const hasActiveResolution = !!activeGroups['resolution'];
 
@@ -1117,14 +1116,25 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
             )}
 
             {baseStreams.length === 0 ? (
-                <p class="text-w-muted text-sm text-center py-6">
-                    {t('discover.noProfileStreamMatch')}
-                </p>
+                <div>
+                    <p class="text-w-muted text-sm text-center py-6">
+                        {t('discover.noProfileStreamMatch')}
+                    </p>
+                    {isAdult && !modal.exhaustive && onLoadMore && (
+                        <button
+                            type="button"
+                            class="btn btn-sm w-full border border-w-line bg-w-surface/50 text-w-text hover:border-w-cyan/30 hover:text-w-cyan py-2.5 transition-all mt-2"
+                            onClick={onLoadMore}
+                        >
+                            ⚡ {t('discover.loadMore') || 'Load More'}
+                        </button>
+                    )}
+                </div>
             ) : (
                 <>
                     <div class="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
                         {sortedFilteredStreams.map(({ stream, parsed: info, visible }, i) => (
-                            visible && <StreamRow key={i} stream={stream} info={info} onStreamClick={onStreamClick} />
+                            visible && <StreamRow key={i} stream={stream} info={info} onStreamClick={onStreamClick} isAdult={isAdult} />
                         ))}
                     </div>
 
@@ -1132,6 +1142,16 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
                         <p class="text-w-muted text-sm text-center py-6">
                             {hasSearchQuery ? t('discover.noStreamSearchMatch') : t('discover.noFilterMatch')}
                         </p>
+                    )}
+
+                    {isAdult && !modal.exhaustive && onLoadMore && (
+                        <button
+                            type="button"
+                            class="btn btn-sm w-full border border-w-line bg-w-surface/50 text-w-text hover:border-w-cyan/30 hover:text-w-cyan py-2.5 transition-all mt-4"
+                            onClick={onLoadMore}
+                        >
+                            ⚡ {t('discover.loadMore') || 'Load More'}
+                        </button>
                     )}
                 </>
             )}
@@ -1178,9 +1198,11 @@ const PLAY_ICON = (
     </svg>
 );
 
-function StreamRow({ stream, info, onStreamClick }) {
+function StreamRow({ stream, info, onStreamClick, isAdult }) {
     const infoHash = extractInfoHash(stream);
     const fileIdx = extractFileIdx(stream);
+    const magnetUrl = stream.magnetUrl || stream.magnetURL;
+    const resource = magnetUrl || infoHash;
     const titleLines = (stream.title || '').split('\n').filter(Boolean);
     const displayedLabels = info.labels.filter(label => !(label === 'Pack' && info.labels.includes('Season')));
 
@@ -1197,7 +1219,7 @@ function StreamRow({ stream, info, onStreamClick }) {
                     ))}
                 </div>
                 {titleLines.map((line, i) => (
-                    <div key={i} class="text-xs text-w-sub line-clamp-1">{line}</div>
+                    <div key={i} class={`text-xs text-w-sub ${isAdult && i === 0 ? 'break-all' : 'line-clamp-1'}`}>{line}</div>
                 ))}
             </div>
             {!infoHash && (
@@ -1209,7 +1231,7 @@ function StreamRow({ stream, info, onStreamClick }) {
     if (infoHash) {
         return (
             <div
-                onClick={() => onStreamClick(infoHash, fileIdx)}
+                onClick={() => onStreamClick(resource, fileIdx)}
                 class="cursor-pointer flex items-center gap-3 p-3 rounded-lg border border-w-line hover:border-w-cyan/30 hover:bg-w-surface/50 transition-all"
             >
                 {content}
