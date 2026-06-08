@@ -103,14 +103,10 @@ func (s *server) Magnet2Torrent(ctx context.Context, in *pb.Magnet2TorrentReques
 	publicTrackers := []string{
 		"udp://tracker.opentrackr.org:1337/announce",
 		"udp://open.stealth.si:80/announce",
-		"udp://tracker.torrent.eu.org:451/announce",
-		"udp://tracker.coppersurfer.tk:6969/announce",
-		"udp://tracker.leechers-paradise.org:6969/announce",
-		"udp://tracker.openbittorrent.com:6969/announce",
-		"udp://opentracker.i2p.rocks:6969/announce",
 		"udp://explodie.org:6969/announce",
 		"udp://tracker.tiny-vps.com:6969/announce",
-		"udp://open.demonii.com:1337/announce",
+		"udp://open.demonii.si:1337/announce",
+		"udp://tracker.torrent.eu.org:451/announce",
 	}
 	for _, tr := range publicTrackers {
 		magnetStr += "&tr=" + url.QueryEscape(tr)

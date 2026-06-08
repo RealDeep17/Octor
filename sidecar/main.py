@@ -438,7 +438,7 @@ _NOT_JAV_PREFIXES = {
 }
 
 _JAV_CODE_RE = re.compile(
-    r'(?:^|[\s._\-\[\(])([A-Z]{2,6})[-_ ]?(\d{2,5})(?:[\s._\-\]\)]|$)',
+    r'(?:^|[^a-zA-Z0-9])([A-Z]{2,6})[-_ ]?(\d{2,5})(?:[^a-zA-Z0-9]|$)',
     re.IGNORECASE,
 )
 # Date-based JAV sites: site-YYMMDD-NNN
@@ -1463,7 +1463,7 @@ def tpdb_lookup_by_id(scene_id: str) -> Optional[dict]:
     return None
 
 def tpdb_jav_lookup_by_id(scene_id: str) -> Optional[dict]:
-    url = f"{TPDB_BASE}/scenes/{scene_id}"
+    url = f"{TPDB_BASE}/jav/{scene_id}"
     log(f"TPDB JAV ID lookup: {url}")
     try:
         r = SESSION.get(url, headers=_TPDB_HEADERS(), timeout=5)
@@ -1517,7 +1517,7 @@ def metadata_proxy(
         return cached
 
     # ── Native ID Lookup Path ───────────────────────────────────────────────────
-    if i and sidecar_enabled:
+    if i:
         normalized_id = i
         if normalized_id.startswith("tpdb="):
             normalized_id = "tpdb:" + normalized_id[5:]
@@ -1535,9 +1535,13 @@ def metadata_proxy(
                 return resp
         elif normalized_id.startswith("tpdb_jav:"):
             scene_id = normalized_id[9:]
-            result = tpdb_jav_lookup_by_id(scene_id)
-            if not result:
-                result = tpdb_jav_lookup(scene_id)
+            if scene_id.startswith("fallback_"):
+                clean_code = scene_id[9:]
+                result = tpdb_jav_lookup(clean_code)
+            else:
+                result = tpdb_jav_lookup_by_id(scene_id)
+                if not result:
+                    result = tpdb_jav_lookup(scene_id)
             if result:
                 resp = _to_omdb(result)
                 _cache_set(cache_key, resp)
@@ -1552,7 +1556,7 @@ def metadata_proxy(
 
     # ── Path 1: JAV code ────────────────────────────────────────────────────────
     jav_code = extract_jav_code(t) if t else None
-    if jav_code and sidecar_enabled:
+    if jav_code:
         log(f"JAV fast-path for code: {jav_code}")
         result = tpdb_jav_lookup(jav_code)
         if result:
@@ -1565,7 +1569,7 @@ def metadata_proxy(
     # Only search when a known studio name OR structural date pattern is present,
     # or if the query is explicitly flagged as adult content by the upstream parser.
     is_adult = (porn and porn.lower() == "true") or (t and is_adult_content(t))
-    if t and sidecar_enabled and is_adult:
+    if t and is_adult:
         log(f"Adult content detected, attempting enrichment for: {t}")
         data = adult_enrichment_lookup(t, duration=duration)
         if data:

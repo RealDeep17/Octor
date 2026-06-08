@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"io"
 	"net/http"
 	"net/url"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,19 +26,25 @@ import (
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/auth"
-	"github.com/webtor-io/web-ui/services/tpdb"
 	"github.com/webtor-io/web-ui/services/javguru"
+	"github.com/webtor-io/web-ui/services/tpdb"
 )
 
 const CacheDir = "/srv/octor/infra-data/cache/adult-posters"
 
 var (
-	resolvedStudioIDs      []string
-	resolvedStudioNameToID  map[string]string
-	resolvedStudiosLock    sync.RWMutex
-	globalRedisClient      *cs.RedisClient
-	globalJavGuruSvc       *javguru.Service
-	javCodeRx              = regexp.MustCompile(`(?i)\b([a-zA-Z]{2,10})[\s\-_]?(\d{3,8})\b`)
+	resolvedStudioIDs           []string
+	resolvedStudioNameToID      map[string]string
+	resolvedStudiosLock         sync.RWMutex
+	globalRedisClient           *cs.RedisClient
+	globalJavGuruSvc            *javguru.Service
+	javCodeRx                   = regexp.MustCompile(`(?i)\b([a-zA-Z]{2,10})[\s\-_]?(\d{3,8})\b`)
+	siteripRx                   = regexp.MustCompile(`(?i)\b(siterips?|site-rips?|megapacks?|mega-packs?|packs?)\b`)
+	globalProwlarrIndexersCache struct {
+		sync.Mutex
+		indexers  []ProwlarrIndexer
+		updatedAt time.Time
+	}
 )
 
 func RegisterAdultRoutes(r *gin.Engine, tpdbSvc *tpdb.Service, adminSvc *admin.Admin, redisClient *cs.RedisClient, javGuruSvc *javguru.Service) {
@@ -89,6 +95,13 @@ var fallbackStudioNameToID = map[string]string{
 	"twistys":            "ec61a0b4-d5ae-4c87-9d2d-68e6674790f6",
 	"mile high media":    "6070e7f0-b8a1-463b-bf0f-0cb3499fd00c",
 	"newsensations":      "3e8fb21e-1c95-44f6-839c-8f24ae7d48f9",
+	"property sex":       "b4a8d39e-6ed8-401e-b8d1-3e3f107b70ca",
+	"elegant angel":      "475bdee5-3b4a-4153-9706-01f457a59e4a",
+	"private":            "e83ce38f-ddf4-45a7-800e-c199392a09c4",
+	"ddf network":        "a7cba57b-cc9d-47ae-8468-af1e20b6f61a",
+	"dane jones":         "046ea0c9-c1ae-47bf-9a7e-ba27706da1c7",
+	"dorcel":             "21397546-2256-4ed9-9a5b-08c10ca56e3e",
+	"archangel":          "c1cf3e96-6324-4d61-8114-a42f12aef348",
 }
 
 func resolveStudiosJob() {
@@ -121,6 +134,35 @@ func resolveStudiosJob() {
 		"3e8fb21e-1c95-44f6-839c-8f24ae7d48f9", // New Sensations
 		"9be5eddc-a9f2-4e5c-9bf1-086ddf08a907", // BLT Innovations
 		"e42f2af3-d410-4bb4-bb5c-1b5fbbb07eae", // Alex Adams Media
+		"b4a8d39e-6ed8-401e-b8d1-3e3f107b70ca", // Property Sex
+		"475bdee5-3b4a-4153-9706-01f457a59e4a", // Elegant Angel
+		"e83ce38f-ddf4-45a7-800e-c199392a09c4", // Private
+		"a7cba57b-cc9d-47ae-8468-af1e20b6f61a", // DDF Network
+		"046ea0c9-c1ae-47bf-9a7e-ba27706da1c7", // Dane Jones
+		"21397546-2256-4ed9-9a5b-08c10ca56e3e", // Dorcel
+		"c1cf3e96-6324-4d61-8114-a42f12aef348", // ArchAngel Video
+		"2c9d7ab5-3db2-4744-af76-d9e920c4dd9b", // MetArt Network
+		"1faa9636-6eb8-4c3b-bcf9-d34670c21506", // Deeper
+		"842cc5ba-4f5c-4bba-bc4e-04637f4d5c13", // SpyFam
+		"70b41fb2-aa50-46bc-bb66-090c38be7149", // Devil's Film (Network)
+		"dba7de20-ee98-4563-90a6-c697dc54e375", // Cherry Pimps
+		"647792dd-9ccc-49b4-8b85-b7f4de0b5d48", // Sweet Sinner
+		"f6ae4372-00df-463f-9551-442d6650b855", // Wicked Pictures
+		"1a6c64c5-dde7-477c-addb-c3d1381cf593", // Digital Sin
+		"233babe6-ff73-40ef-8650-cb2c95ab6a4e", // Penthouse
+		"8c4e72ad-4dfb-4e00-bb28-ab92cb9c61a0", // BaDoink
+		"91792902-ba1e-4c5f-b7f5-c129e626ce8a", // JoyMii
+		"643bb8a1-9556-443d-950b-e016218c2ed4", // Scoreland
+		"bf892f77-11a3-483e-8a41-2a94146dc4c2", // 21 Sextury (Network)
+		"d22943f5-9bb5-495e-8b01-6e12d2fffc80", // X-Art
+		"f47c35d9-a62b-417a-a492-33bab9c9cd64", // Mom Lover (Network)
+		"75fab6e9-275b-4348-936f-3184d034e19b", // ExploitedX
+		"98c4c6c5-cf89-487c-91cf-902aa121eb3b", // MYLF
+		"a37b47ad-0854-4f74-84ba-9d8c70ba1dd9", // Fakehub
+		"059a602f-7ba6-419e-a422-e688c87359be", // Fantasy Massage (Network)
+		"3396ac96-80e9-40aa-825f-fcc09159835f", // Dogfart Network
+		"eb711259-b4fa-49a4-a572-ebfaba0f93e7", // NF Media
+		"b464d27d-2611-4f78-b7ee-68065a305b6e", // Fuck You Cash
 	}
 
 	excludeRx := regexp.MustCompile(`(?i)\b(lesbians?|gays?|bi-?empire|boys?|males?|men|trans|t-?girls?|midgets?)\b`)
@@ -143,7 +185,7 @@ func resolveStudiosJob() {
 		if len(currentParents) == 0 {
 			break
 		}
-		
+
 		var nextParents []string
 		page := 1
 
@@ -1003,9 +1045,9 @@ func resolveSingleJavScene(ctx context.Context, tpdbSvc *tpdb.Service, code, jav
 
 	if !found {
 		scene = tpdb.TpdbScene{
-			ID:     "fallback_" + code,
-			Title:  javGuruTitle,
-			Date:   pubDate,
+			ID:    "fallback_" + code,
+			Title: javGuruTitle,
+			Date:  pubDate,
 		}
 		if jgPoster != "" {
 			scene.Poster = jgPoster
@@ -1314,6 +1356,9 @@ func fetchStashDBSingleScene(ctx context.Context, id string) (*tpdb.TpdbScene, e
 			details
 			studio {
 				name
+				parent {
+					name
+				}
 			}
 			performers {
 				performer {
@@ -1364,7 +1409,10 @@ func fetchStashDBSingleScene(ctx context.Context, id string) (*tpdb.TpdbScene, e
 				ReleaseDate string `json:"release_date"`
 				Details     string `json:"details"`
 				Studio      struct {
-					Name string `json:"name"`
+					Name   string `json:"name"`
+					Parent *struct {
+						Name string `json:"name"`
+					} `json:"parent"`
 				} `json:"studio"`
 				Performers []struct {
 					Performer struct {
@@ -1402,6 +1450,11 @@ func fetchStashDBSingleScene(ctx context.Context, id string) (*tpdb.TpdbScene, e
 		}
 	}
 
+	parentName := ""
+	if fs.Studio.Parent != nil {
+		parentName = strings.TrimSpace(fs.Studio.Parent.Name)
+	}
+
 	return &tpdb.TpdbScene{
 		ID:          fs.ID,
 		Title:       fs.Title,
@@ -1409,7 +1462,8 @@ func fetchStashDBSingleScene(ctx context.Context, id string) (*tpdb.TpdbScene, e
 		Date:        fs.ReleaseDate,
 		Poster:      poster,
 		Site: &tpdb.TpdbSceneSite{
-			Name: fs.Studio.Name,
+			Name:   fs.Studio.Name,
+			Parent: parentName,
 		},
 		Performers: performers,
 	}, nil
@@ -1489,7 +1543,6 @@ func handleMeta(tpdbSvc *tpdb.Service) gin.HandlerFunc {
 		if originalBackground == "" && originalPoster != "" {
 			originalBackground = originalPoster
 		}
-
 
 		proxiedPoster := ""
 		if originalPoster != "" {
@@ -1589,7 +1642,7 @@ func getDMMFallbackURLs(urlStr string) []string {
 	// e.g., "1fns00205pl.jpg" -> prefix="fns", num=205
 	rx := regexp.MustCompile(`(?:^|[^a-z0-9])([a-z]{2,8})[^a-z0-9]*(\d{3,6})`)
 	m := rx.FindStringSubmatch(filename)
-	
+
 	// If it doesn't match the filename, try the whole URL
 	if len(m) < 3 {
 		m = rx.FindStringSubmatch(strings.ToLower(urlStr))
@@ -1601,7 +1654,7 @@ func getDMMFallbackURLs(urlStr string) []string {
 
 	prefix := m[1]
 	numStr := m[2]
-	
+
 	var num int
 	fmt.Sscanf(numStr, "%d", &num)
 
@@ -1917,7 +1970,135 @@ type ProwlarrResultItem struct {
 	Leechers    int    `json:"leechers,omitempty"`
 }
 
-func searchProwlarrDirect(ctx context.Context, query string, javMode bool) ([]ProwlarrResultItem, error) {
+type ProwlarrIndexer struct {
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	Enable       bool   `json:"enable"`
+	Capabilities struct {
+		Categories []struct {
+			ID   int    `json:"id"`
+			Name string `json:"name"`
+		} `json:"categories"`
+	} `json:"capabilities"`
+}
+
+// IndexerWithCatInfo holds an indexer ID, name, and whether it supports adult categories (5000/6000)
+type IndexerWithCatInfo struct {
+	ID                int
+	Name              string
+	SupportsAdultCats bool
+}
+
+func getProwlarrIndexerIDs(ctx context.Context, names []string) []int {
+	results := getProwlarrIndexersWithCatInfo(ctx, names)
+	ids := make([]int, len(results))
+	for i, r := range results {
+		ids[i] = r.ID
+	}
+	return ids
+}
+
+func getEnabledProwlarrIndexers(ctx context.Context) ([]ProwlarrIndexer, error) {
+	globalProwlarrIndexersCache.Lock()
+	defer globalProwlarrIndexersCache.Unlock()
+
+	if len(globalProwlarrIndexersCache.indexers) > 0 && time.Since(globalProwlarrIndexersCache.updatedAt) < 10*time.Minute {
+		copied := make([]ProwlarrIndexer, len(globalProwlarrIndexersCache.indexers))
+		copy(copied, globalProwlarrIndexersCache.indexers)
+		return copied, nil
+	}
+
+	prowlarrURL := os.Getenv("PROWLARR_URL")
+	apiKey := os.Getenv("PROWLARR_API_KEY")
+	if prowlarrURL == "" || apiKey == "" {
+		return nil, fmt.Errorf("Prowlarr is not configured")
+	}
+	apiURL := fmt.Sprintf("%s/api/v1/indexer?apikey=%s", prowlarrURL, apiKey)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	cl := &http.Client{Timeout: 5 * time.Second}
+	resp, err := cl.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bad status code from Prowlarr indexer: %d", resp.StatusCode)
+	}
+	var indexers []ProwlarrIndexer
+	if err := json.NewDecoder(resp.Body).Decode(&indexers); err != nil {
+		return nil, err
+	}
+
+	var enabled []ProwlarrIndexer
+	for _, ind := range indexers {
+		if ind.Enable {
+			enabled = append(enabled, ind)
+		}
+	}
+
+	globalProwlarrIndexersCache.indexers = enabled
+	globalProwlarrIndexersCache.updatedAt = time.Now()
+
+	copied := make([]ProwlarrIndexer, len(enabled))
+	copy(copied, enabled)
+	return copied, nil
+}
+
+func getProwlarrIndexersWithCatInfo(ctx context.Context, names []string) []IndexerWithCatInfo {
+	enabled, err := getEnabledProwlarrIndexers(ctx)
+	if err != nil {
+		log.Warnf("Failed to fetch enabled Prowlarr indexers: %v", err)
+		return nil
+	}
+
+	var results []IndexerWithCatInfo
+	for _, ind := range enabled {
+		indName := strings.ToLower(ind.Name)
+		matched := false
+		for _, n := range names {
+			target := strings.ToLower(n)
+			if indName == target || strings.Contains(indName, target) || strings.Contains(target, indName) {
+				matched = true
+				break
+			}
+		}
+		if matched {
+			supportsAdult := false
+			for _, cat := range ind.Capabilities.Categories {
+				if cat.ID == 5000 || cat.ID == 6000 || cat.ID == 6010 || cat.ID == 6020 || cat.ID == 6030 {
+					supportsAdult = true
+					break
+				}
+			}
+			results = append(results, IndexerWithCatInfo{
+				ID:                ind.ID,
+				Name:              ind.Name,
+				SupportsAdultCats: supportsAdult,
+			})
+		}
+	}
+	return results
+}
+
+func cleanAdultStudioName(name string) string {
+	name = strings.TrimSpace(name)
+	nameLower := strings.ToLower(name)
+
+	suffixes := []string{" media group", " network", " entertainment", " productions", " studios", " distribution", " group"}
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(nameLower, suffix) {
+			name = name[:len(name)-len(suffix)]
+			nameLower = strings.ToLower(name)
+		}
+	}
+	return strings.TrimSpace(name)
+}
+
+func searchProwlarrDirect(ctx context.Context, query string, indexerIDs []int, javMode bool, noCategories bool) ([]ProwlarrResultItem, error) {
 	prowlarrURL := os.Getenv("PROWLARR_URL")
 	apiKey := os.Getenv("PROWLARR_API_KEY")
 	if prowlarrURL == "" || apiKey == "" {
@@ -1925,9 +2106,8 @@ func searchProwlarrDirect(ctx context.Context, query string, javMode bool) ([]Pr
 	}
 
 	var apiURL string
-	if javMode {
-		// JAV content is indexed under various non-standard categories (foreign, uncategorized, etc.)
-		// Do NOT restrict by category — search all indexers without category filter.
+	if javMode || noCategories {
+		// JAV content or indexers that don't support adult categories — search without category filter
 		apiURL = fmt.Sprintf("%s/api/v1/search?query=%s&apikey=%s&type=search",
 			prowlarrURL, url.QueryEscape(query), apiKey)
 	} else {
@@ -1936,13 +2116,21 @@ func searchProwlarrDirect(ctx context.Context, query string, javMode bool) ([]Pr
 			prowlarrURL, url.QueryEscape(query), apiKey)
 	}
 
+	if len(indexerIDs) > 0 {
+		var ids []string
+		for _, id := range indexerIDs {
+			ids = append(ids, fmt.Sprintf("indexerIds=%d", id))
+		}
+		apiURL += "&" + strings.Join(ids, "&")
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 
-	cl := &http.Client{Timeout: 15 * time.Second}
+	cl := &http.Client{Timeout: 5 * time.Second}
 	resp, err := cl.Do(req)
 	if err != nil {
 		return nil, err
@@ -1962,26 +2150,170 @@ func searchProwlarrDirect(ctx context.Context, query string, javMode bool) ([]Pr
 }
 
 type StreamItem struct {
-	Name     string `json:"name"`
-	Title    string `json:"title"`
-	URL      string `json:"url,omitempty"`
-	InfoHash string `json:"infoHash,omitempty"`
-	FileIdx  *int   `json:"fileIdx,omitempty"`
+	Name      string `json:"name"`
+	Title     string `json:"title"`
+	URL       string `json:"url,omitempty"`
+	InfoHash  string `json:"infoHash,omitempty"`
+	FileIdx   *int   `json:"fileIdx,omitempty"`
+	MagnetURL string `json:"magnetUrl,omitempty"`
 }
 
 type StreamsResponse struct {
 	Streams []StreamItem `json:"streams"`
 }
 
+func cleanForComparison(s string) string {
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, " ", "")
+	s = strings.ReplaceAll(s, ".", "")
+	s = strings.ReplaceAll(s, "-", "")
+	s = strings.ReplaceAll(s, "_", "")
+	return s
+}
+
+func filterRelevantResults(res []ProwlarrResultItem, q string, javMode bool, scene *tpdb.TpdbScene, studioName string, parentStudio string) []ProwlarrResultItem {
+	var relevant []ProwlarrResultItem
+	if javMode {
+		queryJav := extractJAVCode(q)
+		for _, r := range res {
+			titleLow := strings.ToLower(r.Title)
+			if queryJav != "" {
+				titleJav := extractJAVCode(r.Title)
+				if titleJav == queryJav {
+					relevant = append(relevant, r)
+				} else {
+					titleLowClean := strings.NewReplacer("-", "", "_", "", " ", "").Replace(titleLow)
+					if strings.Contains(titleLowClean, queryJav) {
+						relevant = append(relevant, r)
+					}
+				}
+			} else {
+				queryLow := strings.ToLower(q)
+				words := strings.Fields(queryLow)
+				matched := false
+				for _, w := range words {
+					if len(w) >= 3 && strings.Contains(titleLow, w) {
+						matched = true
+						break
+					}
+				}
+				if matched {
+					relevant = append(relevant, r)
+				}
+			}
+		}
+	} else {
+		isDateQuery := false
+		var dateMM, dateDD string
+		parts := strings.Fields(q)
+		if len(parts) >= 3 {
+			last := parts[len(parts)-1]
+			prev := parts[len(parts)-2]
+			if len(last) == 2 && len(prev) == 2 {
+				if _, e1 := strconv.Atoi(last); e1 == nil {
+					if _, e2 := strconv.Atoi(prev); e2 == nil {
+						isDateQuery = true
+						dateMM = prev
+						dateDD = last
+					}
+				}
+			}
+		}
+		for _, r := range res {
+			titleLow := strings.ToLower(r.Title)
+
+			// Enforce SFW leak prevention filter for general-purpose indexers
+			isGeneral := false
+			indName := strings.ToLower(r.Indexer)
+			if strings.Contains(indName, "zilean") || strings.Contains(indName, "pirate") || strings.Contains(indName, "knaben") {
+				isGeneral = true
+			}
+			if isGeneral {
+				titleLowClean := cleanForComparison(r.Title)
+				studioMatched := false
+				if studioName != "" && strings.Contains(titleLowClean, cleanForComparison(studioName)) {
+					studioMatched = true
+				}
+				if parentStudio != "" && strings.Contains(titleLowClean, cleanForComparison(parentStudio)) {
+					studioMatched = true
+				}
+				perfMatched := false
+				for _, perf := range scene.Performers {
+					pName := cleanForComparison(perf.Name)
+					if pName != "" && strings.Contains(titleLowClean, pName) {
+						perfMatched = true
+						break
+					}
+				}
+				if !studioMatched && !perfMatched {
+					continue
+				}
+			}
+
+			if isDateQuery {
+				if strings.Contains(titleLow, dateMM+" "+dateDD) ||
+					strings.Contains(titleLow, dateMM+"."+dateDD) ||
+					strings.Contains(titleLow, dateMM+"-"+dateDD) ||
+					strings.Contains(titleLow, dateMM+dateDD) ||
+					strings.Contains(titleLow, dateDD+"."+dateMM) ||
+					strings.Contains(titleLow, dateDD+"-"+dateMM) {
+					relevant = append(relevant, r)
+				}
+			} else {
+				stopWords := map[string]bool{
+					"a": true, "an": true, "the": true, "and": true, "or": true, "in": true,
+					"of": true, "to": true, "is": true, "at": true, "by": true, "for": true,
+					"on": true, "me": true, "my": true, "her": true, "his": true, "with": true,
+					"from": true, "it": true, "was": true, "not": true, "are": true, "be": true,
+				}
+				queryLow := strings.ToLower(q)
+				sigWords := []string{}
+				for _, w := range strings.Fields(queryLow) {
+					if len(w) >= 3 && !stopWords[w] {
+						sigWords = append(sigWords, w)
+					}
+				}
+				if len(sigWords) == 0 {
+					for _, w := range strings.Fields(queryLow) {
+						if len(w) >= 2 && !stopWords[w] {
+							sigWords = append(sigWords, w)
+						}
+					}
+				}
+				matches := 0
+				for _, w := range sigWords {
+					if strings.Contains(titleLow, w) {
+						matches++
+					}
+				}
+				minMatch := 2
+				if len(sigWords) <= 2 {
+					minMatch = 1
+				} else if len(sigWords) <= 4 {
+					minMatch = 2
+				} else {
+					minMatch = 3
+				}
+				if matches >= minMatch && len(sigWords) > 0 {
+					relevant = append(relevant, r)
+				}
+			}
+		}
+	}
+	return relevant
+}
+
 func handleAdultStreams(c *gin.Context, tpdbSvc *tpdb.Service, id string) {
-	// 1. Redis cache lookup
-	redisKey := fmt.Sprintf("adult_streams_cache:%s", id)
+	exhaustive := c.Query("exhaustive") == "true"
+
+	// 1. Redis cache lookup (segregated by exhaustive parameter)
+	redisKey := fmt.Sprintf("adult_streams_cache:%s:ex:%v", id, exhaustive)
 	if globalRedisClient != nil {
 		cachedVal, err := globalRedisClient.Get().Get(c.Request.Context(), redisKey).Result()
 		if err == nil && cachedVal != "" {
 			var cachedResp StreamsResponse
 			if err := json.Unmarshal([]byte(cachedVal), &cachedResp); err == nil {
-				log.Infof("Returning cached streams for adult ID: %s", id)
+				log.Infof("Returning cached streams for adult ID: %s (exhaustive: %v)", id, exhaustive)
 				c.JSON(http.StatusOK, cachedResp)
 				return
 			}
@@ -2032,7 +2364,10 @@ func handleAdultStreams(c *gin.Context, tpdbSvc *tpdb.Service, id string) {
 	}
 
 	// 3. Formulate highly clean search terms
-	var searchQueries []string
+	var primaryQueries []string
+	var fallbackQueries []string
+	var studioName string
+	var parentStudio string
 
 	if prefix == "tpdb_jav" {
 		code := ""
@@ -2044,201 +2379,251 @@ func handleAdultStreams(c *gin.Context, tpdbSvc *tpdb.Service, id string) {
 			letters := strings.ToUpper(m[1])
 			numbers := m[2]
 			code = letters + "-" + numbers
-			searchQueries = append(searchQueries, code)
-			searchQueries = append(searchQueries, letters+numbers)
+			primaryQueries = append(primaryQueries, code)
+			primaryQueries = append(primaryQueries, letters+numbers)
 		} else {
-			searchQueries = append(searchQueries, scene.Title)
+			primaryQueries = append(primaryQueries, strings.Join(strings.Fields(scene.Title), " "))
 		}
 	} else {
-		studioName := ""
 		if scene.Site != nil {
-			studioName = scene.Site.Name
+			studioName = cleanAdultStudioName(scene.Site.Name)
 		}
-		studioName = strings.TrimSpace(studioName)
 
-		// Stage 1: Studio + Date — try BOTH 4-digit and 2-digit year variants
-		// Torrents are inconsistently named: "Brazzers Exxtra 2026 05 25" vs "BrazzersExxtra 26 05 25"
+		var yy, yyShort, mm, dd string
 		if len(scene.Date) >= 10 {
 			dateParts := strings.Split(scene.Date, "-")
 			if len(dateParts) == 3 {
-				yy := dateParts[0]
-				yyShort := dateParts[0][2:] // 2-digit year (e.g. "26" from "2026")
-				mm := dateParts[1]
-				dd := dateParts[2]
-				if studioName != "" {
-					// 4-digit year variant: "Brazzers Exxtra 2026 05 25"
-					searchQueries = append(searchQueries, fmt.Sprintf("%s %s %s %s", studioName, yy, mm, dd))
-					// 2-digit year variant: "Brazzers Exxtra 26 05 25"
-					searchQueries = append(searchQueries, fmt.Sprintf("%s %s %s %s", studioName, yyShort, mm, dd))
+				yy = dateParts[0]
+				yyShort = dateParts[0][2:]
+				mm = dateParts[1]
+				dd = dateParts[2]
+			}
+		}
+
+		cleanedTitle := scene.Title
+		cleanedTitle = strings.NewReplacer(":", " ", "&", " ", "'", "", "\"", "", "-", " ", "(", "", ")", "").Replace(cleanedTitle)
+		words := strings.Fields(cleanedTitle)
+		if len(words) > 10 {
+			words = words[:10]
+		}
+		titleFull := strings.Join(words, " ")
+
+		// Resolve parent studio
+		if scene.Site != nil && scene.Site.Parent != "" {
+			parentStudio = cleanAdultStudioName(scene.Site.Parent)
+		} else if studioWords := strings.Fields(studioName); len(studioWords) > 1 {
+			firstWord := studioWords[0]
+			genericWords := map[string]bool{"the": true, "big": true, "hot": true, "new": true, "my": true, "all": true, "sexy": true}
+			if !genericWords[strings.ToLower(firstWord)] && len(firstWord) >= 4 {
+				parentStudio = firstWord
+			}
+		}
+
+		studioQueryName := strings.ReplaceAll(studioName, " ", "")
+		parentStudioQueryName := strings.ReplaceAll(parentStudio, " ", "")
+
+		// --- 1. Primary Queries (Tier 1) ---
+		// Studio + Date (2-digit year)
+		if studioQueryName != "" && yyShort != "" {
+			primaryQueries = append(primaryQueries, strings.Join(strings.Fields(fmt.Sprintf("%s %s %s %s", studioQueryName, yyShort, mm, dd)), " "))
+		}
+		// Studio + Title
+		if studioQueryName != "" && titleFull != "" {
+			primaryQueries = append(primaryQueries, strings.Join(strings.Fields(fmt.Sprintf("%s %s", studioQueryName, titleFull)), " "))
+		}
+		// Studio + Date (4-digit year)
+		if studioQueryName != "" && yy != "" {
+			primaryQueries = append(primaryQueries, strings.Join(strings.Fields(fmt.Sprintf("%s %s %s %s", studioQueryName, yy, mm, dd)), " "))
+		}
+		// Performer + Date (2-digit year) - DO NOT add performer yyyy mm dd
+		if yyShort != "" && len(scene.Performers) > 0 {
+			for _, perf := range scene.Performers {
+				perfName := strings.TrimSpace(perf.Name)
+				if perfName != "" {
+					primaryQueries = append(primaryQueries, strings.Join(strings.Fields(fmt.Sprintf("%s %s %s %s", perfName, yyShort, mm, dd)), " "))
 				}
 			}
 		}
 
-		// Stage 2: Title-only search (proved effective in live tests - many trackers don't use studio names)
-		cleanedTitle := scene.Title
-		cleanedTitle = strings.NewReplacer(":", " ", "'", "", "\"", "", "-", " ", "(", "", ")", "").Replace(cleanedTitle)
-		words := strings.Fields(cleanedTitle)
-		titleFull := cleanedTitle
-		if len(words) > 5 {
-			titleFull = strings.Join(words[:5], " ")
-		}
-		// Title-only (trackers like Knaben/xxxtor index by title)
-		searchQueries = append(searchQueries, titleFull)
-		// Studio + Title (for trackers that include studio prefix)
-		if studioName != "" {
-			searchQueries = append(searchQueries, fmt.Sprintf("%s %s", studioName, titleFull))
+		// Parent Studio fallback for primary queries
+		if parentStudioQueryName != "" && !strings.EqualFold(parentStudioQueryName, studioQueryName) {
+			if yyShort != "" {
+				primaryQueries = append(primaryQueries, strings.Join(strings.Fields(fmt.Sprintf("%s %s %s %s", parentStudioQueryName, yyShort, mm, dd)), " "))
+			}
+			if titleFull != "" {
+				primaryQueries = append(primaryQueries, strings.Join(strings.Fields(fmt.Sprintf("%s %s", parentStudioQueryName, titleFull)), " "))
+			}
+			if yy != "" {
+				primaryQueries = append(primaryQueries, strings.Join(strings.Fields(fmt.Sprintf("%s %s %s %s", parentStudioQueryName, yy, mm, dd)), " "))
+			}
 		}
 
-		// Stage 3: Studio + Performer (Western porn only — performer-only is too noisy)
-		if studioName != "" && len(scene.Performers) > 0 {
+		// --- 2. Fallback Queries (Tier 2 only) ---
+		// Title-only
+		if titleFull != "" {
+			fallbackQueries = append(fallbackQueries, titleFull)
+		}
+		// Studio + Performer
+		if studioQueryName != "" && len(scene.Performers) > 0 {
 			for _, perf := range scene.Performers {
 				perfName := strings.TrimSpace(perf.Name)
 				if perfName != "" {
-					searchQueries = append(searchQueries, fmt.Sprintf("%s %s", studioName, perfName))
+					fallbackQueries = append(fallbackQueries, strings.Join(strings.Fields(fmt.Sprintf("%s %s", studioQueryName, perfName)), " "))
+				}
+			}
+		}
+		// Parent Studio + Performer
+		if parentStudioQueryName != "" && !strings.EqualFold(parentStudioQueryName, studioQueryName) && len(scene.Performers) > 0 {
+			for _, perf := range scene.Performers {
+				perfName := strings.TrimSpace(perf.Name)
+				if perfName != "" {
+					fallbackQueries = append(fallbackQueries, strings.Join(strings.Fields(fmt.Sprintf("%s %s", parentStudioQueryName, perfName)), " "))
 				}
 			}
 		}
 	}
 
-	// 4. Search Prowlarr sequentially using fallback stages + relevance filtering
+	javMode := prefix == "tpdb_jav"
+
+	// Split preferred indexers based on JAV mode into Primary and Secondary categories
+	var primaryNames []string
+	var secondaryNames []string
+	if javMode {
+		primaryNames = []string{"sukebei.nyaa.si", "Knaben"}
+		secondaryNames = []string{"Tokyo Toshokan", "nekoBT", "Nyaa.si", "The Pirate Bay", "Zilean DMM", "Zilean"}
+	} else {
+		primaryNames = []string{"The Pirate Bay", "Knaben"}
+		secondaryNames = []string{"sukebei.nyaa.si", "TorrentGalaxyClone", "XXXClub", "xxxtor", "Zilean DMM", "Zilean"}
+	}
+
+	primaryIndexers := getProwlarrIndexersWithCatInfo(c.Request.Context(), primaryNames)
+	secondaryIndexers := getProwlarrIndexersWithCatInfo(c.Request.Context(), secondaryNames)
+
 	var torrents []ProwlarrResultItem
-	for _, query := range searchQueries {
-		query = strings.TrimSpace(query)
-		if query == "" {
-			continue
-		}
-		log.Infof("Searching Prowlarr for adult query: %q (javMode=%v)", query, prefix == "tpdb_jav")
-		results, err := searchProwlarrDirect(c.Request.Context(), query, prefix == "tpdb_jav")
-		if err != nil || len(results) == 0 {
-			continue
-		}
+	var mu sync.Mutex
 
-		var relevant []ProwlarrResultItem
-
-		if prefix == "tpdb_jav" {
-			// Specialized JAV Relevance Filter
-			queryJav := extractJAVCode(query)
-			for _, r := range results {
-				titleLow := strings.ToLower(r.Title)
-				if queryJav != "" {
-					titleJav := extractJAVCode(r.Title)
-					if titleJav == queryJav {
-						relevant = append(relevant, r)
-					} else {
-						// Substring check on cleaned alphanumeric title
-						titleLowClean := strings.NewReplacer("-", "", "_", "", " ", "").Replace(titleLow)
-						if strings.Contains(titleLowClean, queryJav) {
-							relevant = append(relevant, r)
+	// Tier 1 Search: Query primary indexers in parallel across primary queries ONLY
+	if len(primaryIndexers) > 0 {
+		var wg sync.WaitGroup
+		for _, q := range primaryQueries {
+			q = strings.TrimSpace(q)
+			if q == "" {
+				continue
+			}
+			for _, ind := range primaryIndexers {
+				wg.Add(1)
+				go func(query string, indexer IndexerWithCatInfo) {
+					defer wg.Done()
+					reqCtx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+					defer cancel()
+					res, err := searchProwlarrDirect(reqCtx, query, []int{indexer.ID}, javMode, !indexer.SupportsAdultCats)
+					if err == nil && len(res) > 0 {
+						filtered := filterRelevantResults(res, query, javMode, scene, studioName, parentStudio)
+						if len(filtered) > 0 {
+							mu.Lock()
+							torrents = append(torrents, filtered...)
+							mu.Unlock()
 						}
 					}
-				} else {
-					// Fallback to significant words if no clean JAV code was extracted from query
-					queryLow := strings.ToLower(query)
-					words := strings.Fields(queryLow)
-					matched := false
-					for _, w := range words {
-						if len(w) >= 3 && strings.Contains(titleLow, w) {
-							matched = true
+				}(q, ind)
+			}
+		}
+		wg.Wait()
+	}
+
+	// Tier 2 Search: Query secondary indexers sequentially if Tier 1 returned 0 results, or if exhaustive mode is requested
+	if exhaustive || len(torrents) == 0 {
+		zileanIDs := []int{}
+		var mainSecondaryIndexers []IndexerWithCatInfo
+		for _, ind := range secondaryIndexers {
+			if strings.Contains(strings.ToLower(ind.Name), "zilean") {
+				zileanIDs = append(zileanIDs, ind.ID)
+			} else {
+				mainSecondaryIndexers = append(mainSecondaryIndexers, ind)
+			}
+		}
+
+		// Combined queries for Tier 2 fallback: primary queries first, then fallback queries
+		var allQueries []string
+		allQueries = append(allQueries, primaryQueries...)
+		allQueries = append(allQueries, fallbackQueries...)
+
+		for _, q := range allQueries {
+			q = strings.TrimSpace(q)
+			if q == "" {
+				continue
+			}
+
+			// 1. Zilean DMM cache check (local, fast)
+			if len(zileanIDs) > 0 {
+				log.Infof("Searching Zilean DMM cache for query: %q", q)
+				reqCtx, cancel := context.WithTimeout(c.Request.Context(), 1500*time.Millisecond)
+				res, err := searchProwlarrDirect(reqCtx, q, zileanIDs, true, true)
+				cancel()
+				if err == nil && len(res) > 0 {
+					filtered := filterRelevantResults(res, q, javMode, scene, studioName, parentStudio)
+					if len(filtered) > 0 {
+						torrents = append(torrents, filtered...)
+						log.Infof("Found %d relevant torrents in Zilean cache for query %q", len(filtered), q)
+						if !exhaustive {
 							break
 						}
 					}
-					if matched {
-						relevant = append(relevant, r)
-					}
-				}
-			}
-		} else {
-			// Specialized Western Adult Relevance Filter
-			isDateQuery := false
-			var dateMM, dateDD string
-			{
-				parts := strings.Fields(query)
-				if len(parts) >= 3 {
-					last := parts[len(parts)-1]
-					prev := parts[len(parts)-2]
-					// Detect MM DD (both should be 2-digit numeric)
-					if len(last) == 2 && len(prev) == 2 {
-						if _, e1 := strconv.Atoi(last); e1 == nil {
-							if _, e2 := strconv.Atoi(prev); e2 == nil {
-								isDateQuery = true
-								dateMM = prev
-								dateDD = last
-							}
-						}
-					}
 				}
 			}
 
-			for _, r := range results {
-				titleLow := strings.ToLower(r.Title)
+			// 2. Live indexers search (sequential query blocks, parallelized within each block)
+			indexersToQuery := mainSecondaryIndexers
+			isFallback := false
+			for _, fq := range fallbackQueries {
+				if fq == q {
+					isFallback = true
+					break
+				}
+			}
+			if isFallback {
+				indexersToQuery = append(indexersToQuery, primaryIndexers...)
+			}
 
-				if isDateQuery {
-					// For date queries: title must contain "MM DD" or "MMDD" or "DD MM" etc.
-					// to confirm it's actually from that date (not just from the same studio in the same year)
-					if strings.Contains(titleLow, dateMM+" "+dateDD) ||
-						strings.Contains(titleLow, dateMM+"."+dateDD) ||
-						strings.Contains(titleLow, dateMM+"-"+dateDD) ||
-						strings.Contains(titleLow, dateMM+dateDD) ||
-						strings.Contains(titleLow, dateDD+"."+dateMM) ||
-						strings.Contains(titleLow, dateDD+"-"+dateMM) {
-						relevant = append(relevant, r)
-					}
-				} else {
-					// For title/performer queries: require significant word matches
-					stopWords := map[string]bool{
-						"a": true, "an": true, "the": true, "and": true, "or": true, "in": true,
-						"of": true, "to": true, "is": true, "at": true, "by": true, "for": true,
-						"on": true, "me": true, "my": true, "her": true, "his": true, "with": true,
-						"from": true, "it": true, "was": true, "not": true, "are": true, "be": true,
-					}
-					queryLow := strings.ToLower(query)
-					sigWords := []string{}
-					for _, w := range strings.Fields(queryLow) {
-						// Use length >= 3 to retain crucial adult terms (e.g. cum, ass, tit, sex, wet, hot, pov)
-						if len(w) >= 3 && !stopWords[w] {
-							sigWords = append(sigWords, w)
-						}
-					}
-					// If sigWords is empty, use all non-stop words of length >= 2
-					if len(sigWords) == 0 {
-						for _, w := range strings.Fields(queryLow) {
-							if len(w) >= 2 && !stopWords[w] {
-								sigWords = append(sigWords, w)
+			if len(indexersToQuery) > 0 && (exhaustive || len(torrents) == 0) {
+				log.Infof("Searching indexers sequentially for query: %q", q)
+				var qWg sync.WaitGroup
+				var qMu sync.Mutex
+				var qResults []ProwlarrResultItem
+
+				for _, ind := range indexersToQuery {
+					qWg.Add(1)
+					go func(indexer IndexerWithCatInfo) {
+						defer qWg.Done()
+						reqCtx, cancel := context.WithTimeout(c.Request.Context(), 4*time.Second)
+						defer cancel()
+						res, err := searchProwlarrDirect(reqCtx, q, []int{indexer.ID}, javMode, !indexer.SupportsAdultCats)
+						if err == nil && len(res) > 0 {
+							filtered := filterRelevantResults(res, q, javMode, scene, studioName, parentStudio)
+							if len(filtered) > 0 {
+								qMu.Lock()
+								qResults = append(qResults, filtered...)
+								qMu.Unlock()
 							}
 						}
-					}
+					}(ind)
+				}
+				qWg.Wait()
 
-					matches := 0
-					for _, w := range sigWords {
-						if strings.Contains(titleLow, w) {
-							matches++
-						}
-					}
-
-					minMatch := 2
-					if len(sigWords) <= 2 {
-						minMatch = len(sigWords)
-					}
-					if matches >= minMatch && len(sigWords) > 0 {
-						relevant = append(relevant, r)
+				if len(qResults) > 0 {
+					torrents = append(torrents, qResults...)
+					if !exhaustive {
+						break
 					}
 				}
 			}
 		}
-
-		if len(relevant) > 0 {
-			log.Infof("Prowlarr query %q: %d/%d results passed relevance filter (prefix=%q)", query, len(relevant), len(results), prefix)
-			torrents = relevant
-			break // Relevant match found! Stop further fallback.
-		}
-		log.Infof("Prowlarr query %q: %d results but 0 passed relevance filter, trying next...", query, len(results))
 	}
 
 	// 4.5 Resolve infohashes for items that only have a DownloadURL (in parallel)
 	{
 		var wg sync.WaitGroup
 		for i := range torrents {
-			// First, try to parse from existing fields (InfoHash/MagnetURL/DownloadURL)
 			if parsed := tryParseInfoHash(torrents[i].InfoHash); parsed != "" {
 				torrents[i].InfoHash = parsed
 			} else if parsed := tryParseInfoHash(torrents[i].MagnetURL); parsed != "" {
@@ -2247,7 +2632,6 @@ func handleAdultStreams(c *gin.Context, tpdbSvc *tpdb.Service, id string) {
 				torrents[i].InfoHash = parsed
 			}
 
-			// If still empty, download the torrent file (only if it's a real HTTP download URL)
 			if torrents[i].InfoHash == "" && torrents[i].DownloadURL != "" && !strings.HasPrefix(strings.ToLower(torrents[i].DownloadURL), "magnet:") {
 				wg.Add(1)
 				go func(idx int) {
@@ -2265,11 +2649,23 @@ func handleAdultStreams(c *gin.Context, tpdbSvc *tpdb.Service, id string) {
 		wg.Wait()
 	}
 
-	// 5. Deduplicate by InfoHash & Package streams
-	seenHashes := make(map[string]bool)
-	streamItems := []StreamItem{}
-
+	// 5. Filter siterips and deduplicate by InfoHash (keeping longest title)
+	var filteredTorrents []ProwlarrResultItem
 	for _, item := range torrents {
+		if siteripRx.MatchString(item.Title) {
+			log.Infof("Skipping siterip/pack torrent: %s", item.Title)
+			continue
+		}
+		filteredTorrents = append(filteredTorrents, item)
+	}
+
+	if len(filteredTorrents) == 0 {
+		log.Warnf("handleAdultStreams: 0 results after all queries and filtering for id=%s", id)
+	}
+
+	bestTorrents := make(map[string]ProwlarrResultItem)
+	var orderedHashes []string
+	for _, item := range filteredTorrents {
 		hash := tryParseInfoHash(item.InfoHash)
 		if hash == "" {
 			hash = tryParseInfoHash(item.MagnetURL)
@@ -2280,13 +2676,21 @@ func handleAdultStreams(c *gin.Context, tpdbSvc *tpdb.Service, id string) {
 		if hash == "" {
 			continue
 		}
-		if seenHashes[hash] {
-			continue
+		existing, exists := bestTorrents[hash]
+		if !exists {
+			bestTorrents[hash] = item
+			orderedHashes = append(orderedHashes, hash)
+		} else if len(item.Title) > len(existing.Title) {
+			bestTorrents[hash] = item
 		}
-		seenHashes[hash] = true
+	}
 
-		// Detect resolution quality
-		resolution := "HD"
+	streamItems := []StreamItem{}
+	for _, hash := range orderedHashes {
+		item := bestTorrents[hash]
+
+		// Detect resolution quality (default to 1080p for better advanced filtering in StreamModal)
+		resolution := "1080p"
 		titleLower := strings.ToLower(item.Title)
 		if strings.Contains(titleLower, "2160p") || strings.Contains(titleLower, "4k") {
 			resolution = "4K"
@@ -2299,30 +2703,59 @@ func handleAdultStreams(c *gin.Context, tpdbSvc *tpdb.Service, id string) {
 		}
 
 		sizeGB := float64(item.Size) / (1024 * 1024 * 1024)
-		titleString := fmt.Sprintf("%s\n💾 %.2f GB | 👥 Seeders: %d", item.Title, sizeGB, item.Seeders)
-
 		indexerLabel := item.Indexer
 		if indexerLabel == "" {
 			indexerLabel = "Prowlarr"
 		}
 
-		fileIdx := 0
+		titleString := fmt.Sprintf("%s\n💾 %.2f GB | 👥 Seeders: %d | ⚙️ %s", item.Title, sizeGB, item.Seeders, indexerLabel)
+
+		trackers := []string{
+			"udp://tracker.opentrackr.org:1337/announce",
+			"udp://open.stealth.si:80/announce",
+			"udp://explodie.org:6969/announce",
+			"udp://tracker.tiny-vps.com:6969/announce",
+			"udp://open.demonii.si:1337/announce",
+			"udp://tracker.torrent.eu.org:451/announce",
+		}
+
+		magnet := item.MagnetURL
+		// ALWAYS override Prowlarr HTTP proxy download links with a direct magnet link to bypass Prowlarr downtime/timeouts on click
+		if magnet == "" || strings.HasPrefix(strings.ToLower(magnet), "http://") || strings.HasPrefix(strings.ToLower(magnet), "https://") {
+			var trs []string
+			for _, tr := range trackers {
+				trs = append(trs, "&tr="+url.QueryEscape(tr))
+			}
+			magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s&dn=%s%s", hash, url.QueryEscape(item.Title), strings.Join(trs, ""))
+		}
+
+		var nameParts []string
+		nameParts = append(nameParts, "⚡ Octor")
+		nameParts = append(nameParts, resolution)
+		nameParts = append(nameParts, extractAdultExtraNameInfo(item.Title)...)
+
 		streamItems = append(streamItems, StreamItem{
-			Name:     fmt.Sprintf("⚡ Octor\n[%s] [%s]", resolution, indexerLabel),
-			Title:    titleString,
-			InfoHash: hash,
-			FileIdx:  &fileIdx,
+			Name:      strings.Join(nameParts, "\n"),
+			Title:     titleString,
+			InfoHash:  hash,
+			FileIdx:   nil,
+			MagnetURL: magnet,
 		})
 	}
 
-	// 6. Sort streams by seeders descending
 	sort.Slice(streamItems, func(i, j int) bool {
 		getSeeders := func(s string) int {
 			idx := strings.LastIndex(s, "Seeders: ")
 			if idx != -1 {
 				val := s[idx+len("Seeders: "):]
-				if num, err := strconv.Atoi(val); err == nil {
-					return num
+				end := 0
+				for end < len(val) && val[end] >= '0' && val[end] <= '9' {
+					end++
+				}
+				if end > 0 {
+					if num, err := strconv.Atoi(val[:end]); err == nil {
+						return num
+					}
 				}
 			}
 			return 0
@@ -2334,7 +2767,6 @@ func handleAdultStreams(c *gin.Context, tpdbSvc *tpdb.Service, id string) {
 		Streams: streamItems,
 	}
 
-	// 7. Save to Redis cache for 15 minutes
 	if globalRedisClient != nil && len(streamItems) > 0 {
 		if respBytes, err := json.Marshal(resp); err == nil {
 			_ = globalRedisClient.Get().Set(c.Request.Context(), redisKey, string(respBytes), 15*time.Minute).Err()
@@ -2345,7 +2777,7 @@ func handleAdultStreams(c *gin.Context, tpdbSvc *tpdb.Service, id string) {
 }
 
 func resolveInfoHashFromTorrent(ctx context.Context, downloadURL string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
@@ -2409,4 +2841,127 @@ func extractJAVCode(s string) string {
 		return strings.ToLower(m[1] + m[2])
 	}
 	return ""
+}
+
+var (
+	adultCodecRx     = regexp.MustCompile(`(?i)\b(hevc|h265|x265|h264|x264|avc|av1|10bit|8bit)\b`)
+	adultSourceRx    = regexp.MustCompile(`(?i)\b(web-dl|webdl|webrip|web|bluray|brrip|bdrip|hdtv|dvdrip|siterip|site-rip)\b`)
+	adultUploaderRx1 = regexp.MustCompile(`(?i)\[([a-zA-Z0-9_.-]{3,15})\]\s*$`)
+	adultUploaderRx2 = regexp.MustCompile(`(?i)-([a-zA-Z0-9_.-]{3,15})$`)
+)
+
+func extractAdultExtraNameInfo(title string) []string {
+	var tags []string
+
+	// 1. Codec extraction
+	if m := adultCodecRx.FindString(title); m != "" {
+		mLower := strings.ToLower(m)
+		if strings.Contains(mLower, "265") || strings.Contains(mLower, "hevc") {
+			tags = append(tags, "HEVC")
+		} else if strings.Contains(mLower, "264") || strings.Contains(mLower, "avc") {
+			tags = append(tags, "AVC")
+		} else if strings.Contains(mLower, "av1") {
+			tags = append(tags, "AV1")
+		} else {
+			tags = append(tags, m)
+		}
+	}
+
+	// 2. Source extraction
+	if m := adultSourceRx.FindString(title); m != "" {
+		mLower := strings.ToLower(m)
+		if strings.Contains(mLower, "web-dl") || strings.Contains(mLower, "webdl") {
+			tags = append(tags, "WEB-DL")
+		} else if strings.Contains(mLower, "webrip") {
+			tags = append(tags, "WEBRip")
+		} else if strings.Contains(mLower, "bluray") || strings.Contains(mLower, "bdrip") || strings.Contains(mLower, "brrip") {
+			tags = append(tags, "BluRay")
+		} else if strings.Contains(mLower, "siterip") || strings.Contains(mLower, "site-rip") {
+			tags = append(tags, "SiteRip")
+		} else if strings.Contains(mLower, "hdtv") {
+			tags = append(tags, "HDTV")
+		} else if strings.Contains(mLower, "dvdrip") {
+			tags = append(tags, "DVDRip")
+		}
+	}
+
+	// 3. Clean extensions/junk from the end of title before uploader matching
+	cleanTitle := regexp.MustCompile(`(?i)\.(mp4|mkv|avi|wmv|flv)\s*$`).ReplaceAllString(title, "")
+	cleanTitle = strings.TrimSpace(cleanTitle)
+
+	// 4. Uploader / Release Group extraction
+	isIgnoredUploader := func(u string) bool {
+		u = strings.ToLower(strings.TrimSpace(u))
+		if len(u) < 2 {
+			return true
+		}
+
+		// Heuristic: ignore tags that are mostly numbers (resolutions, dates, etc.)
+		digits := 0
+		letters := 0
+		for _, r := range u {
+			if r >= '0' && r <= '9' {
+				digits++
+			} else if r >= 'a' && r <= 'z' {
+				letters++
+			}
+		}
+		if digits > letters || letters == 0 {
+			return true
+		}
+
+		ignored := map[string]bool{
+			"mp4": true, "mkv": true, "avi": true, "wmv": true, "flv": true,
+			"hevc": true, "h265": true, "x265": true, "h264": true, "x264": true,
+			"avc": true, "av1": true, "10bit": true, "8bit": true,
+			"web-dl": true, "webdl": true, "webrip": true, "web": true,
+			"bluray": true, "brrip": true, "bdrip": true, "hdtv": true,
+			"dvdrip": true, "siterip": true, "site-rip": true,
+			"xxx": true, "uncensored": true, "censored": true, "jav": true,
+			"sub": true, "eng": true, "raw": true, "hd": true, "fhd": true,
+			"qhd": true, "uhd": true, "sd": true,
+		}
+		if ignored[u] {
+			return true
+		}
+
+		if javCodeRx.MatchString(u) {
+			return true
+		}
+
+		return false
+	}
+
+	// Extract all bracketed tags anywhere in the title
+	bracketRx := regexp.MustCompile(`(?i)\[([a-zA-Z0-9_.-]{3,15})\]`)
+	bracketMatches := bracketRx.FindAllStringSubmatch(cleanTitle, -1)
+	for _, m := range bracketMatches {
+		if len(m) > 1 {
+			u := m[1]
+			if !isIgnoredUploader(u) {
+				tags = append(tags, u)
+			}
+		}
+	}
+
+	// Also extract hyphenated suffix (e.g. -KTR) at the end of the title
+	if m := adultUploaderRx2.FindStringSubmatch(cleanTitle); len(m) > 1 {
+		u := m[1]
+		if !isIgnoredUploader(u) {
+			tags = append(tags, u)
+		}
+	}
+
+	// Deduplicate tags
+	uniqueTags := []string{}
+	seenTags := make(map[string]bool)
+	for _, t := range tags {
+		tLower := strings.ToLower(t)
+		if !seenTags[tLower] {
+			seenTags[tLower] = true
+			uniqueTags = append(uniqueTags, t)
+		}
+	}
+
+	return uniqueTags
 }

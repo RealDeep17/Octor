@@ -287,6 +287,29 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 		}
 		torrentInfos = append(torrentInfos, ti)
 	}
+	if len(torrentInfos) > 0 {
+		var maxSize int64
+		for _, ti := range torrentInfos {
+			if ti.ListItem.Size > maxSize {
+				maxSize = ti.ListItem.Size
+			}
+		}
+		if maxSize > 150*1024*1024 { // 150 MB
+			var filtered []*TorrentInfo
+			for _, ti := range torrentInfos {
+				if ti.ListItem.Size >= 100*1024*1024 || ti.ListItem.Size >= maxSize/5 {
+					filtered = append(filtered, ti)
+				} else {
+					log.WithFields(log.Fields{
+						"hash": hash,
+						"path": ti.PathStr,
+						"size": ti.ListItem.Size,
+					}).Info("dropped spam/promotional video file from enrichment")
+				}
+			}
+			torrentInfos = filtered
+		}
+	}
 	// Drop sample/preview clips when the same torrent already carries the
 	// real release. Without this, "Sicario/sicario.sample.mkv" + the main
 	// "Sicario.2015...mkv" produce two distinct movie rows and two AI
@@ -790,6 +813,16 @@ func (s *Enricher) mapEpisodeMetadata(ctx context.Context, videoID string, seaso
 func (s *Enricher) mapMetadata(ctx context.Context, vc *models.VideoContent, t models.ContentType, f bool, hintVideoID string, pathHint string, budget *resourceAIBudget) (*models.VideoMetadata, error) {
 	if pathHint != "" {
 		ctx = context.WithValue(ctx, "path_hint", pathHint)
+	}
+	isAdult := isAdultContent(vc)
+	if !isAdult && pathHint != "" {
+		isAdult, _ = IsAdultPath(pathHint)
+	}
+	if !isAdult && (strings.HasPrefix(hintVideoID, "stash:") || strings.HasPrefix(hintVideoID, "tpdb:") || strings.HasPrefix(hintVideoID, "tpdb_jav:")) {
+		isAdult = true
+	}
+	if isAdult {
+		ctx = context.WithValue(ctx, "is_adult", true)
 	}
 	if hintVideoID != "" {
 		if md := s.lookupByHint(ctx, hintVideoID, t, f); md != nil {

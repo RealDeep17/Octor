@@ -750,4 +750,139 @@ var fallbackStudioIDs = []string{
 	"9c5d4047-c23c-48ae-8b06-2b22328f9990",
 	"f8a92133-292f-4882-a65f-6ae0d44da8e1",
 	"5559c974-ab86-408e-8a30-8532bfd63c7e",
+	"b4a8d39e-6ed8-401e-b8d1-3e3f107b70ca", // Property Sex
+	"05823a8b-ec49-41a3-9aea-4c2843f05a33", // Gangbang Creampie
+	"0f1d8e2c-627e-4d05-a52e-c821b26cab0c", // Evil Angel
+	"475bdee5-3b4a-4153-9706-01f457a59e4a", // Elegant Angel
+	"e83ce38f-ddf4-45a7-800e-c199392a09c4", // Private
+	"a7cba57b-cc9d-47ae-8468-af1e20b6f61a", // DDF Network
+	"046ea0c9-c1ae-47bf-9a7e-ba27706da1c7", // Dane Jones
+	"cad7ddf0-c24c-4125-a2a3-af4287849364", // Woodman Casting X
+	"21397546-2256-4ed9-9a5b-08c10ca56e3e", // Dorcel
+	"c1cf3e96-6324-4d61-8114-a42f12aef348", // ArchAngel Video
+	"8db7c5c6-3d52-4fae-bc4f-647dfaceb08e", // Lethal Hardcore
+	"5aeae2a8-2cb3-4905-81e1-636dd4934fd4", // Young Legal Porn / LegalPorno
+	"2c9d7ab5-3db2-4744-af76-d9e920c4dd9b", // MetArt Network
+	"842cc5ba-4f5c-4bba-bc4e-04637f4d5c13", // SpyFam
+	"bd31010f-ce5b-4c68-bbe6-f3eda74537b0", // Passion-HD
+	"70b41fb2-aa50-46bc-bb66-090c38be7149", // Devil's Film (Network)
+	"806fcf28-ef0b-43b4-9d4b-a55ffcd81b79", // Devil's Film
+	"f6ae4372-00df-463f-9551-442d6650b855", // Wicked Pictures
+	"52b1ef39-a60d-480a-a8a8-57ca6db08941", // Zero Tolerance Films
+	"28175125-54f6-45d3-90bf-bf1aa506e577", // Combat Zone
+	"3aad7414-b6de-4bb6-b839-024e9893d43c", // Hustler
+	"233babe6-ff73-40ef-8650-cb2c95ab6a4e", // Penthouse
+	"0e1a56e1-f598-43cc-87c5-674bfd8eeecf", // Kink.com
+	"8c4e72ad-4dfb-4e00-bb28-ab92cb9c61a0", // BaDoink
+	"643bb8a1-9556-443d-950b-e016218c2ed4", // Scoreland
+	"bf892f77-11a3-483e-8a41-2a94146dc4c2", // 21 Sextury (Network)
+	"d22943f5-9bb5-495e-8b01-6e12d2fffc80", // X-Art
+	"f47c35d9-a62b-417a-a492-33bab9c9cd64", // Mom Lover (Network)
+	"6897d7f7-6574-4cc9-996c-4322304e35f4", // Bratty MILF
+	"3509d567-58d0-406b-af99-35aad65223c3", // Cheating Mommy
+	"a4b833cc-005b-4ac6-8e67-7e16ea7de258", // Dating My Stepson
+	"019d8ba6-88e7-716c-b564-3eb3aaac4eb2", // Double Pies
+	"08e59931-d5b3-4ec8-b058-9bba3eef3de3", // I'm Not Your Mommy
+	"51f4dc00-5eb5-4d20-bb98-8c3709bd410f", // Milf Coach
+	"82364e67-f097-4cd8-a305-c2158f9277c3", // Mom's Boy Toy
+	"aa6aa79c-16b4-4887-a686-e15052e00555", // Mom's Family Secrets
+	"2d9394f4-a5a8-45fd-8194-14ba8ec40a97", // Mom's Tight
+	"e9cba0f3-e313-42fd-b729-90802221a452", // Mom Swapped
+	"580819d0-aac0-4292-b35b-4f570848c261", // Mom Wants Creampie
+	"05831b2d-85c9-4f0e-a3fd-4fc13696619c", // Mom Wants to Breed
+	// ExploitedX + sub-studios
+	"75fab6e9-275b-4348-936f-3184d034e19b", // ExploitedX
+	"0005ed71-bbfb-4148-a730-2426c1263209", // Backroom Casting Couch
+	"bec510f7-2e2c-4368-aaeb-ddb43f668c10", // BBC Surprise
+	"218fb156-a31f-4759-b96b-b509a297a28f", // Black Ambush
+	"8df81c48-347c-4f6e-abb7-c9fec14a23e8", // ExCoGigirls
+	"ecb1b9dd-41a4-450d-8dd7-c2e72b6695cd", // Exploited College Girls
+	"6d9886c4-0317-4184-ae5a-1949cb4986c7", // Hot Milfs Fuck
+	// MYLF (root) — sub-studios resolved dynamically via StashDB at runtime
+	"98c4c6c5-cf89-487c-91cf-902aa121eb3b", // MYLF
+	// Fakehub + sub-studios
+	"a37b47ad-0854-4f74-84ba-9d8c70ba1dd9", // Fakehub
+	"f178b9c3-ef58-4fed-8d43-3dc8502b1a9d", // Fake Agent
+	"e4dfcec1-eac6-4bfc-a90c-d0078a16a36b", // Fake Agent UK
+	"e2d4c1d2-6802-46f4-90f2-902483bee5e5", // Fake Cop
+	"71c657bd-7d0a-4bee-87e5-26ac39be412a", // Fake Driving School
+	"0c5631b5-382f-4f73-b0b4-5554c03c3b1b", // Fake Hospital
+	"d3490724-8a40-45f8-8046-edf351b5adcb", // Fake Hostel
+	"d78f73be-9f9e-4ac9-b6d6-c7107476d0fe", // Fakehub Originals
+	"1e6794ca-b3d3-4326-a219-45b0a37bd312", // Fake Taxi
+	"ffa13de7-f6f1-4d52-b0aa-d7174076297e", // Female Agent
+	"2cbfed13-adaf-41c7-84ee-279717df650c", // Female Fake Taxi
+	"54f100d6-d172-40df-aa9e-e4d7dfbb4c06", // Public Agent
+	// Fantasy Massage (Network) + sub-studios
+	"059a602f-7ba6-419e-a422-e688c87359be", // Fantasy Massage (Network)
+	"4316179d-9bff-4561-9395-be089320614b", // All Girl Massage
+	"2938f40c-c32b-4652-84bd-4b1e5653c6e3", // Family Sex Massage
+	"201c73d8-c324-4b2d-ac66-2351a2fe3a06", // Fantasy Massage
+	"b01e06e3-a991-4b36-8c19-a4762566d557", // Massage Parlor
+	"9a5d55aa-3bc5-4321-83b4-f622c18e3e81", // Milking Table
+	"bfac98ee-de07-4bb6-a3fc-c75712fe20f8", // Nuru Massage
+	"433b2ff3-ee79-408b-905a-eaa01b598d92", // Soapy Massage
+	"36cbeb7f-1f28-4efa-8444-c53c7188eacf", // Tricky Spa
+	// Dogfart Network + sub-studios
+	"3396ac96-80e9-40aa-825f-fcc09159835f", // Dogfart Network
+	"019ceb6a-d842-7a6e-829b-b868fee09ecb", // Afro Invasion
+	"2f7b16c7-4ab9-4c56-a1f6-6b0dace33dc8", // BarbCummings
+	"d0d6c3b8-66eb-4919-adf1-c884188f614d", // Black Meat White Feet
+	"e9e5d9eb-8187-468d-9d5b-a4b9f15ebdb5", // Blacks on Blondes
+	"c00319c4-88da-4554-aab9-8df4a65adaa3", // Blacks on Cougars
+	"aaa4ab25-71ff-40e6-9d61-81343fbba29c", // Candy Monroe
+	"8cc423a1-a9d8-4bb3-8ce7-8f26904e1db3", // Cheating With My Ex
+	"a5273efe-d48b-4d7a-94ad-873d20b9f0f9", // Cougar Seductions
+	"badbd618-7b43-4aad-a905-a119c2c1b7a3", // Cuckold Sessions
+	"3465a6e8-d690-4330-86eb-652eaf70ad74", // Cum Bang
+	"740fabb6-5362-41d4-b368-da0ba5d0198e", // DFX Big Bangz
+	"c42ddae4-33e1-418b-a88f-785aba09f861", // DFX Homewreckers
+	"e87822f5-54ec-4877-b143-7eb3eafc0b5e", // DFX Hotwives
+	"0c7b9460-a267-4dc7-8447-6fdda399ae79", // DFX Solemates
+	"8777c5cc-df18-42f5-a36f-58827555d286", // DFXtra
+	"1b6f7acd-dfad-42d3-914a-9a56d3c9d7f7", // DFXtra Compilations
+	"c32ae76d-4da5-4284-be68-7b7262fd5a34", // DFXtra Originals
+	"b6d5cbd5-78c7-4e67-8312-ed671d3e01e4", // Dogfart Behind The Scenes
+	"10c42c12-8f76-4d01-885b-ae8654fe7833", // Downlow Boys
+	"0d2c38d8-54a9-48dd-a453-32f8f1341002", // GloryHole
+	"628a7726-513b-4a92-abb9-60061f66ba6f", // Glory Hole Initiations
+	"09c37be6-3464-4e53-81bf-5f511d9ecd93", // Interracial Blowbang
+	"7baa3e35-4d5f-44e9-89a2-14ead5ee50fa", // Interracial Pickups
+	"6dbda1a6-a04b-4d7c-a935-6a4079428b5a", // Katie Thomas
+	"68b69b12-8db7-49df-8480-34b10170ef86", // Ruth Blackwell
+	"6dd468cf-8627-4526-8a33-6f9d60dced28", // Spring Thomas
+	"f5676e15-3ea2-473c-9a7e-ffa059b2bdf3", // The Minion
+	"96755b74-5670-4729-9b7d-7c816fe03a30", // Watching My Daughter Go Black
+	"30cf92b5-26e7-4dbd-bee6-202a95d640b4", // Watching My Mom Go Black
+	"33620fd1-65d9-4b20-ba7e-0c92407f6fd0", // We Fuck Black Girls
+	"495c66cc-40eb-4f48-87f1-807f28c57728", // Wife Writing
+	"ec75532d-adc3-442a-b6c6-afc511d19d1d", // Zebra Girls
+	// NF Media + sub-studios
+	"eb711259-b4fa-49a4-a572-ebfaba0f93e7", // NF Media
+	"3e8b36f8-a7fd-4a6a-a7ba-daa7726ce237", // Anilos
+	"44878072-2053-4cb1-bf1b-5479a347551c", // Bratty Sis
+	"29cc0f51-c923-4bba-b2a1-8b5702515b05", // Deep Lush
+	"019bba04-b5bd-73e9-857f-81728131db97", // Glowing Desire
+	"974ddd4f-32c5-42c5-860a-78e37eae6a45", // The POV GOD
+	// Fuck You Cash + sub-studios (SpyFam/Passion-HD already in parent list)
+	"b464d27d-2611-4f78-b7ee-68065a305b6e", // Fuck You Cash
+	"1f711e88-f4d0-4ba8-8035-d365b7e6de64", // Anal 4K
+	"fbfd741a-a94e-4c5a-88a2-1833c9f84b41", // BBC Pie
+	"9e41a377-e220-4b52-9a13-4b2b653f6b9d", // Blacks In Becky
+	"885b33d1-82b5-48de-931f-f3c13fdf8188", // Casting Couch X
+	"ba5a29d0-d797-4618-b9dd-c9059ab71d43", // Cum4K
+	"026eef0b-4c48-47da-9d0a-24347ecebaf2", // Exotic4K
+	"e1e14677-ac40-4e52-824f-4c734ac4950b", // Facials4k
+	"26078c8c-b0aa-4744-995b-968d282ed310", // Fantasy HD
+	"ca3d3e01-5f46-4a00-be06-03f10650b3ab", // GirlCum
+	"5ba69962-79cc-40d4-9971-3ff8038fac14", // Holed
+	"63c9716d-3309-4663-ba68-259fa87f82b1", // Lubed
+	"ad3a1330-c1b4-4efa-8075-523b67fccbb6", // Mom 4K
+	"3cb7aacf-9e13-4b83-94ef-1e70978a54cb", // My Very First Time
+	"6bc48f3a-999e-4a04-badd-07ae22d94661", // NannySpy
+	"4e11a55f-ca6b-4c2d-9d48-b3c475ab8382", // POVD
+	"80c52317-f187-4628-88e7-43afebd32137", // Pure Mature
+	"837623dd-92b3-418c-a96b-989f048255a7", // Strippers4K
+	"a1a6358e-8141-4d19-9f9c-5e233f838b71", // Tiny4K
+	"981887d6-da48-4dfc-88d1-7ed13a2754f2", // WetVR
 }

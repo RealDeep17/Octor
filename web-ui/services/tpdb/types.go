@@ -5,7 +5,8 @@ type TpdbSceneBackground struct {
 }
 
 type TpdbSceneSite struct {
-	Name string `json:"name"`
+	Name   string `json:"name"`
+	Parent string `json:"parent_name,omitempty"` // parent studio name (e.g., "Brazzers" for "Brazzers Exxtra")
 }
 
 type TpdbScenePerformer struct {

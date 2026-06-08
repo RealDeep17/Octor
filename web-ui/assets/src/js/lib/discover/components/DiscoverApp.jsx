@@ -407,7 +407,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
     const loadStreams = useCallback(async (type, id, item, modalExtra = {}) => {
         const title = item.name || item.title;
         const poster = item.poster;
-        const metaId = id.split(':')[0];
+        const metaId = (id.startsWith('stash:') || id.startsWith('tpdb:') || id.startsWith('tpdb_jav:')) ? id : id.split(':')[0];
         const itemType = type;
         const year = item.year;
         const releaseInfo = item.releaseInfo;
@@ -442,13 +442,23 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         // We call it directly via fetch and inject the result into the streams modal.
         const ADULT_STREAM_TYPES = new Set(['adult', 'porn', 'jav']);
         if (ADULT_STREAM_TYPES.has(type)) {
-            dispatch({ type: 'SHOW_MODAL', modal: { view: 'fetching', title, poster, metaId, itemType, ...itemMeta,
-                addons: [{ name: '⚡ Octor', host: 'octor', status: 'fetching' }], ...modalExtra } });
+            dispatch({
+                type: 'SHOW_MODAL', modal: {
+                    view: 'fetching', title, poster, metaId, itemType, ...itemMeta,
+                    addons: [{ name: '⚡ Octor', host: 'octor', status: 'fetching' }],
+                    streams: modalExtra.exhaustive ? (stateRef.current?.modal?.streams || []) : [],
+                    exhaustive: modalExtra.exhaustive || false,
+                    ...modalExtra
+                }
+            });
             let streams = [];
             try {
                 // Don't encode colons — the backend expects "stash:uuid" / "tpdb_jav:code" literally in the path
                 const safePath = id.replace(/#/g, '%23').replace(/\?/g, '%3F');
-                const proxyUrl = `/discover/adult/comet-proxy/stream/movie/${safePath}.json`;
+                let proxyUrl = `/discover/adult/comet-proxy/stream/movie/${safePath}.json`;
+                if (modalExtra.exhaustive) {
+                    proxyUrl += '?exhaustive=true';
+                }
                 const res = await fetch(proxyUrl, { headers: { Accept: 'application/json' } });
                 if (res.ok) {
                     const data = await res.json();
@@ -456,12 +466,18 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                 }
             } catch (e) { /* network error — streams stays [] */ }
             const addonStatuses = [{ name: '⚡ Octor', host: 'octor', status: streams.length > 0 ? 'done' : 'error', count: streams.length }];
-            dispatch({ type: 'SHOW_MODAL', modal: { view: 'streams', title, poster, metaId, itemType, ...itemMeta, streams, addons: addonStatuses, failedAddons: [], ...modalExtra } });
+            if (!stateRef.current?.modal || stateRef.current?.modal?.metaId !== metaId) {
+                return;
+            }
+            dispatch({ type: 'SHOW_MODAL', modal: { view: 'streams', title, poster, metaId, itemType, ...itemMeta, streams, addons: addonStatuses, failedAddons: [], exhaustive: modalExtra.exhaustive || false, ...modalExtra } });
             window.umami?.track('discover-streams-loaded', { type, id, count: streams.length });
             return;
         }
 
         if (!addons.length) {
+            if (!stateRef.current?.modal || stateRef.current?.modal?.metaId !== metaId) {
+                return;
+            }
             dispatch({ type: 'SHOW_MODAL', modal: { view: 'streams', title, poster, metaId, itemType, ...itemMeta, streams: [], failedAddons: inferredFailures, ...modalExtra } });
             return;
         }
@@ -483,6 +499,9 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
             } catch (e) {
                 addonStatuses[i] = { ...addonStatuses[i], status: 'error' };
             }
+            if (!stateRef.current?.modal || stateRef.current?.modal?.metaId !== metaId) {
+                return;
+            }
             dispatch({ type: 'SHOW_MODAL', modal: { view: 'fetching', title, poster, metaId, itemType, ...itemMeta, addons: [...addonStatuses], ...modalExtra } });
         });
 
@@ -492,6 +511,9 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         // generic "no streams" empty-state. Combines fetch-time errors
         // with addons whose manifest was already unreachable when we
         // started — both are equally meaningful to the user.
+        if (!stateRef.current?.modal || stateRef.current?.modal?.metaId !== metaId) {
+            return;
+        }
         const failedFromFetch = addonStatuses.filter(s => s.status === 'error');
         const failedAddons = [...failedFromFetch, ...inferredFailures];
         dispatch({ type: 'SHOW_MODAL', modal: { view: 'streams', title, poster, metaId, itemType, ...itemMeta, streams: allStreams, addons: [...addonStatuses], failedAddons, ...modalExtra } });
@@ -542,10 +564,12 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                 const meta = await client.fetchMeta(type, id);
                 enrichFromMeta(meta);
                 if (meta?.videos?.length > 0) {
-                    dispatch({ type: 'SHOW_MODAL', modal: {
-                        view: 'episodes', title: meta.name || item.name, poster: meta.poster || item.poster, meta, itemId: id, itemType: type, ...cardMeta,
-                        defaultSeason: restoreSeason != null ? Number(restoreSeason) : undefined,
-                    } });
+                    dispatch({
+                        type: 'SHOW_MODAL', modal: {
+                            view: 'episodes', title: meta.name || item.name, poster: meta.poster || item.poster, meta, itemId: id, itemType: type, ...cardMeta,
+                            defaultSeason: restoreSeason != null ? Number(restoreSeason) : undefined,
+                        }
+                    });
                 } else {
                     await loadStreams(type, id, { ...item, ...cardMeta });
                 }
@@ -556,12 +580,13 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
             // Fetch meta in parallel with streams to enrich modal with description/rating.
             const metaPromise = client.fetchMeta(type, id).catch(() => null);
             const streamsPromise = loadStreams(type, id, { ...item, ...cardMeta });
-            
+
             metaPromise.then(meta => {
                 if (meta) {
                     enrichFromMeta(meta);
                     const cur = stateRef.current?.modal;
-                    if (cur && cur.metaId === id.split(':')[0]) {
+                    const targetMetaId = (id.startsWith('stash:') || id.startsWith('tpdb:') || id.startsWith('tpdb_jav:')) ? id : id.split(':')[0];
+                    if (cur && cur.metaId === targetMetaId) {
                         dispatch({ type: 'SHOW_MODAL', modal: { ...cur, ...cardMeta, title: meta.name || cur.title, poster: meta.poster || cur.poster } });
                     }
                 }
@@ -627,12 +652,12 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                 if (meta?.videos?.length > 0) {
                     const backToEpisodes = { title: name, poster, meta, itemId: id, itemType: type, season: ep.season, year: item?.year, releaseInfo: item?.releaseInfo, imdbRating: item?.imdbRating, description: item?.description };
                     const cur = stateRef.current?.modal;
-                    if (cur && cur.metaId === id.split(':')[0]) {
+                    const targetMetaId = (id.startsWith('stash:') || id.startsWith('tpdb:') || id.startsWith('tpdb_jav:')) ? id : id.split(':')[0];
+                    if (cur && cur.metaId === targetMetaId) {
                         dispatch({ type: 'SHOW_MODAL', modal: { ...cur, backToEpisodes } });
                     }
                 }
             });
-
             await loadStreams(type, epId, { name: epName, poster, year: item?.year, releaseInfo: item?.releaseInfo, imdbRating: item?.imdbRating, description: item?.description }, {});
         } else if (item) {
             cardClick(item);
@@ -678,9 +703,11 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         const currentPoster = customPoster || curState.modal?.poster;
         const currentBackToEpisodes = curState.modal?.backToEpisodes;
 
-        dispatch({ type: 'SHOW_MODAL', modal: {
-            view: 'progress', title: currentTitle, poster: currentPoster, logUrl: null, fileIdx: fileIdx != null ? fileIdx : null,
-        }});
+        dispatch({
+            type: 'SHOW_MODAL', modal: {
+                view: 'progress', title: currentTitle, poster: currentPoster, logUrl: null, fileIdx: fileIdx != null ? fileIdx : null,
+            }
+        });
 
         try {
             const formData = new FormData();
@@ -702,15 +729,19 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
             const logUrl = data.job_log_url;
             if (!logUrl) throw new Error('No job log URL');
 
-            dispatch({ type: 'SHOW_MODAL', modal: {
-                view: 'progress', title: currentTitle, poster: currentPoster, logUrl, fileIdx: fileIdx != null ? fileIdx : null,
-            }});
+            dispatch({
+                type: 'SHOW_MODAL', modal: {
+                    view: 'progress', title: currentTitle, poster: currentPoster, logUrl, fileIdx: fileIdx != null ? fileIdx : null,
+                }
+            });
         } catch (e) {
-            dispatch({ type: 'SHOW_MODAL', modal: {
-                view: 'streams', title: currentTitle, poster: currentPoster, streams: [],
-                error: t('discover.resourcePrepError'),
-                backToEpisodes: currentBackToEpisodes,
-            }});
+            dispatch({
+                type: 'SHOW_MODAL', modal: {
+                    view: 'streams', title: currentTitle, poster: currentPoster, streams: [],
+                    error: t('discover.resourcePrepError'),
+                    backToEpisodes: currentBackToEpisodes,
+                }
+            });
         }
     }, []);
 
@@ -1002,6 +1033,28 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         await loadStreams(type, streamId, item, m.backToEpisodes ? { backToEpisodes: m.backToEpisodes } : {});
     }, [client]);
 
+    const loadMoreAdult = useCallback(async () => {
+        const m = stateRef.current?.modal;
+        if (!m) return;
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        const season = params.get('season');
+        const episode = params.get('episode');
+        if (!id) return;
+        const streamId = (season != null && episode != null) ? `${id}:${season}:${episode}` : id;
+        const type = m.backToEpisodes?.itemType || m.itemType || stateRef.current?.selectedType;
+        const item = {
+            id: streamId,
+            name: m.title,
+            poster: m.poster,
+            year: m.year,
+            releaseInfo: m.releaseInfo,
+            imdbRating: m.imdbRating,
+            description: m.description,
+        };
+        await loadStreams(type, streamId, item, { ...(m.backToEpisodes ? { backToEpisodes: m.backToEpisodes } : {}), exhaustive: true });
+    }, [loadStreams]);
+
     // Lightweight retry triggered from the AddonHealthChip — does NOT drop
     // the user back into the loading view. Re-fetches manifests, updates
     // addon health + catalog disabled flags, and (if a previously selected
@@ -1076,10 +1129,12 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                 if (streams.length > 0) break;
                 if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
             }
-            dispatch({ type: 'SHOW_MODAL', modal: {
-                view: 'streams', title: pending.title, poster: pending.poster, streams,
-                backToEpisodes: pending.backToEpisodes,
-            } });
+            dispatch({
+                type: 'SHOW_MODAL', modal: {
+                    view: 'streams', title: pending.title, poster: pending.poster, streams,
+                    backToEpisodes: pending.backToEpisodes,
+                }
+            });
             // Restore URL params so browser back returns to this modal
             url.push({ id: pending.id, season: pending.season, episode: pending.episode });
         } else {
@@ -1147,18 +1202,22 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
 
         if (currentlyWatched) {
             // Unmark: clear watched + rating (server deletes entire status row)
-            dispatch({ type: 'USER_STATUSES_MERGED', statuses: {
-                [item.id]: { watched: false, rating: 0 },
-            }});
+            dispatch({
+                type: 'USER_STATUSES_MERGED', statuses: {
+                    [item.id]: { watched: false, rating: 0 },
+                }
+            });
             const result = await toggleWatched(item.id, type, true);
             if (!result) {
                 dispatch({ type: 'USER_STATUSES_MERGED', statuses: { [item.id]: { ...prev } } });
             }
         } else {
             // Mark watched, then prompt for rating
-            dispatch({ type: 'USER_STATUSES_MERGED', statuses: {
-                [item.id]: { ...prev, watched: true },
-            }});
+            dispatch({
+                type: 'USER_STATUSES_MERGED', statuses: {
+                    [item.id]: { ...prev, watched: true },
+                }
+            });
             const result = await toggleWatched(item.id, type, false);
             if (result) {
                 if (result.rateForm) setRatingTarget({ item, type, currentRating: 0 });
@@ -1312,9 +1371,11 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         const { item, type } = ratingTarget;
         setRatingTarget(null);
         const prevStatus = state.userStatuses[item.id];
-        dispatch({ type: 'USER_STATUSES_MERGED', statuses: {
-            [item.id]: { ...prevStatus, watched: true, rating },
-        }});
+        dispatch({
+            type: 'USER_STATUSES_MERGED', statuses: {
+                [item.id]: { ...prevStatus, watched: true, rating },
+            }
+        });
         const ok = await rateVideo(item.id, type, rating);
         if (!ok) {
             dispatch({ type: 'USER_STATUSES_MERGED', statuses: { [item.id]: { ...prevStatus } } });
@@ -1326,9 +1387,11 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         const { item, type } = ratingTarget;
         setRatingTarget(null);
         const prev = state.userStatuses[item.id];
-        dispatch({ type: 'USER_STATUSES_MERGED', statuses: {
-            [item.id]: { ...prev, rating: 0 },
-        }});
+        dispatch({
+            type: 'USER_STATUSES_MERGED', statuses: {
+                [item.id]: { ...prev, rating: 0 },
+            }
+        });
         const ok = await unrateVideo(item.id, type);
         if (!ok) {
             dispatch({ type: 'USER_STATUSES_MERGED', statuses: { [item.id]: { ...prev } } });
@@ -1364,7 +1427,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
         }
         return state.items;
     }, [state.isSearchMode, state.items, state.searchResults, state.searchType,
-        state.watchlistFilterEnabled, state.watchlistItems, state.watchlistType, state.isNsfw]);
+    state.watchlistFilterEnabled, state.watchlistItems, state.watchlistType, state.isNsfw]);
 
     const showBadges = useMemo(() => {
         if (state.isSearchMode) return state.searchType === 'all';
@@ -1409,6 +1472,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                         hasCustomAddons={hasCustomAddons || addonsInstalled}
                         onSetupAddons={onSetupAddons}
                         onRetryStreams={retryStreams}
+                        onLoadMore={loadMoreAdult}
                         userStatuses={state.userStatuses}
                         watchlistIds={state.watchlistIds}
                         onToggleWatched={handleToggleWatched}
@@ -1504,7 +1568,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
             {/* Sticky tab bar — stays below navbar (72px) on scroll */}
             <div class="sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 bg-w-bg/90 backdrop-blur-lg border-b border-w-line/30">
                 <AddonHealthChip addons={state.addons} onRetry={retryAddons} />
-                 {state.isSearchMode ? (
+                {state.isSearchMode ? (
                     <SearchTabs
                         searchResults={state.searchResults}
                         searchTypes={searchTypes}
@@ -1623,6 +1687,7 @@ export function DiscoverApp({ addonUrls, addonSeeds, hasCustomAddons, pathPrefix
                     hasCustomAddons={hasCustomAddons || addonsInstalled}
                     onSetupAddons={onSetupAddons}
                     onRetryStreams={retryStreams}
+                    onLoadMore={loadMoreAdult}
                     userStatuses={state.userStatuses}
                     watchlistIds={state.watchlistIds}
                     onToggleWatched={handleToggleWatched}
