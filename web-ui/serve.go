@@ -25,6 +25,8 @@ import (
 	wj "github.com/webtor-io/web-ui/handlers/job"
 	"github.com/webtor-io/web-ui/handlers/legal"
 	"github.com/webtor-io/web-ui/handlers/library"
+	"github.com/webtor-io/web-ui/handlers/series"
+	libHelpers "github.com/webtor-io/web-ui/handlers/library/helpers"
 	wm "github.com/webtor-io/web-ui/handlers/migration"
 	p "github.com/webtor-io/web-ui/handlers/profile"
 	wr "github.com/webtor-io/web-ui/handlers/resource"
@@ -160,7 +162,8 @@ func serve(c *cli.Context) error {
 		WithHelper(rec.NewHelper(c)).
 		WithHelper(si18n.NewHelper(i18nSvc)).
 		WithHelper(turnstile.NewHelper(c)).
-		WithHelper(stremios.NewHelper())
+		WithHelper(stremios.NewHelper()).
+		WithHelper(libHelpers.NewVideoContentHelper())
 
 	var servers []cs.Servable
 	// Setting Probe
@@ -419,6 +422,7 @@ func serve(c *cli.Context) error {
 
 	// Setting Library
 	library.RegisterHandler(c, r, tm, sapi, pg, jobs, cl, s3Cl, en, adminSvc, tpdbSvc)
+	series.RegisterHandler(r, tm, pg)
 
 	// Setting UserSubtitle handler. When AWS_USER_SUBTITLE_BUCKET is not
 	// set the service is nil; RegisterHandler skips its routes and the UI

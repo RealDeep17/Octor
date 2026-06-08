@@ -21,6 +21,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/handlers/library/shared"
+	libHelpers "github.com/webtor-io/web-ui/handlers/library/helpers"
 	"github.com/webtor-io/web-ui/models"
 	vaultModels "github.com/webtor-io/web-ui/models/vault"
 	adminsvc "github.com/webtor-io/web-ui/services/admin"
@@ -124,7 +125,7 @@ type VaultData struct {
 
 func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, v *vault.Vault, en *enrich.Enricher, admin *adminsvc.Admin, sapi *api.Api) {
 	h := &Handler{
-		tb:       tm.MustRegisterViews("admin/*").WithLayout("main"),
+		tb:       tm.MustRegisterViews("admin/*").WithHelper(libHelpers.NewVideoContentHelper()).WithLayout("main"),
 		pg:       pg,
 		vault:    v,
 		enricher: en,
@@ -700,6 +701,7 @@ func (h *Handler) loadSeriesItems(ctx context.Context, db *pg.DB, userID *uuid.U
 	if err != nil {
 		return nil, err
 	}
+	list = models.MergeSeriesByVideoID(list)
 	ids := make([]string, 0, len(list))
 	for _, item := range list {
 		ids = append(ids, item.ResourceID)
@@ -754,7 +756,8 @@ func (h *Handler) getAllUserSeries(ctx context.Context, db *pg.DB, sort models.S
 		JoinOn("series.resource_id = l.resource_id").
 		Join("left join series_metadata as smd").
 		JoinOn("series.series_metadata_id = smd.series_metadata_id").
-		Relation("SeriesMetadata")
+		Relation("SeriesMetadata").
+		Relation("Episodes.EpisodeMetadata")
 
 	if q != "" {
 		query.Where("smd.title ILIKE ? OR series.title ILIKE ?", "%"+q+"%", "%"+q+"%")

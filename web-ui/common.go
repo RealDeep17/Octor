@@ -13,6 +13,7 @@ import (
 	"github.com/webtor-io/web-ui/services/omdb"
 	rec "github.com/webtor-io/web-ui/services/recommendations"
 	"github.com/webtor-io/web-ui/services/tmdb"
+	"github.com/webtor-io/web-ui/services/tpdb"
 )
 
 func configureEnricher(f []cli.Flag) []cli.Flag {
@@ -62,6 +63,15 @@ func makeEnricher(c *cli.Context, cl *http.Client, pg *cs.PG, sapi *api.Api, ant
 	kpu := enr.NewKinopoiskUnofficial(pg, kpuApi)
 	if kpu != nil {
 		mdMappers = append(mdMappers, kpu)
+	}
+
+	// Setting NSFW Mapper
+	tpdbSvc := tpdb.New(c, cl, pg)
+	if tpdbSvc != nil {
+		nsfwMapper := enr.NewNSFWMapper(pg, tpdbSvc)
+		if nsfwMapper != nil {
+			mdMappers = append(mdMappers, nsfwMapper)
+		}
 	}
 
 	// Setting AI Resolver — last-resort identifier when every title-search
