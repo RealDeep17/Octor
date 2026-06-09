@@ -59,6 +59,15 @@ av(async function() {
     await initPlayer(this);
     destroyUserSubtitleUpload = initUserSubtitleUpload();
 }, async function() {
+    // Synchronously stop all playing media elements immediately to free CPU/network
+    document.querySelectorAll('video, audio').forEach(el => {
+        try {
+            el.pause();
+            el.src = '';
+            el.removeAttribute('src');
+            el.load();
+        } catch (err) {}
+    });
     const { destroyPlayer } = await import('../../lib/player/Player');
     destroyPlayer();
     destroyUserSubtitleUpload();

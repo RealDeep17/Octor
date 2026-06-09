@@ -910,6 +910,18 @@ export function destroyPlayer() {
     if (!_currentPlayer) return;
     const { mountEl, playerContainer, videoEl, controlsMountEl } = _currentPlayer;
 
+    // Halt video playback and clear resources immediately to release network & CPU decoders
+    if (videoEl) {
+        try {
+            videoEl.pause();
+            videoEl.src = '';
+            videoEl.removeAttribute('src');
+            videoEl.load();
+        } catch (e) {
+            console.warn('Failed to release video resources:', e);
+        }
+    }
+
     closeTranscoderSession(videoEl.dataset.sessionDeletePath);
 
     // Destroy HLS

@@ -346,7 +346,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 	case "torrent-store":
 		bucketDir = filepath.Join(storageDir, "data", "torrents_system")
 	case "poster-cache":
-		bucketDir = filepath.Join(storageDir, "data", "postercache")
+		bucketDir = filepath.Join(filepath.Dir(storageDir), "postercache")
 	case "storage":
 		bucketDir = filepath.Join(storageDir, "recovery")
 	default:

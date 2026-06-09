@@ -13,12 +13,47 @@ av(async function() {
         initProgressLog(progress);
     }
 
+    // Intercept stream form submissions to destroy any currently active players
+    this.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (form && form.classList.contains('stream')) {
+            // Synchronously stop all playing media elements immediately to free CPU/network
+            document.querySelectorAll('video, audio').forEach(el => {
+                try {
+                    el.pause();
+                    el.src = '';
+                    el.removeAttribute('src');
+                    el.load();
+                } catch (err) {}
+            });
+            import('../lib/player/Player').then(({ destroyPlayer }) => {
+                destroyPlayer();
+            }).catch(err => console.warn('Failed to destroy player:', err));
+        }
+    });
+
     const mountEl = this.querySelector('#direct-search-mount');
     if (mountEl && window._searchQuery) {
         const DirectSearchApp = (await import('../lib/discover/components/DirectSearchApp')).DirectSearchApp;
         
         const onStreamClick = async (resource, title, event) => {
             const clickedRow = event ? event.currentTarget : null;
+            // Synchronously stop all playing media elements immediately to free CPU/network
+            document.querySelectorAll('video, audio').forEach(el => {
+                try {
+                    el.pause();
+                    el.src = '';
+                    el.removeAttribute('src');
+                    el.load();
+                } catch (err) {}
+            });
+            // Kill any old player/playback
+            try {
+                const { destroyPlayer } = await import('../lib/player/Player');
+                destroyPlayer();
+            } catch (e) {
+                console.warn('Failed to destroy player:', e);
+            }
             // Remove any existing inline progress logs first
             const existingAlert = mountEl.querySelector('.progress-alert-direct');
             if (existingAlert) existingAlert.remove();

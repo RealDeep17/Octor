@@ -26,6 +26,7 @@ type EpisodeTorrent struct {
 	TorrentName string // TorrentResource name
 	Size        int64  // Torrent size in bytes
 	ItemID      string
+	IsActive    bool
 }
 
 // EpisodeGroup groups all torrent copies of a single S×E.
@@ -59,6 +60,8 @@ type SeriesPageData struct {
 	TotalEpisodes       int
 	TotalTorrents       int
 	UserPosterLayout    string
+	ActiveSeason        int
+	ActiveEpisode       int
 }
 
 func (h *Handler) get(c *gin.Context) {
@@ -108,11 +111,30 @@ func (h *Handler) get(c *gin.Context) {
 		layoutPref = status.PosterLayout
 	}
 
-	data := buildPageData(videoID, seriesList, trMap, layoutPref)
+	// Find the most recently watched episode from watch history
+	var history []*models.WatchHistory
+	if len(resourceIDs) > 0 {
+		_ = db.Model(&history).
+			Where("user_id = ?", targetUserID).
+			Where("resource_id IN (?)", pg.In(resourceIDs)).
+			Order("updated_at DESC").
+			Limit(1).
+			Select()
+	}
+
+	var activeResourceID, activePath string
+	if len(history) > 0 {
+		activeResourceID = history[0].ResourceID
+		activePath = history[0].Path
+	}
+
+	data := buildPageData(videoID, seriesList, trMap, layoutPref, activeResourceID, activePath)
 	h.tb.Build("series/index").HTML(http.StatusOK, web.NewContext(c).WithData(data))
 }
 
-func buildPageData(videoID string, seriesList []*models.Series, trMap map[string]*models.TorrentResource, layoutPref string) *SeriesPageData {
+func buildPageData(videoID string, seriesList []*models.Series, trMap map[string]*models.TorrentResource, layoutPref string, activeResourceID string, activePath string) *SeriesPageData {
+	activeSeason := -1
+	activeEpisode := -1
 	// Extract show-level metadata from first series with it
 	var showTitle string
 	var showYear *int16
@@ -399,6 +421,11 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 				h.Write([]byte(rawPath))
 				itemID = hex.EncodeToString(h.Sum(nil))
 			}
+			isActive := (e.resourceID == activeResourceID && e.path == activePath)
+			if isActive {
+				activeSeason = key.season
+				activeEpisode = key.episode
+			}
 			torrents = append(torrents, EpisodeTorrent{
 				ResourceID:  e.resourceID,
 				FolderName:  folder,
@@ -407,6 +434,7 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 				TorrentName: trName,
 				Size:        size,
 				ItemID:      itemID,
+				IsActive:    isActive,
 			})
 		}
 
@@ -467,6 +495,8 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 		TotalEpisodes:       totalEpisodes,
 		TotalTorrents:       len(torrentIDs),
 		UserPosterLayout:    layoutPref,
+		ActiveSeason:        activeSeason,
+		ActiveEpisode:       activeEpisode,
 	}
 }
 
@@ -481,7 +511,7 @@ func splitPath(p string) (folder, file string) {
 }
 
 func detectVirtualSeason(filePath string, defaultSeason int) int {
-	if defaultSeason != 0 || filePath == "" {
+	if filePath == "" {
 		return defaultSeason
 	}
 	lower := strings.ToLower(filePath)

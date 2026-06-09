@@ -651,7 +651,6 @@ func (h *Handler) loadTorrentItems(ctx context.Context, db *pg.DB, userID *uuid.
 	if err != nil {
 		return nil, err
 	}
-	items := make([]any, 0, len(list))
 	for _, item := range list {
 		if owner := owners[item.ResourceID]; owner != nil {
 			item.User = &models.User{Email: owner.OwnerLabel(), UserID: owner.PrimaryUserID}
@@ -659,7 +658,11 @@ func (h *Handler) loadTorrentItems(ctx context.Context, db *pg.DB, userID *uuid.
 				item.UserID = owner.PrimaryUserID
 			}
 		}
-		items = append(items, item)
+	}
+	tree := shared.BuildTorrentTree(list, true, sort) // Admins always have access to adult content
+	items := make([]any, len(tree))
+	for i, v := range tree {
+		items[i] = v
 	}
 	return items, nil
 }
