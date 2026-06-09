@@ -177,6 +177,52 @@ func parseItem(item *ra.ListItem) (ti *ptn.TorrentInfo, err error) {
 	return ti, nil
 }
 
+func isKnownOrSpecial(ti *TorrentInfo) bool {
+	if ti.Season > 0 || ti.Episode > 0 {
+		return true
+	}
+	path := ti.ListItem.PathStr
+	if path == "" {
+		return false
+	}
+	lower := strings.ToLower(path)
+	parts := strings.Split(lower, "/")
+
+	// Skip the root torrent directory prefix
+	startIndex := 0
+	if len(parts) > 0 && parts[0] == "" {
+		startIndex = 2
+	} else {
+		startIndex = 1
+	}
+
+	for i := startIndex; i < len(parts)-1; i++ {
+		part := parts[i]
+		if strings.Contains(part, "ova") ||
+			strings.Contains(part, "movie") ||
+			strings.Contains(part, "extra") ||
+			strings.Contains(part, "opening") ||
+			strings.Contains(part, "ending") ||
+			strings.Contains(part, "ncop") ||
+			strings.Contains(part, "nced") {
+			return true
+		}
+	}
+	if len(parts) > 0 {
+		filename := parts[len(parts)-1]
+		if strings.Contains(filename, "ova") ||
+			strings.Contains(filename, "movie") ||
+			strings.Contains(filename, "extra") ||
+			strings.Contains(filename, "opening") ||
+			strings.Contains(filename, "ending") ||
+			strings.Contains(filename, "ncop") ||
+			strings.Contains(filename, "nced") {
+			return true
+		}
+	}
+	return false
+}
+
 // torrentRoot returns the first non-empty segment of a torrent file
 // path — typically the torrent's root folder name. Used when feeding
 // a series path to the AI enrichment fallback: a per-episode filename
@@ -297,7 +343,7 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 		if maxSize > 150*1024*1024 { // 150 MB
 			var filtered []*TorrentInfo
 			for _, ti := range torrentInfos {
-				if ti.ListItem.Size >= 100*1024*1024 || ti.ListItem.Size >= maxSize/5 {
+				if ti.ListItem.Size >= 100*1024*1024 || ti.ListItem.Size >= maxSize/5 || isKnownOrSpecial(ti) {
 					filtered = append(filtered, ti)
 				} else {
 					log.WithFields(log.Fields{
@@ -403,6 +449,9 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 		seriesItemID = series.VideoContent.ItemID
 	}
 
+	if len(movies) > 0 {
+		_ = models.DeleteSeriesForResource(ctx, db, hash)
+	}
 	err = models.ReplaceMoviesForResource(ctx, db, hash, movies)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to replace movie for hash %s", hash)
@@ -410,6 +459,7 @@ func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, 
 
 	var seriesSlice []*models.Series
 	if series != nil {
+		_ = models.DeleteMoviesForResource(ctx, db, hash)
 		seriesSlice = append(seriesSlice, series)
 	}
 	err = models.ReplaceSeriesForResource(ctx, db, hash, seriesSlice)
@@ -1203,6 +1253,9 @@ func (s *Enricher) makeSeriesWithEpisodes(infos []*TorrentInfo, hash string, mt 
 		metadata, err := StructToMap(ti.TorrentInfo)
 		if err != nil {
 			return nil, err
+		}
+		if ti.ListItem != nil {
+			metadata["size"] = ti.ListItem.Size
 		}
 		e.Metadata = metadata
 		ser.Episodes = append(ser.Episodes, e)

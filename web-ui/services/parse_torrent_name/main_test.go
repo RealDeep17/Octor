@@ -256,6 +256,7 @@ var testData = []string{
 	// Negative: the main release file in a torrent that also contains a
 	// sample must NOT be flagged as Sample.
 	"Sicario.2015.1080p.HQ.10bit.BluRay.8CH.x265.HEVC-PSA.mkv",
+	"Samurai Champloo (Season 01+OST) [BD] - 01",
 }
 
 func TestParser(t *testing.T) {

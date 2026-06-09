@@ -118,6 +118,7 @@ var fieldParsers = FieldParsers{
 		`(?i)(s?([0-9]{1,2}))[ex]`,
 		`(?i)(s?([0-9]{1,2}))\se`,
 		`(?i)\b(s([0-9]{1,2}))\b`,
+		`(?i)\b((?:season|series)[\s.]?([0-9]{1,2}))\b`,
 	), nil},
 	{FieldTypeScene, NewRegexpMatcher(`(?i)(^S([0-9]{2}))`, `(?i)(Scene([0-9]{2}))`), nil},
 	// Episode digit count capped at 3. Anything longer (4+ digits) is

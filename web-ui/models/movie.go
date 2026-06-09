@@ -137,3 +137,11 @@ func GetMovieWithMetadataByResourceID(ctx context.Context, db *pg.DB, resourceID
 
 	return &m, nil
 }
+
+func DeleteMoviesForResource(ctx context.Context, db *pg.DB, resourceID string) error {
+	_, err := db.Model((*Movie)(nil)).
+		Where("resource_id = ?", resourceID).
+		Context(ctx).
+		Delete()
+	return err
+}

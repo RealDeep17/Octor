@@ -213,3 +213,11 @@ func GetSeriesWithEpisodes(ctx context.Context, db *pg.DB, sID uuid.UUID) (*Seri
 	}
 	return &s, nil
 }
+
+func DeleteSeriesForResource(ctx context.Context, db *pg.DB, resourceID string) error {
+	_, err := db.Model((*Series)(nil)).
+		Where("resource_id = ?", resourceID).
+		Context(ctx).
+		Delete()
+	return err
+}

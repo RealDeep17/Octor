@@ -882,7 +882,12 @@ func (h *Handler) loadLibraryCounts(ctx context.Context, db *pg.DB, userID *uuid
 	if err != nil {
 		return 0, 0, 0, 0, errors.Wrap(err, "failed to count all-user movies")
 	}
-	_, err = db.QueryOneContext(ctx, pg.Scan(&series), "select count(distinct series.resource_id) from series join library as l on series.resource_id = l.resource_id")
+	_, err = db.QueryOneContext(ctx, pg.Scan(&series), `
+		SELECT COUNT(DISTINCT smd.video_id) + COUNT(CASE WHEN smd.video_id IS NULL OR smd.video_id = '' THEN 1 END)
+		FROM series
+		JOIN (SELECT DISTINCT resource_id FROM library) as l ON series.resource_id = l.resource_id
+		LEFT JOIN series_metadata as smd ON series.series_metadata_id = smd.series_metadata_id
+	`)
 	if err != nil {
 		return 0, 0, 0, 0, errors.Wrap(err, "failed to count all-user series")
 	}
