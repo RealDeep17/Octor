@@ -4,15 +4,19 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/webtor-io/web-ui/services/api"
 )
 
 func (s *Handler) getItems(c *gin.Context) {
 	id := c.Param("resource_id")
-	claims := s.api.GetClaimsFromContext(c)
+	claims := api.GetClaimsFromContext(c)
 
-	list, err := s.api.GetResourceItemsCached(c.Request.Context(), claims, id)
+	list, err := s.api.ListResourceContentCached(c.Request.Context(), claims, id, &api.ListResourceContentArgs{
+		Output: api.OutputList,
+		Limit:  10000,
+	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get resource items"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if list == nil {

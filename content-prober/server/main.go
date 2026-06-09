@@ -47,7 +47,17 @@ type server struct {
 const ErrorText = "ERROR"
 const CacheKeyPrefix = "content-prober"
 
+var probeSemaphore chan struct{}
+
 func ffprobe(ctx context.Context, url string, fast bool) (string, error) {
+	if probeSemaphore != nil {
+		select {
+		case probeSemaphore <- struct{}{}:
+			defer func() { <-probeSemaphore }()
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
 	done := make(chan error)
 	ffprobe, err := exec.LookPath("ffprobe")
 	if err != nil {
@@ -270,8 +280,21 @@ func main() {
 			Value:  30,
 			EnvVar: "ENRICH_CACHE_TTL_DAYS",
 		},
+		cli.IntFlag{
+			Name:   "max-concurrency, C",
+			Usage:  "maximum concurrent ffprobe processes",
+			Value:  3,
+			EnvVar: "MAX_CONCURRENCY",
+		},
 	}
 	app.Action = func(c *cli.Context) error {
+		maxConcurrency := c.Int("max-concurrency")
+		if maxConcurrency <= 0 {
+			maxConcurrency = 3
+		}
+		probeSemaphore = make(chan struct{}, maxConcurrency)
+		log.Infof("Initializing content prober with max-concurrency limit of %d", maxConcurrency)
+
 		if c.String("redis-host") == "" {
 			return errors.New("No redis host defined")
 		}

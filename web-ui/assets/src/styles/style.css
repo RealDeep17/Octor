@@ -430,6 +430,29 @@
   color: var(--o-primary-l) !important;
 }
 
+.btn-soft-cyan {
+  background-color: color-mix(in srgb, var(--o-cyan) 10%, transparent) !important;
+  border-color: color-mix(in srgb, var(--o-cyan) 30%, transparent) !important;
+  color: var(--o-cyan) !important;
+}
+.btn-soft-cyan:hover {
+  background-color: color-mix(in srgb, var(--o-cyan) 20%, transparent) !important;
+  border-color: color-mix(in srgb, var(--o-cyan) 45%, transparent) !important;
+  color: var(--o-cyan) !important;
+}
+
+.btn-soft-purple {
+  background-color: color-mix(in srgb, var(--o-purple) 10%, transparent) !important;
+  border-color: color-mix(in srgb, var(--o-purple) 30%, transparent) !important;
+  color: var(--o-purple-l) !important;
+}
+.btn-soft-purple:hover {
+  background-color: color-mix(in srgb, var(--o-purple) 20%, transparent) !important;
+  border-color: color-mix(in srgb, var(--o-purple) 45%, transparent) !important;
+  color: var(--o-purple-l) !important;
+}
+
+
 /* Shared Utilities */
 
 .gradient-text {
