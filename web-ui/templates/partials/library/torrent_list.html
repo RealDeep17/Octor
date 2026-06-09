@@ -40,7 +40,7 @@
                     </svg>
                 {{ end }}
                 <span class="font-semibold text-sm">{{ .Data.Name }}</span>
-                <span class="text-xs text-o-muted">({{ len .Data.Children }})</span>
+                <span class="text-xs text-o-muted">({{ .Data.ItemCount }})</span>
             </summary>
             <div class="pl-5 ml-4 border-l space-y-1 mt-1 transition-all duration-300
                 {{ if eq .Data.Category "movie" }}border-sky-500/10{{ else if eq .Data.Category "series" }}border-violet-500/10{{ else if eq .Data.Category "adult" }}border-rose-500/10{{ else }}border-amber-500/10{{ end }}">

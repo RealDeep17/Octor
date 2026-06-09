@@ -19,6 +19,17 @@ type TorrentNode struct {
 	Children []*TorrentNode  `json:"children,omitempty"`
 }
 
+func (n *TorrentNode) ItemCount() int {
+	if n.Type == "item" {
+		return 1
+	}
+	count := 0
+	for _, child := range n.Children {
+		count += child.ItemCount()
+	}
+	return count
+}
+
 func GetTorrentCategory(lib *models.Library) (category string, groupKey string, groupName string) {
 	isAdult := false
 	isJAV := false
