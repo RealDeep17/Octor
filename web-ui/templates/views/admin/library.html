@@ -40,6 +40,13 @@
               <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="Search by name..." class="input input-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full pl-10" />
               <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-o-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </div>
+          {{ if eq .Data.Args.Section "adult" }}
+          <select id="adult-type-select" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-28 shrink-0">
+              <option value="all">All Types</option>
+              <option value="porn">Porn</option>
+              <option value="jav">JAV</option>
+          </select>
+          {{ end }}
           <select name="user" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full sm:w-64" onchange="this.form.requestSubmit()">
             {{ range .Data.Users }}
               <option value="{{ .ID }}" {{ if .Selected }}selected{{ end }}>{{ .Email }}</option>
@@ -75,7 +82,8 @@
       {{ else }}
       <div class="dynamic-grid grid-flow-row-dense gap-4">
         {{ range .Data.Items }}
-        <a href="{{ langPath $.Lang (.Content | getCardHref) }}?user={{ if $.Data.SelectedUser }}{{ $.Data.SelectedUser }}{{ else }}{{ .PrimaryUserID }}{{ end }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2">
+        <a href="{{ langPath $.Lang (.Content | getCardHref) }}?user={{ if $.Data.SelectedUser }}{{ $.Data.SelectedUser }}{{ else }}{{ .PrimaryUserID }}{{ end }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2"
+           data-adult-type="{{ if .Content | isAdultJAV }}jav{{ else }}porn{{ end }}">
           <div class="w-card-frame w-full">
             <input type="checkbox" id="toggle-{{ .ResourceID }}" class="layout-toggle-checkbox peer hidden"
                    data-video-type="{{ .Content | getVideoType }}"
@@ -190,10 +198,13 @@
         }
     });
 
+    const adultSelect = document.getElementById('adult-type-select');
+
     const filterItems = () => {
         const query = searchInput.value.trim().toLowerCase();
         const items = document.querySelectorAll('.admin-library-item');
         const emptyState = document.getElementById('admin-library-search-empty');
+        const adultType = adultSelect ? adultSelect.value : 'all';
         
         const torrentContainer = document.getElementById('admin-torrent-container');
         const cardContainer = document.querySelector('.grid[class*="grid-cols-"].gap-4');
@@ -204,9 +215,15 @@
         items.forEach((item) => {
             const nameEl = item.querySelector('.font-medium, .w-card-title');
             const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
-            const matches = nameText.includes(query);
+            const matchesQuery = nameText.includes(query);
 
-            if (matches) {
+            let matchesAdult = true;
+            if (adultType !== 'all') {
+                const itemAdultType = item.getAttribute('data-adult-type');
+                matchesAdult = (itemAdultType === adultType);
+            }
+
+            if (matchesQuery && matchesAdult) {
                 item.classList.remove('hidden');
                 visibleCount++;
             } else {
@@ -226,6 +243,9 @@
     };
 
     searchInput.addEventListener('input', filterItems);
+    if (adultSelect) {
+        adultSelect.addEventListener('change', filterItems);
+    }
 
     if (searchInput.value) {
         filterItems();

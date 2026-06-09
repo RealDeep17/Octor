@@ -287,3 +287,21 @@ func (s *VideoContentHelper) GetCardHref(m models.VideoContentWithMetadata) stri
 	}
 	return "/" + m.GetContent().ResourceID
 }
+
+func (s *VideoContentHelper) IsAdultJAV(m models.VideoContentWithMetadata) bool {
+	if m == nil || m.GetContent() == nil {
+		return false
+	}
+	if m.GetMetadata() != nil {
+		videoID := m.GetMetadata().VideoID
+		if strings.HasPrefix(videoID, "tpdb_jav:") || strings.HasPrefix(videoID, "tpdb_jav=") {
+			return true
+		}
+	}
+	if m.GetPath() != nil {
+		if strings.Contains(strings.ToLower(*m.GetPath()), "jav") {
+			return true
+		}
+	}
+	return false
+}

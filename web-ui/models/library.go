@@ -225,13 +225,12 @@ func GetLibraryTorrentsList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort 
 		Relation("MediaInfo.SeriesList.SeriesMetadata")
 
 	if q != "" {
-		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
-			Where("t.name ILIKE ?", "%"+q+"%")
+		query.Where("torrent.name ILIKE ?", "%"+q+"%")
 	}
 
 	switch sort {
 	case SortTypeName:
-		query.OrderExpr("torrent.name ASC") // вместо torrent_resource.name
+		query.OrderExpr("torrent.name ASC")
 	case SortTypeRecentlyAdded:
 		fallthrough
 	default:
@@ -300,13 +299,12 @@ func GetLibraryMovieTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, s
 		Relation("Torrent")
 
 	if q != "" {
-		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
-			Where("t.name ILIKE ?", "%"+q+"%")
+		query.Where("torrent.name ILIKE ?", "%"+q+"%")
 	}
 
 	switch sort {
 	case SortTypeName:
-		query.OrderExpr("torrent.name ASC") // вместо torrent_resource.name
+		query.OrderExpr("torrent.name ASC")
 	case SortTypeRecentlyAdded:
 		fallthrough
 	default:
@@ -332,13 +330,12 @@ func GetLibrarySeriesTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, 
 		Relation("Torrent")
 
 	if q != "" {
-		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
-			Where("t.name ILIKE ?", "%"+q+"%")
+		query.Where("torrent.name ILIKE ?", "%"+q+"%")
 	}
 
 	switch sort {
 	case SortTypeName:
-		query.OrderExpr("torrent.name ASC") // вместо torrent_resource.name
+		query.OrderExpr("torrent.name ASC")
 	case SortTypeRecentlyAdded:
 		fallthrough
 	default:
@@ -541,8 +538,7 @@ func GetLibraryTorrentsListAll(ctx context.Context, db *pg.DB, sort SortType, q 
 		Relation("MediaInfo.SeriesList.SeriesMetadata")
 
 	if q != "" {
-		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
-			Where("t.name ILIKE ?", "%"+q+"%")
+		query.Where("torrent.name ILIKE ?", "%"+q+"%")
 	}
 
 	applyAllUsersLibrarySort(query, sort)
@@ -565,8 +561,7 @@ func GetLibraryMovieTorrentListAll(ctx context.Context, db *pg.DB, sort SortType
 		Relation("Torrent")
 
 	if q != "" {
-		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
-			Where("t.name ILIKE ?", "%"+q+"%")
+		query.Where("torrent.name ILIKE ?", "%"+q+"%")
 	}
 
 	applyAllUsersLibrarySort(query, sort)
@@ -586,8 +581,7 @@ func GetLibrarySeriesTorrentListAll(ctx context.Context, db *pg.DB, sort SortTyp
 		Relation("Torrent")
 
 	if q != "" {
-		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
-			Where("t.name ILIKE ?", "%"+q+"%")
+		query.Where("torrent.name ILIKE ?", "%"+q+"%")
 	}
 
 	applyAllUsersLibrarySort(query, sort)
@@ -622,8 +616,7 @@ func GetLibraryAdultTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, s
 		Relation("Torrent")
 
 	if q != "" {
-		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
-			Where("t.name ILIKE ?", "%"+q+"%")
+		query.Where("torrent.name ILIKE ?", "%"+q+"%")
 	}
 
 	switch sort {
@@ -724,8 +717,7 @@ func GetLibraryAdultTorrentListAll(ctx context.Context, db *pg.DB, sort SortType
 		Relation("Torrent")
 
 	if q != "" {
-		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
-			Where("t.name ILIKE ?", "%"+q+"%")
+		query.Where("torrent.name ILIKE ?", "%"+q+"%")
 	}
 
 	applyAllUsersLibrarySort(query, sort)

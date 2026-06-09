@@ -10,6 +10,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -778,8 +779,9 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 8. Put Object (Single part upload fallback)
+	// 8. Put Object (Single part upload fallback) or Copy Object
 	if r.Method == http.MethodPut {
+		copySource := r.Header.Get("x-amz-copy-source")
 		humanPath := r.Header.Get("X-Amz-Meta-Human-Path")
 		finalPath := filepath.Join(bucketDir, key)
 		if humanReadable && humanPath != "" {
@@ -798,6 +800,81 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		defer destFile.Close()
 
 		var written int64
+		if copySource != "" {
+			// Handle S3 CopyObject request
+			copySource = strings.TrimPrefix(copySource, "/")
+			decodedSource, err := url.PathUnescape(copySource)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "InvalidURI", err.Error(), r.URL.Path)
+				return
+			}
+			parts := strings.SplitN(decodedSource, "/", 2)
+			if len(parts) != 2 {
+				writeError(w, http.StatusBadRequest, "InvalidArgument", "Invalid x-amz-copy-source format. Must be /bucket/key", r.URL.Path)
+				return
+			}
+			srcBucket := parts[0]
+			srcKey := parts[1]
+
+			var srcBucketDir string
+			switch srcBucket {
+			case "vault":
+				srcBucketDir = filepath.Join(storageDir, "vault")
+			case "torrent-store":
+				srcBucketDir = filepath.Join(storageDir, "data", "torrents_system")
+			case "poster-cache":
+				srcBucketDir = filepath.Join(filepath.Dir(storageDir), "postercache")
+			case "storage":
+				srcBucketDir = filepath.Join(storageDir, "recovery")
+			default:
+				srcBucketDir = filepath.Join(storageDir, srcBucket)
+			}
+			srcFilePath := filepath.Join(srcBucketDir, srcKey)
+
+			srcFile, err := os.Open(srcFilePath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					writeError(w, http.StatusNotFound, "NoSuchKey", "The specified copy source key does not exist.", r.URL.Path)
+				} else {
+					writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
+				}
+				return
+			}
+			defer srcFile.Close()
+
+			if writeBufferSize > 0 {
+				bw := bufio.NewWriterSize(destFile, writeBufferSize)
+				written, err = io.Copy(bw, srcFile)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
+					return
+				}
+				if err := bw.Flush(); err != nil {
+					writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
+					return
+				}
+			} else {
+				written, err = io.Copy(destFile, srcFile)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
+					return
+				}
+			}
+
+			createLink(finalPath, r.Header.Get("X-Amz-Meta-Human-Path"))
+
+			w.Header().Set("Content-Type", "application/xml")
+			w.Header().Set("ETag", "\"completed-etag\"")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<CopyObjectResult>
+  <ETag>"completed-etag"</ETag>
+</CopyObjectResult>`))
+			log.Printf("[S3] Copy Object: Source=%s/%s -> DestBucket=%s, Key=%s, Size=%d bytes", srcBucket, srcKey, bucket, key, written)
+			return
+		}
+
+		// Regular Put Object (Single part upload fallback)
 		if writeBufferSize > 0 {
 			bw := bufio.NewWriterSize(destFile, writeBufferSize)
 			written, err = io.Copy(bw, r.Body)
@@ -823,7 +900,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		log.Printf("[S3] Put Object: Bucket=%s, Key=%s, Size=%d bytes", bucket, key, written)
 		return
-		}
+	}
 
-		writeError(w, http.StatusMethodNotAllowed, "MethodNotAllowed", "Method not allowed", r.URL.Path)
-		}
+	writeError(w, http.StatusMethodNotAllowed, "MethodNotAllowed", "Method not allowed", r.URL.Path)
+}
