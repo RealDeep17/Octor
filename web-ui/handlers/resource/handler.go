@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ type Handler struct {
 	vault          *vault.Vault
 	enricher       *enrich.Enricher
 	useDirectLinks bool
+	octorKey       string
 }
 
 func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], api *api.Api, jobs *j.Jobs, pg *cs.PG, v *vault.Vault, en *enrich.Enricher) {
@@ -42,6 +44,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 		vault:          v,
 		enricher:       en,
 		useDirectLinks: c.BoolT(common.UseDirectLinks),
+		octorKey:       c.String("octor-key"),
 	}
 	r.POST("/", h.post)
 	r.POST("/enrich/:resource_id", h.enrichInternal)
@@ -101,13 +104,10 @@ func (s *Handler) enrichInternal(c *gin.Context) {
 		key = c.Query("api_key")
 	}
 	// Use the OCTOR_API_KEY from the CLI context/env
-	expectedKey := c.GetString("octor-api-key")
-	if expectedKey == "" {
-		// Fallback to searching the context or flags if not explicitly set in middleware
-		// For now, we'll assume it's passed or we'll allow it if empty (local only)
-	}
+	expectedKey := s.octorKey
+	automationKey := os.Getenv("AUTOMATION_API_KEY")
 
-	if expectedKey != "" && key != expectedKey {
+	if expectedKey != "" && key != expectedKey && (automationKey == "" || key != automationKey) {
 		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}

@@ -20,7 +20,7 @@ import (
 var (
 	storageDir     = "/srv/octor/infra-data/drive-mount-vfs"
 	indexDriveDir  = "/srv/octor/infra-data/drive1-index"
-	tempUploadsDir = "/srv/octor/infra-data/drive-mount-vfs/.uploads"
+	tempUploadsDir = "/tmp/octor-s3-uploads"
 	port           = ":9000"
 	uploadPartSize = int64(32 * 1024 * 1024) // Default to 32MB multipart size
 	humanReadable  = false                  // Default to original hash-based storage
@@ -310,6 +310,13 @@ func writeAt(f *os.File, r io.Reader, off int64) (int64, error) {
 func handleS3(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(r.URL.Path, "/")
 	parts := strings.SplitN(path, "/", 2)
+	if len(parts) > 0 && parts[0] != "" {
+		bucket := parts[0]
+		if bucket == "favicon.ico" || bucket == "robots.txt" || strings.HasPrefix(bucket, "apple-touch-icon") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	}
 	if len(parts) == 0 || parts[0] == "" {
 		// List buckets mock
 		w.Header().Set("Content-Type", "application/xml")

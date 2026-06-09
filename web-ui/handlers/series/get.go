@@ -1,6 +1,8 @@
 package series
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -23,12 +25,15 @@ type EpisodeTorrent struct {
 	PlayURL     string // /<hash>?file=<encoded_path>
 	TorrentName string // TorrentResource name
 	Size        int64  // Torrent size in bytes
+	ItemID      string
 }
 
 // EpisodeGroup groups all torrent copies of a single S×E.
 type EpisodeGroup struct {
 	Season     int
 	EpisodeNum int
+	ShortLabel string
+	LongLabel  string
 	Title      string // from episode_metadata, may be empty
 	StillURL   string // thumbnail, may be empty
 	Torrents   []EpisodeTorrent
@@ -216,11 +221,13 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 			// Map to virtual season if it's Season 0
 			sea = detectVirtualSeason(filePath, sea)
 
-			if _, ok := occupied[sea]; !ok {
-				occupied[sea] = map[int]bool{}
-			}
-			if epNum != 0 {
-				occupied[sea][epNum] = true
+			if sea < 1000 {
+				if _, ok := occupied[sea]; !ok {
+					occupied[sea] = map[int]bool{}
+				}
+				if epNum != 0 {
+					occupied[sea][epNum] = true
+				}
 			}
 
 			var epSize int64 = 0
@@ -250,23 +257,63 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 		}
 	}
 
-	// Assign unique episode numbers to avoid collisions
-	assignedKeys := map[epKey]bool{}
-	for i, t := range temps {
+	// Separate normal vs virtual season items
+	var normalTemps []epTemp
+	virtualTempsMap := map[int][]epTemp{}
+	for _, t := range temps {
+		if t.sea >= 1000 {
+			virtualTempsMap[t.sea] = append(virtualTempsMap[t.sea], t)
+		} else {
+			normalTemps = append(normalTemps, t)
+		}
+	}
+
+	// Assign unique episode numbers to avoid collisions within the same torrent (normal seasons only)
+	type resEpKey struct {
+		resourceID string
+		sea        int
+		epNum      int
+	}
+	assignedKeys := map[resEpKey]bool{}
+	for i, t := range normalTemps {
 		sea := t.sea
 		epNum := t.epNum
-		key := epKey{sea, epNum}
+		key := resEpKey{t.resourceID, sea, epNum}
 		if epNum == 0 || assignedKeys[key] {
 			nextEp := 1
-			for occupied[sea][nextEp] || assignedKeys[epKey{sea, nextEp}] {
+			for occupied[sea][nextEp] || assignedKeys[resEpKey{t.resourceID, sea, nextEp}] {
 				nextEp++
 			}
 			epNum = nextEp
-			key = epKey{sea, epNum}
+			key = resEpKey{t.resourceID, sea, epNum}
 		}
 		assignedKeys[key] = true
-		temps[i].epNum = epNum
+		normalTemps[i].epNum = epNum
 	}
+
+	// For virtual seasons (sea >= 1000), sort them alphabetically by filePath
+	// and assign sequential episode numbers from 1 to N.
+	for _, items := range virtualTempsMap {
+		sort.Slice(items, func(i, j int) bool {
+			return strings.Compare(strings.ToLower(items[i].filePath), strings.ToLower(items[j].filePath)) < 0
+		})
+		for idx := range items {
+			items[idx].epNum = idx + 1
+		}
+	}
+
+	// Reassemble temps
+	var newTemps []epTemp
+	newTemps = append(newTemps, normalTemps...)
+	for _, sea := range []int{1001, 1002, 1003, 1004} {
+		newTemps = append(newTemps, virtualTempsMap[sea]...)
+	}
+	for sea, items := range virtualTempsMap {
+		if sea != 1001 && sea != 1002 && sea != 1003 && sea != 1004 {
+			newTemps = append(newTemps, items...)
+		}
+	}
+	temps = newTemps
 
 	// Populate epMap and epOrder using the resolved keys
 	for _, t := range temps {
@@ -282,7 +329,7 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 				epTitle = *e.EpisodeMetadata.Title
 			}
 			if e.EpisodeMetadata.StillURL != nil && *e.EpisodeMetadata.StillURL != "" {
-				stillURL = fmt.Sprintf("/lib/episode/still/%s/%d/%d/300.jpg", e.EpisodeMetadata.VideoID, sea, epNum)
+				stillURL = fmt.Sprintf("/lib/episode/still/%s/%d/%d/300.jpg", e.EpisodeMetadata.VideoID, e.EpisodeMetadata.Season, e.EpisodeMetadata.Episode)
 			}
 		}
 		if epTitle == "" && e.Title != nil {
@@ -342,6 +389,16 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 			if e.size > 0 {
 				size = e.size
 			}
+			itemID := e.resourceID
+			if e.path != "" {
+				rawPath := e.path
+				if !strings.HasPrefix(rawPath, "/") {
+					rawPath = "/" + rawPath
+				}
+				h := sha1.New()
+				h.Write([]byte(rawPath))
+				itemID = hex.EncodeToString(h.Sum(nil))
+			}
 			torrents = append(torrents, EpisodeTorrent{
 				ResourceID:  e.resourceID,
 				FolderName:  folder,
@@ -349,12 +406,34 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 				PlayURL:     playURL,
 				TorrentName: trName,
 				Size:        size,
+				ItemID:      itemID,
 			})
+		}
+
+		var shortLabel, longLabel string
+		switch key.season {
+		case 1001:
+			shortLabel = fmt.Sprintf("OVA %d", key.episode)
+			longLabel = fmt.Sprintf("OVA %d", key.episode)
+		case 1002:
+			shortLabel = fmt.Sprintf("Movie %d", key.episode)
+			longLabel = fmt.Sprintf("Movie %d", key.episode)
+		case 1003:
+			shortLabel = fmt.Sprintf("Extra %d", key.episode)
+			longLabel = fmt.Sprintf("Extra %d", key.episode)
+		case 1004:
+			shortLabel = fmt.Sprintf("Clip %d", key.episode)
+			longLabel = fmt.Sprintf("Clip %d", key.episode)
+		default:
+			shortLabel = fmt.Sprintf("EP%d", key.episode)
+			longLabel = fmt.Sprintf("Episode %d", key.episode)
 		}
 
 		eg := EpisodeGroup{
 			Season:     key.season,
 			EpisodeNum: key.episode,
+			ShortLabel: shortLabel,
+			LongLabel:  longLabel,
 			Title:      epTitle,
 			StillURL:   stillURL,
 			Torrents:   torrents,

@@ -349,14 +349,16 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 
 		_ = s.saveTorrents()
 
-		// Octor-Native Library Ingestion
-		if len(targetEmails) > 0 && s.db != nil {
-			go s.HandleLibraryIngest(context.Background(), res, targetEmails)
-		}
+		if !exists {
+			// Octor-Native Library Ingestion
+			if len(targetEmails) > 0 && s.db != nil {
+				go s.HandleLibraryIngest(context.Background(), res, targetEmails)
+			}
 
-		// Auto-vault: fire-and-forget, non-blocking
-		if s.autoVaultEnabled() {
-			go s.triggerAutoVault(context.Background(), res.ID)
+			// Auto-vault: fire-and-forget, non-blocking
+			if s.autoVaultEnabled() {
+				go s.triggerAutoVault(context.Background(), res.ID)
+			}
 		}
 
 		addedTorrent := map[string]interface{}{
@@ -381,10 +383,12 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 			percentDone := 0.0
 			if completed {
 				percentDone = 1.0
+				_ = s.ensureDummyFiles(g.Request.Context(), tracked.InfoHash)
 			} else if total > 0 {
 				percentDone = float64(stored) / float64(total)
+			} else if s.autoVaultEnabled() {
+				percentDone = 0.0
 			} else if tracked.TotalSize > 0 {
-				// Fallback to local cache if size resolved
 				percentDone = 1.0
 			}
 
@@ -405,6 +409,24 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 				tSize = tracked.TotalSize
 			}
 
+			filesList := []interface{}{}
+			if res, err := s.rm.Get(g.Request.Context(), []byte(tracked.InfoHash)); err == nil && res != nil {
+				for _, f := range res.Files {
+					fPath := strings.Join(f.Path, "/")
+					bytesCompleted := int64(0)
+					if completed {
+						bytesCompleted = f.Size
+					} else if total > 0 {
+						bytesCompleted = int64(float64(f.Size) * (float64(stored) / float64(total)))
+					}
+					filesList = append(filesList, map[string]interface{}{
+						"bytesCompleted": bytesCompleted,
+						"length":         f.Size,
+						"name":           fPath,
+					})
+				}
+			}
+
 			torrentInfo := map[string]interface{}{
 				"id":            id,
 				"name":          tracked.Name,
@@ -419,6 +441,8 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 				"error":         0,
 				"errorString":    "",
 				"isFinished":    completed,
+				"downloadDir":   "/srv/Big ARRS/downloads",
+				"files":         filesList,
 			}
 			torrentsList = append(torrentsList, torrentInfo)
 		}
@@ -460,11 +484,138 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 			}
 
 			for _, hash := range hashStringsToRemove {
+				go s.removeDummyFiles(context.Background(), hash)
 				delete(s.trackedTorrent, hash)
 			}
 			s.torrentsLock.Unlock()
 
 			_ = s.saveTorrents()
+
+			// Perform library and vault cleanup for target users
+			if len(targetEmails) > 0 && s.db != nil {
+				go func(hashes []string, emails []string) {
+					ctx := context.Background()
+					// 1. Resolve users
+					var userRows []struct {
+						UserID string `pg:"user_id"`
+					}
+					err := s.db.Model().Table("user").
+						Column("user_id").
+						Where("email IN (?)", pg.In(emails)).
+						Select(&userRows)
+					if err != nil {
+						log.WithError(err).Errorf("torrent-remove: failed to resolve user emails: %v", emails)
+						return
+					}
+					if len(userRows) == 0 {
+						return
+					}
+					var userIDs []string
+					for _, r := range userRows {
+						userIDs = append(userIDs, r.UserID)
+					}
+
+					for _, hash := range hashes {
+						// 2. Delete library entries for these users
+						_, err := s.db.ExecContext(ctx, "DELETE FROM library WHERE resource_id = ? AND user_id IN (?)", hash, pg.In(userIDs))
+						if err != nil {
+							log.WithError(err).Errorf("torrent-remove: failed to delete library entry for %s", hash)
+						}
+
+						// 3. For vault pledges, we need to subtract the pledge amounts from vault.resource.funded_vp
+						var pledges []struct {
+							Amount float64 `pg:"amount"`
+						}
+						err = s.db.Model().Table("vault.pledge").
+							Column("amount").
+							Where("resource_id = ? AND user_id IN (?)", hash, pg.In(userIDs)).
+							Select(&pledges)
+						if err != nil && !errors.Is(err, pg.ErrNoRows) {
+							log.WithError(err).Errorf("torrent-remove: failed to select pledges for %s", hash)
+						}
+
+						deletedPledgeSum := float64(0)
+						for _, p := range pledges {
+							deletedPledgeSum += p.Amount
+						}
+
+						// Delete the pledges
+						if len(pledges) > 0 {
+							_, err = s.db.ExecContext(ctx, "DELETE FROM vault.pledge WHERE resource_id = ? AND user_id IN (?)", hash, pg.In(userIDs))
+							if err != nil {
+								log.WithError(err).Errorf("torrent-remove: failed to delete pledges for %s", hash)
+							}
+						}
+
+						// 4. Update vault.resource funded_vp and check if we should delete
+						var vaultRes struct {
+							RequiredVP float64 `pg:"required_vp"`
+							FundedVP   float64 `pg:"funded_vp"`
+						}
+						err = s.db.Model().Table("vault.resource").
+							Column("required_vp", "funded_vp").
+							Where("resource_id = ?", hash).
+							Select(&vaultRes)
+						
+						if err == nil {
+							newFundedVP := vaultRes.FundedVP - deletedPledgeSum
+							if newFundedVP < 0 {
+								newFundedVP = 0
+							}
+
+							// Check if there are any other users left in library for this resource
+							var libCount int
+							_, err = s.db.QueryOneContext(ctx, pg.Scan(&libCount), "SELECT COUNT(*) FROM library WHERE resource_id = ?", hash)
+							if err != nil {
+								log.WithError(err).Errorf("torrent-remove: failed to count library entries for %s", hash)
+							}
+
+							if libCount == 0 {
+								// No users left! Delete everything and queue vault deletion
+								_, _ = s.db.ExecContext(ctx, "DELETE FROM vault.resource WHERE resource_id = ?", hash)
+								_, _ = s.db.ExecContext(ctx, "DELETE FROM torrent_resource WHERE resource_id = ?", hash)
+
+								// Trigger vault microservice DELETE API
+								go func(id string) {
+									log.Infof("torrent-remove: queueing vault deletion for %s", id)
+									u := fmt.Sprintf("http://%s:%d/resource/%s", s.vaultHost, s.vaultPort, id)
+									req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, u, nil)
+									if err != nil {
+										return
+									}
+									resp, err := s.httpClient.Do(req)
+									if err == nil {
+										resp.Body.Close()
+									}
+								}(hash)
+							} else {
+								// Users still left. Just update funding
+								funded := newFundedVP >= vaultRes.RequiredVP && vaultRes.RequiredVP > 0
+								_, err = s.db.ExecContext(ctx, "UPDATE vault.resource SET funded_vp = ?, funded = ? WHERE resource_id = ?", newFundedVP, funded, hash)
+								if err != nil {
+									log.WithError(err).Errorf("torrent-remove: failed to update vault.resource for %s", hash)
+								}
+
+								// If no longer funded, queue vault deletion
+								if !funded {
+									go func(id string) {
+										log.Infof("torrent-remove: resource %s is no longer funded; queueing vault deletion", id)
+										u := fmt.Sprintf("http://%s:%d/resource/%s", s.vaultHost, s.vaultPort, id)
+										req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, u, nil)
+										if err != nil {
+											return
+										}
+										resp, err := s.httpClient.Do(req)
+										if err == nil {
+											resp.Body.Close()
+										}
+									}(hash)
+								}
+							}
+						}
+					}
+				}(hashStringsToRemove, targetEmails)
+			}
 		}
 
 	default:
@@ -558,7 +709,7 @@ func (s *TransmissionService) HandleLibraryIngest(ctx context.Context, res *Reso
 	// This removes the dependency on local shell scripts.
 	go func(id string, apiKey string) {
 		log.Infof("LibraryIngest: triggering metadata enrichment for %s via internal API", id)
-		url := fmt.Sprintf("http://127.0.0.1:8082/resource/enrich/%s", id)
+		url := fmt.Sprintf("http://127.0.0.1:8082/enrich/%s", id)
 		if apiKey != "" {
 			url += "?api_key=" + apiKey
 		}
@@ -580,14 +731,17 @@ func (s *TransmissionService) HandleLibraryIngest(ctx context.Context, res *Reso
 		vaultRes := map[string]interface{}{
 			"resource_id": res.ID,
 			"required_vp": requiredVP,
-			"funded_vp":   0,
-			"funded":      false,
+			"funded_vp":   requiredVP,
+			"funded":      true,
+			"funded_at":   time.Now(),
 			"vaulted":     false,
 			"name":        res.Name,
 			"created_at":  time.Now(),
 			"updated_at":  time.Now(),
 		}
-		_, err = s.db.Model(&vaultRes).Table("vault.resource").OnConflict("DO NOTHING").Insert()
+		_, err = s.db.Model(&vaultRes).Table("vault.resource").
+			OnConflict("(resource_id) DO UPDATE SET funded_vp = EXCLUDED.funded_vp, funded = EXCLUDED.funded, funded_at = EXCLUDED.funded_at").
+			Insert()
 		if err != nil {
 			log.WithError(err).Errorf("LibraryIngest: failed to ensure vault.resource for %s", res.ID)
 		}
@@ -613,3 +767,130 @@ func (s *TransmissionService) HandleLibraryIngest(ctx context.Context, res *Reso
 		log.Infof("LibraryIngest: successfully added %s to library for %d users", res.ID, len(userRows))
 	}
 }
+
+func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash string) error {
+	markerPath := filepath.Join("/srv/Big ARRS/downloads", ".octor_dummy_"+infoHash)
+	if _, err := os.Stat(markerPath); err == nil {
+		return nil // already created
+	}
+
+	res, err := s.rm.Get(ctx, []byte(infoHash))
+	if err != nil {
+		return err
+	}
+	for _, f := range res.Files {
+		fPath := strings.Join(f.Path, "/")
+		fullPath := filepath.Join("/srv/Big ARRS/downloads", fPath)
+
+		cleanPath := filepath.Clean(fullPath)
+		if !strings.HasPrefix(cleanPath, "/srv/Big ARRS/downloads/") {
+			log.Warnf("DummyFiles: path traversal attempt blocked: %s", fPath)
+			continue
+		}
+
+		// Ensure directory exists
+		if err := os.MkdirAll(filepath.Dir(cleanPath), 0755); err != nil {
+			log.WithError(err).Errorf("Failed to create dummy directory: %s", filepath.Dir(cleanPath))
+			continue
+		}
+
+		// Check if file already exists
+		if _, err := os.Stat(cleanPath); err == nil {
+			continue // already exists
+		}
+
+		ext := strings.ToLower(filepath.Ext(cleanPath))
+		isVideo := ext == ".mkv" || ext == ".mp4" || ext == ".avi" || ext == ".ts" || ext == ".m4v" || ext == ".mov" || ext == ".wmv"
+
+		var createErr error
+		if isVideo {
+			// Copy dummy.mkv template
+			createErr = copyFile("/srv/octor/infra-data/dummy.mkv", cleanPath)
+			if createErr != nil {
+				log.WithError(createErr).Errorf("Failed to copy dummy video template: %s", cleanPath)
+				// Fallback to 0-byte file
+				createErr = createEmptyFile(cleanPath)
+			} else {
+				log.Infof("Created dummy video file for Sonarr import: %s", cleanPath)
+			}
+		} else {
+			createErr = createEmptyFile(cleanPath)
+			if createErr == nil {
+				log.Infof("Created empty dummy file for Sonarr import: %s", cleanPath)
+			}
+		}
+
+		if createErr != nil {
+			log.WithError(createErr).Errorf("Failed to create dummy file: %s", cleanPath)
+			continue
+		}
+	}
+
+	// Create marker file
+	if file, err := os.Create(markerPath); err == nil {
+		file.Close()
+	}
+	return nil
+}
+
+func (s *TransmissionService) removeDummyFiles(ctx context.Context, infoHash string) {
+	markerPath := filepath.Join("/srv/Big ARRS/downloads", ".octor_dummy_"+infoHash)
+	_ = os.Remove(markerPath)
+
+	res, err := s.rm.Get(ctx, []byte(infoHash))
+	if err != nil {
+		return
+	}
+	for _, f := range res.Files {
+		fPath := strings.Join(f.Path, "/")
+		fullPath := filepath.Join("/srv/Big ARRS/downloads", fPath)
+
+		cleanPath := filepath.Clean(fullPath)
+		if !strings.HasPrefix(cleanPath, "/srv/Big ARRS/downloads/") {
+			continue
+		}
+
+		// Delete file
+		_ = os.Remove(cleanPath)
+
+		// Clean up empty parent directories up to /srv/Big ARRS/downloads
+		parent := filepath.Dir(cleanPath)
+		for parent != "/srv/Big ARRS/downloads" && parent != "/" && parent != "." {
+			// Try to remove, will fail if not empty
+			if err := os.Remove(parent); err != nil {
+				break
+			}
+			parent = filepath.Dir(parent)
+		}
+	}
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+	return out.Sync()
+}
+
+func createEmptyFile(dst string) error {
+	file, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	file.Close()
+	return nil
+}
+

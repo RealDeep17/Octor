@@ -110,7 +110,7 @@
           onclick="seriesSelectEp(this, 'ep-{{ .Season }}-{{ .EpisodeNum }}')"
           id="btn-{{ .Season }}-{{ .EpisodeNum }}"
           class="ep-tile group flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-o-line/40 bg-base-200/40 hover:border-o-primaryL hover:bg-o-primary/5 transition-all w-[130px] sm:w-[185px] h-11 cursor-pointer text-left {{ if not .Title }}justify-center{{ end }}">
-          <span class="text-xs sm:text-sm font-mono font-black text-w-title group-[.active]:text-o-primaryL shrink-0">EP{{ .EpisodeNum }}</span>
+          <span class="text-xs sm:text-sm font-mono font-black text-w-title group-[.active]:text-o-primaryL shrink-0">{{ .ShortLabel }}</span>
           {{ if .Title }}
           <span class="text-[10px] sm:text-xs text-o-sub truncate font-semibold leading-tight flex-1 group-[.active]:text-o-primaryL">{{ .Title }}</span>
           {{ end }}
@@ -130,7 +130,7 @@
           </div>
           {{ end }}
           <div class="min-w-0 text-left self-center">
-            <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-o-primaryL">{{ if $seasonName }}{{ $seasonName }}{{ else }}Season {{ $seasonNum }}{{ end }} &middot; Episode {{ .EpisodeNum }}</p>
+            <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-o-primaryL">{{ if $seasonName }}{{ $seasonName }}{{ else }}Season {{ $seasonNum }}{{ end }} &middot; {{ .LongLabel }}</p>
             {{ if .Title }}
             <h3 class="text-base sm:text-xl font-black text-o-primaryL mt-1 sm:mt-1.5 leading-tight">{{ .Title }}</h3>
             {{ end }}
@@ -140,28 +140,34 @@
         {{/* Torrent list */}}
         <div class="grid grid-cols-1 gap-3 bg-base-300/40 p-3 sm:p-4">
           {{ range .Torrents }}
-          <div class="flex items-center justify-between gap-4 p-4 rounded-xl border border-o-line/30 bg-base-200/40 hover:bg-o-primary/5 hover:border-o-primary/30 transition-all group relative">
-            <a href="/{{ .ResourceID }}" data-async-target="main"
-               class="min-w-0 flex-1 cursor-pointer select-none">
-              <p class="text-sm sm:text-base font-bold text-w-title truncate leading-tight hover:text-o-primaryL transition-colors" title="{{ if .TorrentName }}{{ .TorrentName }}{{ else }}{{ .FileName }}{{ end }}">
-                {{ if .TorrentName }}{{ .TorrentName }}{{ else }}{{ .FileName }}{{ end }}
-              </p>
-              <div class="text-[10px] sm:text-xs text-o-muted mt-1.5 truncate flex items-center gap-2" title="{{ .FileName }}">
-                <span class="truncate">{{ .FileName }}</span>
-                {{ if gt .Size 0 }}
-                <span class="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider bg-[#374151] text-[#f3f4f6] flex items-center gap-1 font-mono shrink-0 select-none">
-                  {{ bitsForHumans3 .Size }}
-                </span>
-                {{ end }}
-              </div>
-            </a>
-            <a href="{{ .PlayURL }}" data-async-target="main"
-               class="btn btn-o-primary !w-[84px] !h-8 sm:!w-[104px] sm:!h-10 rounded-xl flex items-center justify-center hover:scale-105 transition-all cursor-pointer z-10 shrink-0 shadow-md !p-0"
-               title="Play Episode">
-              <svg class="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5" viewBox="0 0 24 24">
-                <polygon points="5 3 19 12 5 21"/>
-              </svg>
-            </a>
+          <div class="flex flex-col gap-2 p-4 rounded-xl border border-o-line/30 bg-base-200/40 hover:bg-o-primary/5 hover:border-o-primary/30 transition-all group relative">
+            <div class="flex items-center justify-between gap-4 w-full">
+              <a href="/{{ .ResourceID }}" data-async-target="main"
+                 class="min-w-0 flex-1 cursor-pointer select-none">
+                <p class="text-sm sm:text-base font-bold text-w-title truncate leading-tight hover:text-o-primaryL transition-colors" title="{{ if .TorrentName }}{{ .TorrentName }}{{ else }}{{ .FileName }}{{ end }}">
+                  {{ if .TorrentName }}{{ .TorrentName }}{{ else }}{{ .FileName }}{{ end }}
+                </p>
+                <div class="text-[10px] sm:text-xs text-o-muted mt-1.5 truncate flex items-center gap-2" title="{{ .FileName }}">
+                  <span class="truncate">{{ .FileName }}</span>
+                  {{ if gt .Size 0 }}
+                  <span class="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider bg-[#374151] text-[#f3f4f6] flex items-center gap-1 font-mono shrink-0 select-none">
+                    {{ bitsForHumans3 .Size }}
+                  </span>
+                  {{ end }}
+                </div>
+              </a>
+              <form class="stream" action="{{ langPath $.Lang "/stream-video" }}" method="post" enctype="multipart/form-data" data-async-target="#log-{{ .ResourceID }}-{{ .ItemID }}" data-async-push-state="false">
+                <input type="hidden" name="resource-id" value="{{ .ResourceID }}" />
+                <input type="hidden" name="item-id" value="{{ .ItemID }}" />
+                <button type="submit" class="btn btn-o-primary !w-[84px] !h-8 sm:!w-[104px] sm:!h-10 rounded-xl flex items-center justify-center hover:scale-105 transition-all cursor-pointer z-10 shrink-0 shadow-md !p-0"
+                        title="Play Episode" data-umami-event="stream">
+                  <svg class="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5" viewBox="0 0 24 24">
+                    <polygon points="5 3 19 12 5 21"/>
+                  </svg>
+                </button>
+              </form>
+            </div>
+            <div id="log-{{ .ResourceID }}-{{ .ItemID }}" class="w-full" data-async-layout="{{`{{ template "main" . }}`}}"></div>
           </div>
           {{ end }}
         </div>

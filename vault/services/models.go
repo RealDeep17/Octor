@@ -213,6 +213,9 @@ func ResourceQueueForStoring(ctx context.Context, db *pg.DB, id string, selected
 		}
 		return res, nil
 	}
+	if res.Status == StatusStored || res.Status == StatusStoring {
+		return res, nil
+	}
 	res.Status = StatusQueuedForStoring
 	res.SelectedFiles = selectedFiles
 	// update

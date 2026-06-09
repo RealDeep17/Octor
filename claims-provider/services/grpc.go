@@ -145,6 +145,18 @@ func (s *GRPC) Get(ctx context.Context, req *pb.GetRequest) (*pb.GetResponse, er
 			cs = append(cs, c)
 		}
 	}
+	if !anySuccess || len(cs) == 0 {
+		log.WithField("email", email).Info("database lookup failed or returned no results; using default/mock claims for self-hosted setup")
+		var rate uint64 = 0
+		c = &models.Claims{
+			Email:        email,
+			TierID:       1000,
+			TierName:     "Pro",
+			DownloadRate: &rate,
+		}
+		cs = append(cs, c)
+		anySuccess = true
+	}
 	if !anySuccess {
 		log.WithFields(log.Fields{
 			"email": email,

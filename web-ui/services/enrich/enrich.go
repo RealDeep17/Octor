@@ -679,7 +679,7 @@ func (s *Enricher) Enrich(ctx context.Context, hash string, claims *api.Claims, 
 	}
 	log.Infof("start processing media info %+v", mi)
 	// Resolve sidecar enrichment permission:
-	//   - background job             → check if any admin owns the resource and has it enabled
+	//   - background job             → check if any admin owns the resource (defaults to true for admin-owned content)
 	//   - admin user                 → respects their toggle (fail-closed: false on error)
 	//   - regular user               → never enabled
 	sidecarEnrichment := false
@@ -693,11 +693,11 @@ func (s *Enricher) Enrich(ctx context.Context, hash string, claims *api.Claims, 
 		if err == nil {
 			for _, u := range users {
 				if s.admin.IsAdminEmail(u.Email) {
-					settings, err := models.GetUserStremioSettingsData(ctx, db, u.UserID)
-					if err == nil && settings != nil && settings.SidecarEnrichment {
-						sidecarEnrichment = true
-						break
-					}
+					// Default to true for admin-owned resources in background jobs
+					// so adult/NSFW content pushed by automated clients (like Whisparr)
+					// is automatically enriched.
+					sidecarEnrichment = true
+					break
 				}
 			}
 		} else {

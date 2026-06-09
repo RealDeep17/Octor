@@ -206,6 +206,7 @@ func serve(c *cli.Context) error {
 		"/token/",
 		"/webdav/",
 		"/transcoder-session/",
+		"/enrich/",
 	})
 	if err != nil {
 		return err
