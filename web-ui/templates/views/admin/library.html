@@ -89,7 +89,7 @@
       {{ else }}
       <div class="dynamic-grid grid-flow-row-dense gap-4">
         {{ range .Data.Items }}
-        <a href="{{ langPath $.Lang (.Content | getCardHref) }}{{ if $.Data.SelectedUser }}?user={{ $.Data.SelectedUser }}{{ end }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2"
+        <a href="{{ langPath $.Lang (.Content | getCardHref) }}?user={{ if $.Data.SelectedUser }}{{ $.Data.SelectedUser }}{{ else }}all{{ end }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2"
            data-adult-type="{{ if .Content | isAdultJAV }}jav{{ else }}porn{{ end }}"
            data-series-type="{{ if .Content | isSeriesAnime }}anime{{ else }}tv{{ end }}">
           <div class="w-card-frame w-full">

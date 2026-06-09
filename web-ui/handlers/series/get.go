@@ -74,18 +74,12 @@ func (h *Handler) get(c *gin.Context) {
 
 	targetUserID := user.ID
 	isOmni := false
-	isAdmin := auth.IsAdmin(c) || h.admin.IsAdminUser(user)
-	if isAdmin {
-		if c.Query("user") != "" {
-			if c.Query("user") == "all" || c.Query("user") == "omni" {
-				targetUserID = uuid.Nil
-				isOmni = true
-			} else if parsedID, err := uuid.FromString(c.Query("user")); err == nil {
-				targetUserID = parsedID
-			}
-		} else {
+	if (auth.IsAdmin(c) || h.admin.IsAdminUser(user)) && c.Query("user") != "" {
+		if c.Query("user") == "all" || c.Query("user") == "omni" {
 			targetUserID = uuid.Nil
 			isOmni = true
+		} else if parsedID, err := uuid.FromString(c.Query("user")); err == nil {
+			targetUserID = parsedID
 		}
 	}
 
