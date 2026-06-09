@@ -422,7 +422,7 @@ func serve(c *cli.Context) error {
 
 	// Setting Library
 	library.RegisterHandler(c, r, tm, sapi, pg, jobs, cl, s3Cl, en, adminSvc, tpdbSvc)
-	series.RegisterHandler(r, tm, pg)
+	series.RegisterHandler(r, tm, pg, adminSvc)
 
 	// Setting UserSubtitle handler. When AWS_USER_SUBTITLE_BUCKET is not
 	// set the service is nil; RegisterHandler skips its routes and the UI

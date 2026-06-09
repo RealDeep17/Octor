@@ -4,7 +4,7 @@
      and docs/uikit.html section 7 "Video Card". */}}
 <div class="dynamic-grid grid-flow-row-dense gap-4">
     {{ range $.Data }}
-    <a href="{{ langPath $.Ctx.Lang (printf "/%s" (. | getResourceID)) }}" data-async-target="main" class="library-item group flex [&:has(input:checked)]:col-span-2">
+    <a href="{{ langPath $.Ctx.Lang (. | getCardHref) }}" data-async-target="main" class="library-item group flex [&:has(input:checked)]:col-span-2">
         <div class="w-card-frame {{ if . | getUserWatched }}is-watched{{ end }} w-full">
             <input type="checkbox" id="toggle-{{ . | getResourceID }}" 
                    class="layout-toggle-checkbox peer hidden"
@@ -129,6 +129,7 @@
             </figure>
             <div class="p-3">
                 <h3 class="w-card-title">{{ . | getTitle }}</h3>
+                {{ $epSummary := . | getEpisodeSummary }}{{ if $epSummary }}<p class="text-xs text-o-muted mt-0.5 truncate leading-tight">{{ $epSummary }}</p>{{ end }}
                 <div class="flex justify-between items-center mt-1.5">
                     <div class="flex items-center gap-1.5 flex-wrap">
                         <span class="text-xs text-o-muted">{{ if . | hasYear }}{{ . | getYear }}{{ end }}</span>

@@ -2,6 +2,8 @@ package models
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -184,12 +186,13 @@ func GetLibraryCounts(ctx context.Context, db *pg.DB, uID uuid.UUID) (torrents, 
 		return 0, 0, 0, 0, errors.Wrap(err, "failed to count movies")
 	}
 
-	series, err = db.Model((*Series)(nil)).
-		Context(ctx).
-		Join("join library as l").
-		JoinOn("series.resource_id = l.resource_id").
-		Where("l.user_id = ?", uID).
-		Count()
+	_, err = db.QueryOneContext(ctx, pg.Scan(&series), `
+		SELECT COUNT(DISTINCT smd.video_id) + COUNT(CASE WHEN smd.video_id IS NULL OR smd.video_id = '' THEN 1 END)
+		FROM series
+		JOIN library as l ON series.resource_id = l.resource_id
+		LEFT JOIN series_metadata as smd ON series.series_metadata_id = smd.series_metadata_id
+		WHERE l.user_id = ?
+	`, uID)
 	if err != nil {
 		return 0, 0, 0, 0, errors.Wrap(err, "failed to count series")
 	}
@@ -216,7 +219,10 @@ func GetLibraryTorrentsList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort 
 	query := db.Model(&list).
 		Context(ctx).
 		Where("library.user_id = ?", uID).
-		Relation("Torrent")
+		Relation("Torrent").
+		Relation("MediaInfo").
+		Relation("MediaInfo.Movies.MovieMetadata").
+		Relation("MediaInfo.SeriesList.SeriesMetadata")
 
 	if q != "" {
 		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
@@ -433,7 +439,8 @@ func GetLibrarySeriesList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort So
 		Join("left join series_status as uss").
 		JoinOn("uss.user_id = l.user_id AND uss.video_id = smd.video_id AND uss.watched = true").
 		Where("l.user_id = ?", uID).
-		Relation("SeriesMetadata")
+		Relation("SeriesMetadata").
+		Relation("Episodes.EpisodeMetadata")
 
 	if q != "" {
 		query.Where("smd.title ILIKE ? OR series.title ILIKE ?", "%"+q+"%", "%"+q+"%")
@@ -528,7 +535,10 @@ func GetLibraryTorrentsListAll(ctx context.Context, db *pg.DB, sort SortType, q 
 	query := db.Model(&list).
 		Context(ctx).
 		ColumnExpr("DISTINCT ON (library.resource_id) library.*").
-		Relation("Torrent")
+		Relation("Torrent").
+		Relation("MediaInfo").
+		Relation("MediaInfo.Movies.MovieMetadata").
+		Relation("MediaInfo.SeriesList.SeriesMetadata")
 
 	if q != "" {
 		query.Join("JOIN torrent_resource AS t ON t.resource_id = library.resource_id").
@@ -723,4 +733,79 @@ func GetLibraryAdultTorrentListAll(ctx context.Context, db *pg.DB, sort SortType
 		return nil, errors.Wrap(err, "failed to fetch all-user adult torrent list")
 	}
 	return list, nil
+}
+
+// MergeSeriesByVideoID deduplicates a flat list of Series by their VideoID
+// (from series_metadata), merging episodes from all matching torrents into
+// one representative entry per show. Series without metadata are kept as-is.
+func MergeSeriesByVideoID(list []*Series) []*Series {
+	type group struct {
+		primary *Series
+		seen    map[string]bool
+	}
+	groups := map[string]*group{}
+	var order []string
+	var noMeta []*Series
+
+	for _, s := range list {
+		if s.SeriesMetadata == nil || s.SeriesMetadata.VideoID == "" {
+			noMeta = append(noMeta, s)
+			continue
+		}
+		vid := s.SeriesMetadata.VideoID
+		if _, exists := groups[vid]; !exists {
+			g := &group{primary: s, seen: map[string]bool{}}
+			for _, ep := range s.Episodes {
+				g.seen[seriesEpisodeKey(ep)] = true
+			}
+			groups[vid] = g
+			order = append(order, vid)
+		} else {
+			g := groups[vid]
+			for _, ep := range s.Episodes {
+				key := seriesEpisodeKey(ep)
+				if !g.seen[key] {
+					g.seen[key] = true
+					g.primary.Episodes = append(g.primary.Episodes, ep)
+				}
+			}
+		}
+	}
+
+	result := make([]*Series, 0, len(order)+len(noMeta))
+	for _, vid := range order {
+		merged := groups[vid].primary
+		sort.Slice(merged.Episodes, func(i, j int) bool {
+			si, ei := seriesEpNums(merged.Episodes[i])
+			sj, ej := seriesEpNums(merged.Episodes[j])
+			if si != sj {
+				return si < sj
+			}
+			return ei < ej
+		})
+		result = append(result, merged)
+	}
+	return append(result, noMeta...)
+}
+
+func seriesEpisodeKey(ep *Episode) string {
+	var sea, epn int16
+	if ep.Season != nil {
+		sea = *ep.Season
+	}
+	if ep.Episode != nil {
+		epn = *ep.Episode
+	}
+	return fmt.Sprintf("%d:%d", sea, epn)
+}
+
+func seriesEpNums(ep *Episode) (int16, int16) {
+	var sea, epn int16
+	if ep.Season != nil {
+		sea = *ep.Season
+	}
+	if ep.Episode != nil {
+		epn = *ep.Episode
+	}
+	return sea, epn
 }

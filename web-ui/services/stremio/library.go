@@ -3,6 +3,7 @@ package stremio
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -64,7 +65,7 @@ func (s *Library) GetMeta(ctx context.Context, ct, contentID string) (*MetaRespo
 	vc := vcs[0]
 	meta := s.makeMeta(vc)
 	if ct == "series" {
-		meta.Videos, err = s.makeVideos(vc)
+		meta.Videos, err = s.makeVideos(vcs)
 	}
 	return &MetaResponse{Meta: meta}, nil
 }
@@ -121,6 +122,7 @@ func (s *Library) getCatalogData(ctx context.Context, t string) ([]models.VideoC
 		if err != nil {
 			return nil, err
 		}
+		ls = models.MergeSeriesByVideoID(ls)
 		items = make([]models.VideoContentWithMetadata, len(ls))
 		for i, v := range ls {
 			items[i] = v
@@ -327,37 +329,59 @@ func (s *Library) retrieveTorrentItem(ctx context.Context, hash string, claims *
 	return nil, 0, nil
 }
 
-func (s *Library) makeVideos(vc models.VideoContentWithMetadata) ([]VideoItem, error) {
-	se, _ := vc.(*models.Series)
-	var vis []VideoItem
-	for _, e := range se.Episodes {
-		var ep, sea int
-		if e.Episode != nil {
-			ee := *e.Episode
-			ep = int(ee)
+func (s *Library) makeVideos(vcs []models.VideoContentWithMetadata) ([]VideoItem, error) {
+	// Derive the series ID from the first entry with metadata.
+	seriesID := ""
+	for _, v := range vcs {
+		if v.GetMetadata() != nil && v.GetMetadata().VideoID != "" {
+			seriesID = v.GetMetadata().VideoID
+			break
 		}
-		if e.Season != nil {
-			ss := *e.Season
-			sea = int(ss)
-		}
-		var id string
-		if vc.GetMetadata() != nil {
-			id = vc.GetMetadata().VideoID
-		} else {
-			id = fmt.Sprintf("%v%v", idPrefix, vc.GetID().String())
-		}
-		name := fmt.Sprintf("Episode %d", ep)
-		if e.EpisodeMetadata != nil && e.EpisodeMetadata.Title != nil && *e.EpisodeMetadata.Title != "" {
-			name = *e.EpisodeMetadata.Title
-		}
-		vi := VideoItem{
-			Name:    name,
-			ID:      fmt.Sprintf("%v:%v:%v", id, sea, ep),
-			Season:  sea,
-			Episode: ep,
-		}
-		vis = append(vis, vi)
 	}
+	if seriesID == "" && len(vcs) > 0 {
+		seriesID = fmt.Sprintf("%v%v", idPrefix, vcs[0].GetID().String())
+	}
+
+	seen := map[string]bool{}
+	var vis []VideoItem
+
+	for _, vcItem := range vcs {
+		se, ok := vcItem.(*models.Series)
+		if !ok {
+			continue
+		}
+		for _, e := range se.Episodes {
+			var ep, sea int
+			if e.Episode != nil {
+				ep = int(*e.Episode)
+			}
+			if e.Season != nil {
+				sea = int(*e.Season)
+			}
+			key := fmt.Sprintf("%d:%d", sea, ep)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			name := fmt.Sprintf("Episode %d", ep)
+			if e.EpisodeMetadata != nil && e.EpisodeMetadata.Title != nil && *e.EpisodeMetadata.Title != "" {
+				name = *e.EpisodeMetadata.Title
+			}
+			vis = append(vis, VideoItem{
+				Name:    name,
+				ID:      fmt.Sprintf("%v:%v:%v", seriesID, sea, ep),
+				Season:  sea,
+				Episode: ep,
+			})
+		}
+	}
+
+	sort.Slice(vis, func(i, j int) bool {
+		if vis[i].Season != vis[j].Season {
+			return vis[i].Season < vis[j].Season
+		}
+		return vis[i].Episode < vis[j].Episode
+	})
 	return vis, nil
 }
 

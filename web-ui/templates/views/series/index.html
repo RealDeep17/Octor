@@ -1,0 +1,254 @@
+{{ define "title" }}{{ .Data.Title }}{{ end }}
+{{ define "main" }}
+{{ with .Data }}
+<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
+  <div class="max-w-[900px] lg:max-w-[1100px] mx-auto">
+
+    <div class="hidden sm:inline-flex badge badge-lg bg-o-primary/10 border-o-primary/30 text-o-primaryL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+      </svg>
+      Series
+    </div>
+
+    {{/* ── Hero Card ── */}}
+    <div class="relative overflow-hidden rounded-2xl p-4 sm:p-6 mb-4 bg-gradient-to-br from-o-primary/10 via-base-300/50 to-base-300/50 border border-o-primary/20">
+      <div class="absolute top-0 right-0 w-40 h-40 bg-o-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+      <div class="relative flex items-start gap-3 sm:gap-5">
+        
+        {{/* Poster Container (Always Visible, Left-Aligned, Matching resource/get.html exactly) */}}
+        {{ $layout := .UserPosterLayout }}
+        {{ $hasBoth := and (ne .PosterURL "") (ne .PosterHorizontalURL "") }}
+        <div id="detail-poster-container" 
+             class="shrink-0 rounded-xl overflow-hidden border border-o-line/30 shadow-lg relative transition-all duration-300 group/poster
+                    {{ if eq $layout "horizontal" }}
+                        w-[200px] sm:w-[315px] aspect-[3/2]
+                    {{ else }}
+                        w-[100px] sm:w-[140px] aspect-[2/3]
+                    {{ end }}"
+             data-video-type="series"
+             data-video-id="{{ .VideoID }}"
+             data-has-auth="{{ if $.User | hasAuth }}true{{ else }}false{{ end }}"
+             data-layout-pref="{{ $layout }}">
+            
+            <div class="absolute inset-0 bg-gradient-to-br from-o-primary/20 via-o-primary/10 to-o-cyan/15 text-o-primaryL/60 flex items-center justify-center">
+                <div class="text-center font-bold text-sm p-3 line-clamp-3 drop-shadow-sm">{{ .Title }}</div>
+            </div>
+
+            {{ if ne .PosterURL "" }}
+            <img id="detail-poster-vertical" 
+                 src="{{ .PosterURL }}" 
+                 alt="{{ .Title }}" 
+                 class="absolute inset-0 w-full h-full object-cover {{ if eq $layout "horizontal" }}hidden{{ end }}" 
+                 onerror="this.remove()">
+            {{ end }}
+
+            {{ if ne .PosterHorizontalURL "" }}
+            <img id="detail-poster-horizontal" 
+                 src="{{ .PosterHorizontalURL }}" 
+                 alt="{{ .Title }}" 
+                 class="absolute inset-0 w-full h-full object-cover {{ if ne $layout "horizontal" }}hidden{{ end }}" 
+                 onerror="this.remove()">
+            {{ end }}
+
+            {{ if $hasBoth }}
+            <button type="button" id="detail-layout-toggle"
+                    class="absolute bottom-2 left-2 w-7 h-7 rounded-lg bg-black/60 hover:bg-black/80 backdrop-blur border border-white/10 text-white flex items-center justify-center opacity-0 group-hover/poster:opacity-100 transition-opacity duration-200 z-10 cursor-pointer"
+                    title="Toggle aspect ratio">
+                <svg class="vertical-icon w-4 h-4 {{ if eq $layout "horizontal" }}hidden{{ end }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="6" y="3" width="12" height="18" rx="2" />
+                </svg>
+                <svg class="horizontal-icon w-4 h-4 {{ if ne $layout "horizontal" }}hidden{{ end }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="6" width="18" height="12" rx="2" />
+                </svg>
+            </button>
+            {{ end }}
+        </div>
+
+        {{/* Show Info (Always Left-Aligned, Matching resource/get.html exactly) */}}
+        <div class="flex-1 min-w-0 text-left">
+          <h1 class="text-[clamp(1.5rem,3.5vw,2rem)] font-bold tracking-tight leading-snug break-words line-clamp-2 text-balance" title="{{ .Title }}">{{ .Title }}</h1>
+          <div class="flex flex-wrap items-center gap-2 mb-1 text-sm text-o-sub">
+            {{ if .Year }}<span>{{ .Year }}</span>{{ end }}
+            {{ if gt .Rating 0.0 }}
+            <span class="flex items-center gap-1 text-yellow-400">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clip-rule="evenodd" /></svg>
+                {{ printf "%.1f" .Rating }}
+            </span>
+            {{ end }}
+            <span class="badge badge-sm bg-o-cyan/10 text-o-cyan border-0">{{ .TotalEpisodes }} Episodes</span>
+            <span class="badge badge-sm bg-o-cyan/10 text-o-cyan border-0">{{ .TotalTorrents }} Torrents</span>
+          </div>
+          {{ if .Plot }}
+          <p class="text-sm text-o-sub leading-relaxed mb-4 line-clamp-3">{{ .Plot }}</p>
+          {{ end }}
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Content divider -->
+    <div class="flex items-center gap-3 mt-10 mb-8">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">Episodes</h2>
+        <div class="flex-1 h-px bg-w-line/50"></div>
+    </div>
+
+    {{/* ── Seasons ── */}}
+    {{ range .Seasons }}
+    {{ $seasonName := .SeasonName }}
+    {{ $seasonNum := .Season }}
+    <div class="mb-12" data-season="{{ .Season }}">
+      <div class="flex items-center gap-3 mb-6">
+        <h2 class="text-xl sm:text-2xl font-black text-w-title tracking-tight">{{ if .SeasonName }}{{ .SeasonName }}{{ else }}Season {{ .Season }}{{ end }}</h2>
+        <div class="flex-1 h-px bg-o-line/20"></div>
+      </div>
+
+      {{/* Episode cards (Fixed size cards with episode number and title) */}}
+      <div class="flex flex-wrap gap-3 sm:gap-4 mb-8">
+        {{ range .Episodes }}
+        <button
+          onclick="seriesSelectEp(this, 'ep-{{ .Season }}-{{ .EpisodeNum }}')"
+          id="btn-{{ .Season }}-{{ .EpisodeNum }}"
+          class="ep-tile group flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-o-line/40 bg-base-200/40 hover:border-o-primaryL hover:bg-o-primary/5 transition-all w-[130px] sm:w-[185px] h-11 cursor-pointer text-left {{ if not .Title }}justify-center{{ end }}">
+          <span class="text-xs sm:text-sm font-mono font-black text-w-title group-[.active]:text-o-primaryL shrink-0">EP{{ .EpisodeNum }}</span>
+          {{ if .Title }}
+          <span class="text-[10px] sm:text-xs text-o-sub truncate font-semibold leading-tight flex-1 group-[.active]:text-o-primaryL">{{ .Title }}</span>
+          {{ end }}
+        </button>
+        {{ end }}
+      </div>
+
+      {{/* Episode detail panels — shown when tile clicked */}}
+      {{ range .Episodes }}
+      <div id="ep-{{ .Season }}-{{ .EpisodeNum }}" class="ep-detail hidden mb-8 rounded-2xl border border-o-primary/30 bg-base-300/30 overflow-hidden backdrop-blur-md shadow-md">
+
+        {{/* Panel header (Left-aligned, side-by-side) */}}
+        <div class="flex items-start gap-4 sm:gap-6 px-4 py-4 sm:px-6 sm:py-6 border-b border-o-line/20 bg-o-primary/5">
+          {{ if .StillURL }}
+          <div class="shrink-0 w-32 sm:w-48 aspect-[16/10] rounded-xl overflow-hidden shadow-md border border-o-line/10">
+            <img src="{{ .StillURL }}" alt="" class="w-full h-full object-cover" />
+          </div>
+          {{ end }}
+          <div class="min-w-0 text-left self-center">
+            <p class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-o-primaryL">{{ if $seasonName }}{{ $seasonName }}{{ else }}Season {{ $seasonNum }}{{ end }} &middot; Episode {{ .EpisodeNum }}</p>
+            {{ if .Title }}
+            <h3 class="text-base sm:text-xl font-black text-o-primaryL mt-1 sm:mt-1.5 leading-tight">{{ .Title }}</h3>
+            {{ end }}
+          </div>
+        </div>
+
+        {{/* Torrent list */}}
+        <div class="grid grid-cols-1 gap-3 bg-base-300/40 p-3 sm:p-4">
+          {{ range .Torrents }}
+          <div class="flex items-center justify-between gap-4 p-4 rounded-xl border border-o-line/30 bg-base-200/40 hover:bg-o-primary/5 hover:border-o-primary/30 transition-all group relative">
+            <a href="/{{ .ResourceID }}" data-async-target="main"
+               class="min-w-0 flex-1 cursor-pointer select-none">
+              <p class="text-sm sm:text-base font-bold text-w-title truncate leading-tight hover:text-o-primaryL transition-colors" title="{{ if .TorrentName }}{{ .TorrentName }}{{ else }}{{ .FileName }}{{ end }}">
+                {{ if .TorrentName }}{{ .TorrentName }}{{ else }}{{ .FileName }}{{ end }}
+              </p>
+              <div class="text-[10px] sm:text-xs text-o-muted mt-1.5 truncate flex items-center gap-2" title="{{ .FileName }}">
+                <span class="truncate">{{ .FileName }}</span>
+                {{ if gt .Size 0 }}
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider bg-[#374151] text-[#f3f4f6] flex items-center gap-1 font-mono shrink-0 select-none">
+                  {{ bitsForHumans3 .Size }}
+                </span>
+                {{ end }}
+              </div>
+            </a>
+            <a href="{{ .PlayURL }}" data-async-target="main"
+               class="btn btn-o-primary !w-[84px] !h-8 sm:!w-[104px] sm:!h-10 rounded-xl flex items-center justify-center hover:scale-105 transition-all cursor-pointer z-10 shrink-0 shadow-md !p-0"
+               title="Play Episode">
+              <svg class="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5" viewBox="0 0 24 24">
+                <polygon points="5 3 19 12 5 21"/>
+              </svg>
+            </a>
+          </div>
+          {{ end }}
+        </div>
+      </div>
+      {{ end }}
+    </div>
+    {{ end }}
+
+  </div>
+</section>
+
+<script>
+function seriesSelectEp(btn, id) {
+  var detail = document.getElementById(id);
+  if (!detail) return;
+
+  var section = btn.closest('[data-season]');
+  var isOpen = !detail.classList.contains('hidden');
+
+  // Close all in this season
+  section.querySelectorAll('.ep-detail').forEach(function(d) { d.classList.add('hidden'); });
+  section.querySelectorAll('.ep-tile').forEach(function(b) { b.classList.remove('active', 'border-o-primary/50', 'bg-o-primary/10'); });
+
+  if (!isOpen) {
+    detail.classList.remove('hidden');
+    btn.classList.add('active', 'border-o-primary/50', 'bg-o-primary/10');
+    detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+// Aspect ratio toggler script (Copied from resource/get.js to match Webtor behavior identically)
+(function() {
+    const posterContainer = document.getElementById('detail-poster-container');
+    const layoutToggle = document.getElementById('detail-layout-toggle');
+    if (posterContainer && layoutToggle) {
+        const videoType = posterContainer.getAttribute('data-video-type');
+        const videoId = posterContainer.getAttribute('data-video-id');
+
+        function applyLayout(layout) {
+            const isHorizontal = layout === 'horizontal';
+            if (isHorizontal) {
+                posterContainer.classList.remove('aspect-[2/3]', 'w-[100px]', 'sm:w-[140px]');
+                posterContainer.classList.add('aspect-[3/2]', 'w-[200px]', 'sm:w-[315px]');
+            } else {
+                posterContainer.classList.remove('aspect-[3/2]', 'w-[200px]', 'sm:w-[315px]');
+                posterContainer.classList.add('aspect-[2/3]', 'w-[100px]', 'sm:w-[140px]');
+            }
+            const verticalImg = document.getElementById('detail-poster-vertical');
+            const horizontalImg = document.getElementById('detail-poster-horizontal');
+            if (verticalImg) verticalImg.classList.toggle('hidden', isHorizontal);
+            if (horizontalImg) horizontalImg.classList.toggle('hidden', !isHorizontal);
+            const vertIcon = layoutToggle.querySelector('.vertical-icon');
+            const horizIcon = layoutToggle.querySelector('.horizontal-icon');
+            if (vertIcon) vertIcon.classList.toggle('hidden', isHorizontal);
+            if (horizIcon) horizIcon.classList.toggle('hidden', !isHorizontal);
+        }
+
+        if (videoType && videoId) {
+            const hasAuth = posterContainer.getAttribute('data-has-auth') === 'true';
+            const dbPref = posterContainer.getAttribute('data-layout-pref');
+            if (hasAuth && dbPref) {
+                localStorage.setItem('octor-layout-' + videoType + '-' + videoId, dbPref);
+            } else {
+                const localPref = localStorage.getItem('octor-layout-' + videoType + '-' + videoId);
+                if (localPref) applyLayout(localPref);
+            }
+        }
+
+        layoutToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!videoType || !videoId) return;
+            const isHorizontal = posterContainer.classList.contains('aspect-[3/2]');
+            const newLayout = isHorizontal ? 'vertical' : 'horizontal';
+            applyLayout(newLayout);
+            localStorage.setItem('octor-layout-' + videoType + '-' + videoId, newLayout);
+            fetch('/library/' + videoType + '/' + videoId + '/layout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': window._CSRF || ''
+                },
+                body: JSON.stringify({ layout: newLayout })
+            }).catch(err => console.error('Failed to save layout preference:', err));
+        });
+    }
+})();
+</script>
+{{ end }}
+{{ end }}

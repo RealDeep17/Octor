@@ -220,3 +220,70 @@ func (s *VideoContentHelper) GetStudio(m models.VideoContentWithMetadata) string
 	}
 	return studio
 }
+
+// GetEpisodeSummary returns a short human-readable string of which episodes
+// are available in the library for this series item, e.g.:
+//   "S1E3 — Ozymandias"   (single episode with title)
+//   "S2 · 6 Episodes"     (multiple episodes, same season)
+//   "3 Seasons · 24 Episodes"
+func (s *VideoContentHelper) GetEpisodeSummary(m models.VideoContentWithMetadata) string {
+	ser, ok := m.(*models.Series)
+	if !ok || len(ser.Episodes) == 0 {
+		return ""
+	}
+	eps := ser.Episodes
+	if len(eps) == 1 {
+		ep := eps[0]
+		var sea, epNum int16
+		if ep.Season != nil {
+			sea = *ep.Season
+		}
+		if ep.Episode != nil {
+			epNum = *ep.Episode
+		}
+		title := ""
+		if ep.EpisodeMetadata != nil && ep.EpisodeMetadata.Title != nil && *ep.EpisodeMetadata.Title != "" {
+			title = *ep.EpisodeMetadata.Title
+			runes := []rune(title)
+			if len(runes) > 32 {
+				title = string(runes[:32]) + "…"
+			}
+		}
+		if title != "" {
+			return fmt.Sprintf("S%dE%d — %s", sea, epNum, title)
+		}
+		return fmt.Sprintf("S%dE%d", sea, epNum)
+	}
+	// Multiple episodes — group by season.
+	seasons := map[int16]int{}
+	for _, ep := range eps {
+		if ep.Season != nil {
+			seasons[*ep.Season]++
+		}
+	}
+	if len(seasons) == 1 {
+		var sea int16
+		for k := range seasons {
+			sea = k
+		}
+		if len(eps) == 1 {
+			return fmt.Sprintf("S%d · 1 Episode", sea)
+		}
+		return fmt.Sprintf("S%d · %d Episodes", sea, len(eps))
+	}
+	return fmt.Sprintf("%d Seasons · %d Episodes", len(seasons), len(eps))
+}
+
+// GetCardHref returns the correct href for a library card.
+// Series with a known VideoID go to /series/<video_id> (the episode selector page).
+// Everything else goes to /<resource_id> (the torrent file browser).
+func (s *VideoContentHelper) GetCardHref(m models.VideoContentWithMetadata) string {
+	if ser, ok := m.(*models.Series); ok {
+		if ser.SeriesMetadata != nil && ser.SeriesMetadata.VideoMetadata != nil {
+			if ser.SeriesMetadata.VideoMetadata.VideoID != "" {
+				return "/series/" + ser.SeriesMetadata.VideoMetadata.VideoID
+			}
+		}
+	}
+	return "/" + m.GetContent().ResourceID
+}
