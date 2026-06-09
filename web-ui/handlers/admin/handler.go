@@ -659,7 +659,7 @@ func (h *Handler) loadTorrentItems(ctx context.Context, db *pg.DB, userID *uuid.
 			}
 		}
 	}
-	tree := shared.BuildTorrentTree(list, true, sort) // Admins always have access to adult content
+	tree := shared.BuildTorrentTree(ctx, db, list, true, sort) // Admins always have access to adult content
 	items := make([]any, len(tree))
 	for i, v := range tree {
 		items[i] = v
@@ -779,6 +779,7 @@ func (h *Handler) getAllUserSeries(ctx context.Context, db *pg.DB, sort models.S
 	if err := query.Select(); err != nil {
 		return nil, errors.Wrap(err, "failed to fetch all-user series list")
 	}
+	models.PopulateSeriesAnimeFlags(ctx, db, list)
 	return list, nil
 }
 

@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	"github.com/webtor-io/web-ui/models/tmdb"
 )
 
 type SortType int
@@ -487,9 +490,186 @@ func GetLibrarySeriesList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort So
 				}
 			}
 		}
+		PopulateSeriesAnimeFlags(ctx, db, list)
 	}
 
 	return list, nil
+}
+
+func isAnimeText(str string) bool {
+	if str == "" {
+		return false
+	}
+	sLower := strings.ToLower(str)
+
+	keywords := []string{
+		"anime", "vostfr", "vost", "subsplease", "horriblesubs", "erai-raws",
+		"erai-raw", "pas-raws", "pas-raw", "judas", "asw", "yameii", "golumpa",
+		"noobsub", "noobsubs", "ffa", "nep", "dual-audio", "dual audio", "multiscr",
+		"multi-audio", "sub-esp", "sub-english", "sub-eng", "sub_eng",
+	}
+	for _, kw := range keywords {
+		if strings.Contains(sLower, kw) {
+			return true
+		}
+	}
+
+	for _, r := range str {
+		if (r >= 0x3040 && r <= 0x309F) || // Hiragana
+		   (r >= 0x30A0 && r <= 0x30FF) || // Katakana
+		   (r >= 0x4E00 && r <= 0x9FFF) {   // Kanji
+			return true
+		}
+	}
+
+	if strings.Contains(str, "[") && strings.Contains(str, "]") {
+		parts := strings.Split(sLower, "/")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "[") {
+				return true
+			}
+			if strings.Count(part, "[") >= 2 && strings.Count(part, "]") >= 2 {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func isAnimeHeuristic(s *Series) bool {
+	if s == nil {
+		return false
+	}
+	if isAnimeText(s.Title) {
+		return true
+	}
+	if s.SeriesMetadata != nil && isAnimeText(s.SeriesMetadata.Title) {
+		return true
+	}
+	for _, ep := range s.Episodes {
+		if ep == nil {
+			continue
+		}
+		if ep.Path != nil && isAnimeText(*ep.Path) {
+			return true
+		}
+		if ep.Title != nil && isAnimeText(*ep.Title) {
+			return true
+		}
+	}
+	return false
+}
+
+func isTmdbInfoAnime(info *tmdb.Info) bool {
+	if info == nil || info.Metadata == nil {
+		return false
+	}
+
+	// Check origin country is JP
+	isJP := false
+	if oc, ok := info.Metadata["origin_country"].([]any); ok {
+		for _, c := range oc {
+			if str, ok := c.(string); ok && str == "JP" {
+				isJP = true
+				break
+			}
+		}
+	}
+
+	// Check genre ID 16 (Animation)
+	isAnimation := false
+	if genres, ok := info.Metadata["genres"].([]any); ok {
+		for _, g := range genres {
+			if gMap, ok := g.(map[string]any); ok {
+				if idVal, ok := gMap["id"]; ok {
+					var id float64
+					switch v := idVal.(type) {
+					case float64:
+						id = v
+					case int:
+						id = float64(v)
+					case int64:
+						id = float64(v)
+					}
+					if id == 16 {
+						isAnimation = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return isJP && isAnimation
+}
+
+func PopulateSeriesAnimeFlags(ctx context.Context, db *pg.DB, list []*Series) {
+	if len(list) == 0 {
+		return
+	}
+
+	var imdbIDs []string
+	var tmdbIDs []int
+	videoToSeries := make(map[string][]*Series)
+
+	for _, s := range list {
+		// Default to heuristics
+		s.IsAnime = isAnimeHeuristic(s)
+
+		if s.SeriesMetadata != nil && s.SeriesMetadata.VideoID != "" {
+			videoID := s.SeriesMetadata.VideoID
+			videoToSeries[videoID] = append(videoToSeries[videoID], s)
+
+			if strings.HasPrefix(videoID, "tmdb") {
+				if id, err := strconv.Atoi(strings.TrimPrefix(videoID, "tmdb")); err == nil {
+					tmdbIDs = append(tmdbIDs, id)
+				}
+			} else if strings.HasPrefix(videoID, "tt") {
+				imdbIDs = append(imdbIDs, videoID)
+			}
+		}
+	}
+
+	if len(imdbIDs) == 0 && len(tmdbIDs) == 0 {
+		return
+	}
+
+	var tmdbInfos []*tmdb.Info
+	query := db.Model(&tmdbInfos).Context(ctx)
+
+	var exprs []string
+	var args []any
+	if len(imdbIDs) > 0 {
+		exprs = append(exprs, "imdb_id IN (?)")
+		args = append(args, pg.In(imdbIDs))
+	}
+	if len(tmdbIDs) > 0 {
+		exprs = append(exprs, "tmdb_id IN (?)")
+		args = append(args, pg.In(tmdbIDs))
+	}
+
+	if len(exprs) > 0 {
+		query.Where(strings.Join(exprs, " OR "), args...)
+		err := query.Select()
+		if err == nil {
+			for _, info := range tmdbInfos {
+				isAnime := isTmdbInfoAnime(info)
+				if isAnime {
+					if info.ImdbID != nil {
+						for _, s := range videoToSeries[*info.ImdbID] {
+							s.IsAnime = true
+						}
+					}
+					tmdbVideoID := "tmdb" + strconv.Itoa(info.TmdbID)
+					for _, s := range videoToSeries[tmdbVideoID] {
+						s.IsAnime = true
+					}
+				}
+			}
+		}
+	}
 }
 
 func GetLibraryByNameAny(ctx context.Context, db *pg.DB, name string) (*Library, error) {

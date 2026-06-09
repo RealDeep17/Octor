@@ -96,7 +96,7 @@ func (s *Handler) index(c *gin.Context) {
 			_ = c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
-		tree := shared.BuildTorrentTree(list, args.IsAdmin, args.Sort)
+		tree := shared.BuildTorrentTree(c.Request.Context(), db, list, args.IsAdmin, args.Sort)
 		data.Items = make([]any, len(tree))
 		for i, v := range tree {
 			data.Items[i] = v

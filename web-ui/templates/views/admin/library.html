@@ -21,7 +21,7 @@
               Movies <span class="ml-0.5 text-[10px] opacity-70">{{ .Data.MovieCount }}</span>
             </a>
             <a class="btn btn-sm {{ if eq .Data.Args.Section "series" }}bg-o-purple/15 border-o-purple/30 text-o-purpleL{{ else }}btn-ghost border border-o-line text-o-sub hover:border-o-purple/30 hover:text-o-purpleL{{ end }}" href="{{ langPath $.Lang "/admin/library/series" }}{{ if .Data.SelectedUser }}?user={{ .Data.SelectedUser }}{{ end }}" data-async-target="main">
-              TV Series <span class="ml-0.5 text-[10px] opacity-70">{{ .Data.SeriesCount }}</span>
+              Series <span class="ml-0.5 text-[10px] opacity-70">{{ .Data.SeriesCount }}</span>
             </a>
             <a class="btn btn-sm {{ if eq .Data.Args.Section "adult" }}bg-o-purple/15 border-o-purple/30 text-o-purpleL{{ else }}btn-ghost border border-o-line text-o-sub hover:border-o-purple/30 hover:text-o-purpleL{{ end }}" href="{{ langPath $.Lang "/admin/library/adult" }}{{ if .Data.SelectedUser }}?user={{ .Data.SelectedUser }}{{ end }}" data-async-target="main">
               Adult <span class="ml-0.5 text-[10px] opacity-70">{{ .Data.AdultCount }}</span>
@@ -45,6 +45,13 @@
               <option value="all">All Types</option>
               <option value="porn">Porn</option>
               <option value="jav">JAV</option>
+          </select>
+          {{ end }}
+          {{ if eq .Data.Args.Section "series" }}
+          <select id="series-type-select" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-28 shrink-0">
+              <option value="all">All Types</option>
+              <option value="tv">TV Shows</option>
+              <option value="anime">Anime</option>
           </select>
           {{ end }}
           <select name="user" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full sm:w-64" onchange="this.form.requestSubmit()">
@@ -83,7 +90,8 @@
       <div class="dynamic-grid grid-flow-row-dense gap-4">
         {{ range .Data.Items }}
         <a href="{{ langPath $.Lang (.Content | getCardHref) }}?user={{ if $.Data.SelectedUser }}{{ $.Data.SelectedUser }}{{ else }}{{ .PrimaryUserID }}{{ end }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2"
-           data-adult-type="{{ if .Content | isAdultJAV }}jav{{ else }}porn{{ end }}">
+           data-adult-type="{{ if .Content | isAdultJAV }}jav{{ else }}porn{{ end }}"
+           data-series-type="{{ if .Content | isSeriesAnime }}anime{{ else }}tv{{ end }}">
           <div class="w-card-frame w-full">
             <input type="checkbox" id="toggle-{{ .ResourceID }}" class="layout-toggle-checkbox peer hidden"
                    data-video-type="{{ .Content | getVideoType }}"
@@ -199,40 +207,123 @@
     });
 
     const adultSelect = document.getElementById('adult-type-select');
+    const seriesSelect = document.getElementById('series-type-select');
 
     const filterItems = () => {
         const query = searchInput.value.trim().toLowerCase();
-        const items = document.querySelectorAll('.admin-library-item');
         const emptyState = document.getElementById('admin-library-search-empty');
         const adultType = adultSelect ? adultSelect.value : 'all';
+        const seriesType = seriesSelect ? seriesSelect.value : 'all';
         
         const torrentContainer = document.getElementById('admin-torrent-container');
         const cardContainer = document.querySelector('.grid[class*="grid-cols-"].gap-4');
         const activeContainer = torrentContainer || cardContainer;
         
         let visibleCount = 0;
+        const isTorrentSection = {{ if eq .Data.Args.Section "torrents" }}true{{ else }}false{{ end }};
 
-        items.forEach((item) => {
-            const nameEl = item.querySelector('.font-medium, .w-card-title');
-            const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
-            const matchesQuery = nameText.includes(query);
+        if (isTorrentSection && torrentContainer) {
+            const showAllDescendants = (container) => {
+                const children = container.children;
+                for (let i = 0; i < children.length; i++) {
+                    const child = children[i];
+                    child.classList.remove('hidden');
+                    if (child.classList.contains('admin-library-item')) {
+                        visibleCount++;
+                    }
+                    if (child.tagName.toLowerCase() === 'details') {
+                        const subContainer = child.querySelector('div');
+                        if (subContainer) {
+                            showAllDescendants(subContainer);
+                        }
+                    }
+                }
+            };
 
-            let matchesAdult = true;
-            if (adultType !== 'all') {
-                const itemAdultType = item.getAttribute('data-adult-type');
-                matchesAdult = (itemAdultType === adultType);
+            const filterTorrentNode = (node) => {
+                if (node.classList.contains('admin-library-item')) {
+                    const nameEl = node.querySelector('.font-medium, .w-card-title');
+                    const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
+                    const matches = nameText.includes(query);
+                    if (matches) {
+                        node.classList.remove('hidden');
+                        visibleCount++;
+                        return true;
+                    } else {
+                        node.classList.add('hidden');
+                        return false;
+                    }
+                }
+
+                if (node.tagName.toLowerCase() === 'details') {
+                    const summaryEl = node.querySelector('summary');
+                    const summaryText = summaryEl ? summaryEl.textContent.trim().toLowerCase() : '';
+                    const folderMatches = summaryText.includes(query);
+
+                    const childContainer = node.querySelector('div');
+                    let hasVisibleChild = false;
+                    if (childContainer) {
+                        const children = childContainer.children;
+                        for (let i = 0; i < children.length; i++) {
+                            const childMatches = filterTorrentNode(children[i]);
+                            if (childMatches) {
+                                hasVisibleChild = true;
+                            }
+                        }
+                    }
+
+                    if (folderMatches || hasVisibleChild) {
+                        node.classList.remove('hidden');
+                        if (folderMatches && childContainer) {
+                            showAllDescendants(childContainer);
+                        }
+                        return true;
+                    } else {
+                        node.classList.add('hidden');
+                        return false;
+                    }
+                }
+                return false;
+            };
+
+            const topLevelNodes = torrentContainer.children;
+            for (let i = 0; i < topLevelNodes.length; i++) {
+                filterTorrentNode(topLevelNodes[i]);
             }
+        } else {
+            const items = document.querySelectorAll('.admin-library-item');
+            items.forEach((item) => {
+                const nameEl = item.querySelector('.font-medium, .w-card-title');
+                const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
+                const matchesQuery = nameText.includes(query);
 
-            if (matchesQuery && matchesAdult) {
-                item.classList.remove('hidden');
-                visibleCount++;
-            } else {
-                item.classList.add('hidden');
-            }
-        });
+                let matchesAdult = true;
+                if (adultSelect && adultType !== 'all') {
+                    const itemAdultType = item.getAttribute('data-adult-type');
+                    matchesAdult = (itemAdultType === adultType);
+                }
+
+                let matchesSeries = true;
+                if (seriesSelect && seriesType !== 'all') {
+                    const itemSeriesType = item.getAttribute('data-series-type');
+                    matchesSeries = (itemSeriesType === seriesType);
+                }
+
+                if (matchesQuery && matchesAdult && matchesSeries) {
+                    item.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    item.classList.add('hidden');
+                }
+            });
+        }
 
         if (emptyState) {
-            if (visibleCount === 0 && items.length > 0) {
+            const totalItems = isTorrentSection
+                ? (torrentContainer ? torrentContainer.children.length : 0)
+                : document.querySelectorAll('.admin-library-item').length;
+
+            if (visibleCount === 0 && totalItems > 0) {
                 emptyState.classList.remove('hidden');
                 if (activeContainer) activeContainer.classList.add('hidden');
             } else {
@@ -245,6 +336,9 @@
     searchInput.addEventListener('input', filterItems);
     if (adultSelect) {
         adultSelect.addEventListener('change', filterItems);
+    }
+    if (seriesSelect) {
+        seriesSelect.addEventListener('change', filterItems);
     }
 
     if (searchInput.value) {

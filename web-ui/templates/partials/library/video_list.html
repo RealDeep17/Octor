@@ -5,7 +5,8 @@
 <div class="dynamic-grid grid-flow-row-dense gap-4">
     {{ range $.Data }}
     <a href="{{ langPath $.Ctx.Lang (. | getCardHref) }}" data-async-target="main" class="library-item group flex [&:has(input:checked)]:col-span-2"
-       data-adult-type="{{ if . | isAdultJAV }}jav{{ else }}porn{{ end }}">
+       data-adult-type="{{ if . | isAdultJAV }}jav{{ else }}porn{{ end }}"
+       data-series-type="{{ if . | isSeriesAnime }}anime{{ else }}tv{{ end }}">
         <div class="w-card-frame {{ if . | getUserWatched }}is-watched{{ end }} w-full">
             <input type="checkbox" id="toggle-{{ . | getResourceID }}" 
                    class="layout-toggle-checkbox peer hidden"

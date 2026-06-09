@@ -39,6 +39,13 @@
               <option value="jav">JAV</option>
           </select>
           {{ end }}
+          {{ if eq .Data.Args.Section "series" }}
+          <select id="series-type-select" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-28 shrink-0">
+              <option value="all">All Types</option>
+              <option value="tv">TV Shows</option>
+              <option value="anime">Anime</option>
+          </select>
+          {{ end }}
           <button type="submit" class="hidden">Submit</button>
         </form>
       </div>
@@ -90,36 +97,123 @@
     });
 
     const adultSelect = document.getElementById('adult-type-select');
+    const seriesSelect = document.getElementById('series-type-select');
 
     const filterItems = () => {
         const query = searchInput.value.trim().toLowerCase();
-        const items = document.querySelectorAll('.library-item');
         const emptyState = document.getElementById('library-search-empty');
         const contentContainer = document.getElementById('list');
         const adultType = adultSelect ? adultSelect.value : 'all';
+        const seriesType = seriesSelect ? seriesSelect.value : 'all';
         let visibleCount = 0;
 
-        items.forEach((item) => {
-            const nameEl = item.querySelector('.font-medium, .w-card-title');
-            const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
-            const matchesQuery = nameText.includes(query);
+        const isTorrentSection = {{ if eq .Data.Args.Section "torrents" }}true{{ else }}false{{ end }};
 
-            let matchesAdult = true;
-            if (adultType !== 'all') {
-                const itemAdultType = item.getAttribute('data-adult-type');
-                matchesAdult = (itemAdultType === adultType);
-            }
+        if (isTorrentSection && contentContainer) {
+            const torrentContainer = contentContainer.firstElementChild;
+            if (torrentContainer) {
+                const showAllDescendants = (container) => {
+                    const children = container.children;
+                    for (let i = 0; i < children.length; i++) {
+                        const child = children[i];
+                        child.classList.remove('hidden');
+                        if (child.classList.contains('library-item')) {
+                            visibleCount++;
+                        }
+                        if (child.tagName.toLowerCase() === 'details') {
+                            const subContainer = child.querySelector('div');
+                            if (subContainer) {
+                                showAllDescendants(subContainer);
+                            }
+                        }
+                    }
+                };
 
-            if (matchesQuery && matchesAdult) {
-                item.classList.remove('hidden');
-                visibleCount++;
-            } else {
-                item.classList.add('hidden');
+                const filterTorrentNode = (node) => {
+                    if (node.classList.contains('library-item')) {
+                        const nameEl = node.querySelector('.font-medium, .w-card-title');
+                        const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
+                        const matches = nameText.includes(query);
+                        if (matches) {
+                            node.classList.remove('hidden');
+                            visibleCount++;
+                            return true;
+                        } else {
+                            node.classList.add('hidden');
+                            return false;
+                        }
+                    }
+
+                    if (node.tagName.toLowerCase() === 'details') {
+                        const summaryEl = node.querySelector('summary');
+                        const summaryText = summaryEl ? summaryEl.textContent.trim().toLowerCase() : '';
+                        const folderMatches = summaryText.includes(query);
+
+                        const childContainer = node.querySelector('div');
+                        let hasVisibleChild = false;
+                        if (childContainer) {
+                            const children = childContainer.children;
+                            for (let i = 0; i < children.length; i++) {
+                                const childMatches = filterTorrentNode(children[i]);
+                                if (childMatches) {
+                                    hasVisibleChild = true;
+                                }
+                            }
+                        }
+
+                        if (folderMatches || hasVisibleChild) {
+                            node.classList.remove('hidden');
+                            if (folderMatches && childContainer) {
+                                showAllDescendants(childContainer);
+                            }
+                            return true;
+                        } else {
+                            node.classList.add('hidden');
+                            return false;
+                        }
+                    }
+                    return false;
+                };
+
+                const topLevelNodes = torrentContainer.children;
+                for (let i = 0; i < topLevelNodes.length; i++) {
+                    filterTorrentNode(topLevelNodes[i]);
+                }
             }
-        });
+        } else {
+            const items = document.querySelectorAll('.library-item');
+            items.forEach((item) => {
+                const nameEl = item.querySelector('.font-medium, .w-card-title');
+                const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
+                const matchesQuery = nameText.includes(query);
+
+                let matchesAdult = true;
+                if (adultSelect && adultType !== 'all') {
+                    const itemAdultType = item.getAttribute('data-adult-type');
+                    matchesAdult = (itemAdultType === adultType);
+                }
+
+                let matchesSeries = true;
+                if (seriesSelect && seriesType !== 'all') {
+                    const itemSeriesType = item.getAttribute('data-series-type');
+                    matchesSeries = (itemSeriesType === seriesType);
+                }
+
+                if (matchesQuery && matchesAdult && matchesSeries) {
+                    item.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    item.classList.add('hidden');
+                }
+            });
+        }
 
         if (emptyState) {
-            if (visibleCount === 0 && items.length > 0) {
+            const totalItems = isTorrentSection 
+                ? (contentContainer && contentContainer.firstElementChild ? contentContainer.firstElementChild.children.length : 0)
+                : document.querySelectorAll('.library-item').length;
+
+            if (visibleCount === 0 && totalItems > 0) {
                 emptyState.classList.remove('hidden');
                 if (contentContainer) contentContainer.classList.add('hidden');
             } else {
@@ -132,6 +226,9 @@
     searchInput.addEventListener('input', filterItems);
     if (adultSelect) {
         adultSelect.addEventListener('change', filterItems);
+    }
+    if (seriesSelect) {
+        seriesSelect.addEventListener('change', filterItems);
     }
 
     if (searchInput.value) {

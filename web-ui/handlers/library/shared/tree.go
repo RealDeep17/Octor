@@ -1,11 +1,13 @@
 package shared
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/go-pg/pg/v10"
 	"github.com/webtor-io/web-ui/models"
 )
 
@@ -116,7 +118,16 @@ func GetTorrentCategory(lib *models.Library) (category string, groupKey string, 
 	return "other", "", ""
 }
 
-func BuildTorrentTree(list []*models.Library, isAdmin bool, sortType models.SortType) []*TorrentNode {
+func BuildTorrentTree(ctx context.Context, db *pg.DB, list []*models.Library, isAdmin bool, sortType models.SortType) []*TorrentNode {
+	// Populate series anime flags
+	var seriesSlice []*models.Series
+	for _, lib := range list {
+		if lib.MediaInfo != nil {
+			seriesSlice = append(seriesSlice, lib.MediaInfo.SeriesList...)
+		}
+	}
+	models.PopulateSeriesAnimeFlags(ctx, db, seriesSlice)
+
 	movieGroups := make(map[string][]*models.Library)
 	movieGroupNames := make(map[string]string)
 	var movieGroupOrder []string
@@ -186,16 +197,24 @@ func BuildTorrentTree(list []*models.Library, isAdmin bool, sortType models.Sort
 		}
 	}
 
-	var seriesChildren []*TorrentNode
+	var tvShowsChildren []*TorrentNode
+	var animeChildren []*TorrentNode
+
 	for _, key := range seriesGroupOrder {
 		libs := seriesGroups[key]
+		isAnime := false
+		if len(libs) > 0 && libs[0].MediaInfo != nil && len(libs[0].MediaInfo.SeriesList) > 0 {
+			isAnime = libs[0].MediaInfo.SeriesList[0].IsAnime
+		}
+
+		var node *TorrentNode
 		if len(libs) == 1 {
-			seriesChildren = append(seriesChildren, &TorrentNode{
+			node = &TorrentNode{
 				Name:     seriesGroupNames[key],
 				Type:     "item",
 				Category: "series",
 				Item:     libs[0],
-			})
+			}
 		} else {
 			var subChildren []*TorrentNode
 			for _, lib := range libs {
@@ -206,12 +225,18 @@ func BuildTorrentTree(list []*models.Library, isAdmin bool, sortType models.Sort
 					Item:     lib,
 				})
 			}
-			seriesChildren = append(seriesChildren, &TorrentNode{
+			node = &TorrentNode{
 				Name:     seriesGroupNames[key],
 				Type:     "folder",
 				Category: "series",
 				Children: subChildren,
-			})
+			}
+		}
+
+		if isAnime {
+			animeChildren = append(animeChildren, node)
+		} else {
+			tvShowsChildren = append(tvShowsChildren, node)
 		}
 	}
 
@@ -262,9 +287,28 @@ func BuildTorrentTree(list []*models.Library, isAdmin bool, sortType models.Sort
 	}
 
 	sortNodes(movieChildren, sortType)
-	sortNodes(seriesChildren, sortType)
+	sortNodes(tvShowsChildren, sortType)
+	sortNodes(animeChildren, sortType)
 	sortNodes(adultChildren, sortType)
 	sortNodes(otherChildren, sortType)
+
+	var tvSeriesChildren []*TorrentNode
+	if len(tvShowsChildren) > 0 {
+		tvSeriesChildren = append(tvSeriesChildren, &TorrentNode{
+			Name:     "TV Shows",
+			Type:     "folder",
+			Category: "series",
+			Children: tvShowsChildren,
+		})
+	}
+	if len(animeChildren) > 0 {
+		tvSeriesChildren = append(tvSeriesChildren, &TorrentNode{
+			Name:     "Anime",
+			Type:     "folder",
+			Category: "series",
+			Children: animeChildren,
+		})
+	}
 
 	var rootNodes []*TorrentNode
 	if len(movieChildren) > 0 {
@@ -275,12 +319,12 @@ func BuildTorrentTree(list []*models.Library, isAdmin bool, sortType models.Sort
 			Children: movieChildren,
 		})
 	}
-	if len(seriesChildren) > 0 {
+	if len(tvSeriesChildren) > 0 {
 		rootNodes = append(rootNodes, &TorrentNode{
-			Name:     "TV Series",
+			Name:     "Series",
 			Type:     "folder",
 			Category: "series",
-			Children: seriesChildren,
+			Children: tvSeriesChildren,
 		})
 	}
 	if isAdmin && len(adultChildren) > 0 {

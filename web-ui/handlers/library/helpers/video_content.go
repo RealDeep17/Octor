@@ -305,3 +305,13 @@ func (s *VideoContentHelper) IsAdultJAV(m models.VideoContentWithMetadata) bool 
 	}
 	return false
 }
+
+func (s *VideoContentHelper) IsSeriesAnime(m models.VideoContentWithMetadata) bool {
+	if m == nil {
+		return false
+	}
+	if ser, ok := m.(*models.Series); ok {
+		return ser.IsAnime
+	}
+	return false
+}

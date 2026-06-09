@@ -23,6 +23,7 @@ type Series struct {
 	UserWatched      bool   `pg:"-"`
 	UserRating       *int16 `pg:"-"`
 	UserPosterLayout string `pg:"-"`
+	IsAnime          bool   `pg:"-"`
 
 	Episodes       []*Episode      `pg:"rel:has-many,fk:series_id"`
 	MediaInfo      *MediaInfo      `pg:"rel:has-one,fk:resource_id"`
