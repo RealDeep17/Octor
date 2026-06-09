@@ -118,13 +118,18 @@
               <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" class="text-sm font-medium text-base-content hover:text-o-primaryL transition-colors truncate block" data-async-target="main">
                 {{ .Resource.Name }}
               </a>
+              <div class="flex items-center gap-2 mt-0.5 text-xs text-o-muted min-w-0">
+                <span>{{ printf "%.2f" .Amount }} GB</span>
+                <span>·</span>
+                <span>{{ timeAgoLang $.Lang .CreatedAt }}</span>
+              </div>
               {{/* Sub-line: live stats when downloading */}}
               {{ if .ShowProgress }}
-              <div class="flex items-center gap-3 mt-0.5 text-xs text-o-muted" data-vault-stats-line>
-                <span data-vault-stat-speed class="hidden"></span>
-                <span data-vault-stat-size class="hidden"></span>
-                <span data-vault-stat-eta class="hidden"></span>
-                <span data-vault-stat-peers class="hidden"></span>
+              <div class="flex items-center gap-3 mt-1 text-xs text-o-muted hidden" data-vault-stats-line>
+                <span data-vault-stat-speed class="hidden text-o-cyan font-medium"></span>
+                <span data-vault-stat-size class="hidden text-o-sub"></span>
+                <span data-vault-stat-eta class="hidden text-o-purpleL font-medium"></span>
+                <span data-vault-stat-peers class="hidden text-o-cyan"></span>
               </div>
               {{ end }}
             </div>
@@ -135,9 +140,18 @@
                 <span class="badge badge-sm bg-o-primary/10 border-o-primary/30 text-o-primaryL">Expiring</span>
               {{ else if .ShowProgress }}
                 <span data-vault-progress-badge>
-                  <span class="badge badge-sm bg-o-cyan/10 border-o-cyan/30 text-o-cyan gap-1.5">
-                    <span class="loading loading-dots loading-xs"></span>
-                  </span>
+                  {{ if .WorkerStatus }}
+                    <div class="flex flex-col items-end gap-1">
+                      <span class="badge badge-sm bg-o-cyan/10 border-o-cyan/30 text-o-cyan font-semibold animate-pulse">
+                        Vaulting {{ printf "%.1f" .WorkerStatus.GetProgress }}%
+                      </span>
+                      <div class="text-[10px] text-o-muted tabular-nums">{{ .WorkerStatus.StoredSize | bitsForHumans }} / {{ .WorkerStatus.TotalSize | bitsForHumans }}</div>
+                    </div>
+                  {{ else }}
+                    <span class="badge badge-sm bg-o-cyan/10 border-o-cyan/30 text-o-cyan gap-1.5">
+                      <span class="loading loading-dots loading-xs"></span>
+                    </span>
+                  {{ end }}
                 </span>
               {{ else if .Resource.Vaulted }}
                 {{ if gt (len .Resource.SelectedFiles) 0 }}

@@ -311,8 +311,9 @@ func (s *Vault) UpdateUserVPIfExists(ctx context.Context, user *auth.User) (*vau
 // IsPledgeFrozen is mildly expensive and used both for stats counting and
 // per-row badge rendering, so we compute it once and pass it on.
 type EnrichedPledge struct {
-	Pledge   vaultModels.Pledge
-	IsFrozen bool
+	Pledge       vaultModels.Pledge
+	IsFrozen     bool
+	WorkerStatus *Resource
 }
 
 // UserStats represents user vault points statistics
@@ -370,7 +371,7 @@ func (s *Vault) GetUserStats(ctx context.Context, user *auth.User) (*UserStats, 
 			continue
 		}
 
-		enriched = append(enriched, EnrichedPledge{Pledge: pledge, IsFrozen: isFrozen})
+		item := EnrichedPledge{Pledge: pledge, IsFrozen: isFrozen}
 
 		// Frozen: sum of pledges that are frozen AND funded
 		if isFrozen && pledge.Funded {
@@ -397,8 +398,15 @@ func (s *Vault) GetUserStats(ctx context.Context, user *auth.User) (*UserStats, 
 				stats.VaultedCount++
 			case pledge.Resource.Funded:
 				stats.LoadingCount++
+				// Fetch worker status for funded but not yet vaulted resources
+				status, err := s.GetVaultAPIResource(ctx, pledge.ResourceID)
+				if err == nil && status != nil {
+					item.WorkerStatus = status
+				}
 			}
 		}
+
+		enriched = append(enriched, item)
 	}
 
 	// Ensure Funded is never negative

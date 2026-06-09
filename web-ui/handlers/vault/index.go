@@ -94,9 +94,10 @@ func buildPledgeDisplay(enriched []vault.EnrichedPledge, expirePeriod time.Durat
 			Amount:       e.Pledge.Amount,
 			IsFrozen:     e.IsFrozen,
 			Funded:       e.Pledge.Funded,
-			CreatedAt:    e.Pledge.CreatedAt.Format("2006-01-02 15:04:05"),
+			CreatedAt:    e.Pledge.CreatedAt,
 			ExpiresIn:    expiresIn,
 			ShowProgress: showProgress,
+			WorkerStatus: e.WorkerStatus,
 		})
 	}
 	return display
