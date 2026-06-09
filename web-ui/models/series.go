@@ -169,14 +169,17 @@ func GetSeriesByVideoID(ctx context.Context, db *pg.DB, uID uuid.UUID, videoID s
 		Context(ctx).
 		Join("left join series_metadata as smd").
 		JoinOn("series.series_metadata_id = smd.series_metadata_id").
-		Join("join library as l").
-		JoinOn("series.resource_id = l.resource_id").
 		Where("smd.video_id = ?", videoID).
 		Relation("SeriesMetadata").
 		Relation("Episodes.EpisodeMetadata")
 
 	if uID != uuid.Nil {
-		query.Where("l.user_id = ?", uID)
+		query.Join("join library as l").
+			JoinOn("series.resource_id = l.resource_id").
+			Where("l.user_id = ?", uID)
+	} else {
+		query.Join("join (select distinct resource_id from library) as l").
+			JoinOn("series.resource_id = l.resource_id")
 	}
 
 	err := query.Select()
