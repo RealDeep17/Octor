@@ -9,7 +9,7 @@ import (
 
 func configure(app *cli.App) {
 	app.Flags = []cli.Flag{}
-	cs.RegisterProbeFlags(app)
+	app.Flags = cs.RegisterProbeFlags(app.Flags)
 	s.RegisterWebFlags(app)
 	app.Action = run
 }

@@ -704,18 +704,91 @@ func (h *Handler) loadSeriesItems(ctx context.Context, db *pg.DB, userID *uuid.U
 	if err != nil {
 		return nil, err
 	}
-	list = models.MergeSeriesByVideoID(list)
-	ids := make([]string, 0, len(list))
+
+	// 1. Collect all ResourceIDs from the unmerged list to fetch their owner summaries.
+	allResourceIDs := make([]string, 0, len(list))
 	for _, item := range list {
-		ids = append(ids, item.ResourceID)
+		allResourceIDs = append(allResourceIDs, item.ResourceID)
 	}
-	owners, err := h.loadOwnerSummaries(ctx, db, ids, userID)
+	ownersByResource, err := h.loadOwnerSummaries(ctx, db, allResourceIDs, userID)
 	if err != nil {
 		return nil, err
 	}
-	items := make([]any, 0, len(list))
-	for _, item := range list {
-		items = append(items, h.videoItem(item, item.ResourceID, item.CreatedAt, owners[item.ResourceID]))
+
+	// 2. Merge the series list by VideoID.
+	mergedList := models.MergeSeriesByVideoID(list)
+
+	// 3. Aggregate owner summaries for each merged series by its VideoID (or ResourceID if VideoID is absent).
+	ownersByGroup := map[string]*AdminVideoItem{}
+	for _, item := range list { // Loop through the unmerged list
+		var groupKey string
+		if item.SeriesMetadata != nil && item.SeriesMetadata.VideoID != "" {
+			groupKey = item.SeriesMetadata.VideoID
+		} else {
+			groupKey = item.ResourceID
+		}
+
+		owner := ownersByResource[item.ResourceID]
+		if owner == nil {
+			continue
+		}
+
+		agg := ownersByGroup[groupKey]
+		if agg == nil {
+			// Initialize aggregated owner summary
+			agg = &AdminVideoItem{
+				ResourceID:    item.ResourceID, // Keep the representative ResourceID
+				PrimaryEmail:  owner.PrimaryEmail,
+				PrimaryUserID: owner.PrimaryUserID,
+				OwnerIDs:      append([]uuid.UUID(nil), owner.OwnerIDs...),
+				OwnerEmails:   append([]string(nil), owner.OwnerEmails...),
+			}
+			ownersByGroup[groupKey] = agg
+		} else {
+			// Merge unique OwnerIDs
+			for _, uid := range owner.OwnerIDs {
+				found := false
+				for _, existing := range agg.OwnerIDs {
+					if existing == uid {
+						found = true
+						break
+					}
+				}
+				if !found {
+					agg.OwnerIDs = append(agg.OwnerIDs, uid)
+				}
+			}
+			// Merge unique OwnerEmails
+			for _, email := range owner.OwnerEmails {
+				found := false
+				for _, existing := range agg.OwnerEmails {
+					if existing == email {
+						found = true
+						break
+					}
+				}
+				if !found {
+					agg.OwnerEmails = append(agg.OwnerEmails, email)
+				}
+			}
+		}
+	}
+
+	// Update OwnerCount based on the unique user IDs
+	for _, agg := range ownersByGroup {
+		agg.OwnerCount = len(agg.OwnerIDs)
+	}
+
+	// 4. Construct the items for display using the aggregated owners map.
+	items := make([]any, 0, len(mergedList))
+	for _, item := range mergedList {
+		var groupKey string
+		if item.SeriesMetadata != nil && item.SeriesMetadata.VideoID != "" {
+			groupKey = item.SeriesMetadata.VideoID
+		} else {
+			groupKey = item.ResourceID
+		}
+		items = append(items, h.videoItem(item, item.ResourceID, item.CreatedAt, ownersByGroup[groupKey]))
 	}
 	return items, nil
 }
