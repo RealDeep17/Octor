@@ -73,9 +73,19 @@ func (h *Handler) get(c *gin.Context) {
 	}
 
 	targetUserID := user.ID
-	if (auth.IsAdmin(c) || h.admin.IsAdminUser(user)) && c.Query("user") != "" {
-		if parsedID, err := uuid.FromString(c.Query("user")); err == nil {
-			targetUserID = parsedID
+	isOmni := false
+	isAdmin := auth.IsAdmin(c) || h.admin.IsAdminUser(user)
+	if isAdmin {
+		if c.Query("user") != "" {
+			if c.Query("user") == "all" || c.Query("user") == "omni" {
+				targetUserID = uuid.Nil
+				isOmni = true
+			} else if parsedID, err := uuid.FromString(c.Query("user")); err == nil {
+				targetUserID = parsedID
+			}
+		} else {
+			targetUserID = uuid.Nil
+			isOmni = true
 		}
 	}
 
@@ -106,7 +116,11 @@ func (h *Handler) get(c *gin.Context) {
 
 	// Fetch user's layout preference for poster aspect ratio
 	layoutPref := ""
-	status, err := models.GetSeriesStatus(c.Request.Context(), db, targetUserID, videoID)
+	statusUserID := targetUserID
+	if isOmni {
+		statusUserID = user.ID
+	}
+	status, err := models.GetSeriesStatus(c.Request.Context(), db, statusUserID, videoID)
 	if err == nil && status != nil && status.PosterLayout != "" {
 		layoutPref = status.PosterLayout
 	}
@@ -114,8 +128,13 @@ func (h *Handler) get(c *gin.Context) {
 	// Find the most recently watched episode from watch history
 	var history []*models.WatchHistory
 	if len(resourceIDs) > 0 {
-		_ = db.Model(&history).
-			Where("user_id = ?", targetUserID).
+		historyQuery := db.Model(&history)
+		if !isOmni {
+			historyQuery.Where("user_id = ?", targetUserID)
+		} else {
+			historyQuery.Where("user_id = ?", user.ID)
+		}
+		_ = historyQuery.
 			Where("resource_id IN (?)", pg.In(resourceIDs)).
 			Order("updated_at DESC").
 			Limit(1).
