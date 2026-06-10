@@ -253,8 +253,26 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 				filePath = *e.Path
 			}
 
-			// Map to virtual season if it's Season 0
-			sea = detectVirtualSeason(filePath, sea)
+			// Sanity cap: parsers sometimes mis-read bare episode numbers
+			// (e.g. "- 03 [BD].mkv") as a season value, producing fake seasons
+			// like 61, 89, 91 (Ascendance of a Bookworm). Any season > 100 is
+			// clearly an artifact — treat it as unclassified (sea=0) so the
+			// episode falls through to path-keyword detection or Specials.
+			if sea > 100 {
+				sea = 0
+			}
+
+			// Virtual-season reclassification: only skip when this episode has
+			// a definitive S×E pair (both season AND episode > 0). If either is
+			// missing, the file may be an OVA, Movie, Extra, Featurette, or
+			// Opening/Ending identifiable by its path keywords.
+			//   sea=3,ep=15  → guard false → stays Season 3 (Community S03E15)
+			//   sea=2,ep=0   → guard true  → finds "endings" → 1004 (Code Geass NCOP)
+			//   sea=0,ep=1   → guard true  → finds "ova"     → 1001 (Code Geass OVA04)
+			//   sea=9,ep=0   → guard true  → finds "featurette" → 1003 (Peaky Blinders)
+			if !(sea > 0 && epNum > 0) {
+				sea = detectVirtualSeason(filePath, sea)
+			}
 
 			if sea < 1000 {
 				if _, ok := occupied[sea]; !ok {
@@ -303,26 +321,30 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 		}
 	}
 
-	// Assign unique episode numbers to avoid collisions within the same torrent (normal seasons only)
+	// Assign sequential episode numbers ONLY to episodes that have no episode
+	// number from the DB (epNum==0). Episodes that already have a parsed
+	// episode number keep it even if another file from the same torrent shares
+	// the same S×E — they will be grouped together in the same EpisodeGroup
+	// as multiple torrent options (e.g. regular episode + deleted scene both
+	// labelled S02E01 from the same pack appear as two choices for EP2).
 	type resEpKey struct {
 		resourceID string
 		sea        int
 		epNum      int
 	}
-	assignedKeys := map[resEpKey]bool{}
+	assignedNulls := map[resEpKey]bool{}
 	for i, t := range normalTemps {
 		sea := t.sea
 		epNum := t.epNum
-		key := resEpKey{t.resourceID, sea, epNum}
-		if epNum == 0 || assignedKeys[key] {
+		if epNum == 0 {
+			// No episode number — find the next free slot for this torrent+season.
 			nextEp := 1
-			for occupied[sea][nextEp] || assignedKeys[resEpKey{t.resourceID, sea, nextEp}] {
+			for occupied[sea][nextEp] || assignedNulls[resEpKey{t.resourceID, sea, nextEp}] {
 				nextEp++
 			}
 			epNum = nextEp
-			key = resEpKey{t.resourceID, sea, epNum}
+			assignedNulls[resEpKey{t.resourceID, sea, epNum}] = true
 		}
-		assignedKeys[key] = true
 		normalTemps[i].epNum = epNum
 	}
 
@@ -389,8 +411,17 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 	}
 
 	sort.Slice(epOrder, func(i, j int) bool {
-		if epOrder[i].season != epOrder[j].season {
-			return epOrder[i].season < epOrder[j].season
+		si, sj := epOrder[i].season, epOrder[j].season
+		// Season 0 (Specials/S00) should appear after all real seasons but
+		// before virtual seasons (1001+). Map it to 999 for sorting purposes.
+		if si == 0 {
+			si = 999
+		}
+		if sj == 0 {
+			sj = 999
+		}
+		if si != sj {
+			return si < sj
 		}
 		return epOrder[i].episode < epOrder[j].episode
 	})
@@ -401,12 +432,22 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 	for _, key := range epOrder {
 		entries := epMap[key]
 
+		// Sort entries within the group by file size descending so the
+		// largest file (the real episode) is always first. Deleted scenes,
+		// extras, and other supplemental files are typically much smaller
+		// and will appear below the primary episode in the torrent list.
+		// The first entry also determines the episode title and thumbnail.
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].size > entries[j].size
+		})
+
 		epTitle := ""
 		stillURL := ""
 		if len(entries) > 0 {
 			epTitle = entries[0].epTitle
 			stillURL = entries[0].stillURL
 		}
+
 
 		torrents := make([]EpisodeTorrent, 0, len(entries))
 		for _, e := range entries {
@@ -451,24 +492,13 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 			})
 		}
 
-		var shortLabel, longLabel string
-		switch key.season {
-		case 1001:
-			shortLabel = fmt.Sprintf("OVA %d", key.episode)
-			longLabel = fmt.Sprintf("OVA %d", key.episode)
-		case 1002:
-			shortLabel = fmt.Sprintf("Movie %d", key.episode)
-			longLabel = fmt.Sprintf("Movie %d", key.episode)
-		case 1003:
-			shortLabel = fmt.Sprintf("Extra %d", key.episode)
-			longLabel = fmt.Sprintf("Extra %d", key.episode)
-		case 1004:
-			shortLabel = fmt.Sprintf("Clip %d", key.episode)
-			longLabel = fmt.Sprintf("Clip %d", key.episode)
-		default:
-			shortLabel = fmt.Sprintf("EP%d", key.episode)
-			longLabel = fmt.Sprintf("Episode %d", key.episode)
+		// Derive label using smart filename detection for virtual seasons,
+		// so "Extra 1" becomes "Blooper 1" or "Making Of 1" etc.
+		var firstPath string
+		if len(entries) > 0 {
+			_, firstPath = splitPath(entries[0].path)
 		}
+		shortLabel, longLabel := virtualEpLabel(key.season, key.episode, firstPath)
 
 		eg := EpisodeGroup{
 			Season:     key.season,
@@ -523,6 +553,15 @@ func splitPath(p string) (folder, file string) {
 	return "", p
 }
 
+// detectVirtualSeason inspects a file path for virtual-season keywords and
+// returns the appropriate virtual season number (1001–1004), or defaultSeason
+// if no keyword matches. Pass the episode's current sea value as defaultSeason
+// so that e.g. a Season-2 NCOP with no keyword returns 2 (stays in Season 2)
+// rather than 0 (Specials).
+//
+// Called ONLY when the episode is missing at least one of season or episode
+// from the DB (i.e. !(sea>0 && epNum>0)). Real S×E episodes are never passed
+// here and therefore never reclassified.
 func detectVirtualSeason(filePath string, defaultSeason int) int {
 	if filePath == "" {
 		return defaultSeason
@@ -530,44 +569,132 @@ func detectVirtualSeason(filePath string, defaultSeason int) int {
 	lower := strings.ToLower(filePath)
 	parts := strings.Split(lower, "/")
 
-	// Skip the root torrent directory prefix (e.g. /[Judas] Code Geass ... (Movies + OVAs))
-	// to prevent matching keyword tokens in the torrent name itself.
+	// Skip the torrent root directory (first non-empty segment) to prevent
+	// matching keywords embedded in the torrent pack name itself
+	// (e.g. "[Judas] Code Geass (Seasons 1-2 + Movies + OVAs)" contains
+	// "ova" and "movie" but those refer to the pack, not to individual files).
 	startIndex := 0
 	if len(parts) > 0 && parts[0] == "" {
-		startIndex = 2 // Skip the leading empty string and the torrent root directory
+		startIndex = 2 // leading-slash path: skip empty token + root dir
 	} else {
-		startIndex = 1 // Skip the torrent root directory
+		startIndex = 1 // no leading slash: skip root dir
 	}
 
-	for i := startIndex; i < len(parts)-1; i++ {
-		part := parts[i]
+	match := func(part string) int {
 		if strings.Contains(part, "ova") {
 			return 1001
 		}
 		if strings.Contains(part, "movie") {
 			return 1002
 		}
-		if strings.Contains(part, "extra") {
+		if strings.Contains(part, "extra") || strings.Contains(part, "featurette") {
 			return 1003
 		}
-		if strings.Contains(part, "opening") || strings.Contains(part, "ending") || strings.Contains(part, "ncop") || strings.Contains(part, "nced") {
+		if strings.Contains(part, "opening") || strings.Contains(part, "ending") ||
+			strings.Contains(part, "ncop") || strings.Contains(part, "nced") {
 			return 1004
 		}
+		return 0
 	}
-	filename := parts[len(parts)-1]
-	if strings.Contains(filename, "ova") {
-		return 1001
+
+	// Check intermediate directory components (between root dir and filename)
+	for i := startIndex; i < len(parts)-1; i++ {
+		if v := match(parts[i]); v != 0 {
+			return v
+		}
 	}
-	if strings.Contains(filename, "movie") {
-		return 1002
-	}
-	if strings.Contains(filename, "extra") {
-		return 1003
-	}
-	if strings.Contains(filename, "opening") || strings.Contains(filename, "ending") || strings.Contains(filename, "ncop") || strings.Contains(filename, "nced") {
-		return 1004
+	// Fall back to filename
+	if len(parts) > 0 {
+		if v := match(parts[len(parts)-1]); v != 0 {
+			return v
+		}
 	}
 	return defaultSeason
+}
+
+// virtualEpLabel returns the short and long display labels for a virtual-season
+// episode. Instead of always showing "Extra 1", "Extra 2" etc., it inspects
+// the base filename to pick a more descriptive prefix:
+//
+//	"blooper"          → "Blooper N"
+//	"making of"        → "Making Of N"
+//	"behind the scene" → "BTS N"
+//	"featurette"       → "Featurette N"
+//	"interview"        → "Interview N"
+//	"promo"            → "Promo N"
+//	"ncop"             → "NCOP N"
+//	"nced"             → "NCED N"
+//	"special"          → "Special N"  (OVA group)
+//	otherwise          → season-default (OVA N / Movie N / Extra N / Clip N / EP N)
+func virtualEpLabel(season, epNum int, filename string) (short, long string) {
+	f := strings.ToLower(filename)
+
+	if season == 1003 {
+		// Extras: try to pick a descriptive sub-type from the filename
+		switch {
+		case strings.Contains(f, "blooper"):
+			short = fmt.Sprintf("Blooper %d", epNum)
+			long = fmt.Sprintf("Blooper %d", epNum)
+		case strings.Contains(f, "making of") || strings.Contains(f, "making-of"):
+			short = fmt.Sprintf("Making Of %d", epNum)
+			long = fmt.Sprintf("Making Of %d", epNum)
+		case strings.Contains(f, "behind the scene") || strings.Contains(f, "behind-the-scene"):
+			short = fmt.Sprintf("BTS %d", epNum)
+			long = fmt.Sprintf("Behind the Scenes %d", epNum)
+		case strings.Contains(f, "featurette"):
+			short = fmt.Sprintf("Feat %d", epNum)
+			long = fmt.Sprintf("Featurette %d", epNum)
+		case strings.Contains(f, "interview"):
+			short = fmt.Sprintf("Intv %d", epNum)
+			long = fmt.Sprintf("Interview %d", epNum)
+		case strings.Contains(f, "promo"):
+			short = fmt.Sprintf("Promo %d", epNum)
+			long = fmt.Sprintf("Promo %d", epNum)
+		default:
+			short = fmt.Sprintf("Extra %d", epNum)
+			long = fmt.Sprintf("Extra %d", epNum)
+		}
+		return
+	}
+
+	if season == 1004 {
+		switch {
+		case strings.Contains(f, "ncop"):
+			short = fmt.Sprintf("NCOP %d", epNum)
+			long = fmt.Sprintf("NCOP %d", epNum)
+		case strings.Contains(f, "nced"):
+			short = fmt.Sprintf("NCED %d", epNum)
+			long = fmt.Sprintf("NCED %d", epNum)
+		case strings.Contains(f, "opening"):
+			short = fmt.Sprintf("OP %d", epNum)
+			long = fmt.Sprintf("Opening %d", epNum)
+		case strings.Contains(f, "ending"):
+			short = fmt.Sprintf("ED %d", epNum)
+			long = fmt.Sprintf("Ending %d", epNum)
+		default:
+			short = fmt.Sprintf("Clip %d", epNum)
+			long = fmt.Sprintf("Clip %d", epNum)
+		}
+		return
+	}
+
+	switch season {
+	case 1001:
+		if strings.Contains(f, "special") {
+			short = fmt.Sprintf("Special %d", epNum)
+			long = fmt.Sprintf("Special %d", epNum)
+		} else {
+			short = fmt.Sprintf("OVA %d", epNum)
+			long = fmt.Sprintf("OVA %d", epNum)
+		}
+	case 1002:
+		short = fmt.Sprintf("Movie %d", epNum)
+		long = fmt.Sprintf("Movie %d", epNum)
+	default:
+		short = fmt.Sprintf("EP%d", epNum)
+		long = fmt.Sprintf("Episode %d", epNum)
+	}
+	return
 }
 
 func getSeasonName(season int) string {
