@@ -48,6 +48,21 @@ func GetAllResources(ctx context.Context, db *pg.DB) ([]*TorrentResource, error)
 	return resources, nil
 }
 
+func GetActiveResources(ctx context.Context, db *pg.DB) ([]*TorrentResource, error) {
+	var resources []*TorrentResource
+
+	err := db.Model(&resources).
+		Context(ctx).
+		Where("EXISTS (SELECT 1 FROM library WHERE library.resource_id = torrent_resource.resource_id) OR EXISTS (SELECT 1 FROM vault.pledge WHERE pledge.resource_id = torrent_resource.resource_id)").
+		Select()
+
+	if err != nil {
+		return nil, err
+	}
+	return resources, nil
+}
+
+
 func GetErrorResources(ctx context.Context, db *pg.DB) ([]*TorrentResource, error) {
 	var resources []*TorrentResource
 
@@ -134,3 +149,33 @@ func GetStaleOrMissingMetadataResourceIDs(ctx context.Context, db *pg.DB, staleT
 	)
 	return ids, err
 }
+
+func PruneOneTimers(ctx context.Context, db *pg.DB, olderThan time.Duration) (int64, error) {
+	cutoff := time.Now().Add(-olderThan)
+
+	// Delete from torrent_resource first (where created_at < cutoff, and resource_id not in library/pledge)
+	res1, err := db.Model((*TorrentResource)(nil)).
+		Context(ctx).
+		Where("created_at < ?", cutoff).
+		Where("NOT EXISTS (SELECT 1 FROM library WHERE library.resource_id = torrent_resource.resource_id)").
+		Where("NOT EXISTS (SELECT 1 FROM vault.pledge WHERE pledge.resource_id = torrent_resource.resource_id)").
+		Delete()
+	if err != nil {
+		return 0, err
+	}
+
+	// Delete from media_info (where created_at < cutoff, and resource_id not in library/pledge)
+	// Deleting from media_info cascades to movie, series, episode
+	res2, err := db.Model((*MediaInfo)(nil)).
+		Context(ctx).
+		Where("created_at < ?", cutoff).
+		Where("NOT EXISTS (SELECT 1 FROM library WHERE library.resource_id = media_info.resource_id)").
+		Where("NOT EXISTS (SELECT 1 FROM vault.pledge WHERE pledge.resource_id = media_info.resource_id)").
+		Delete()
+	if err != nil {
+		return int64(res1.RowsAffected()), err
+	}
+
+	return int64(res1.RowsAffected() + res2.RowsAffected()), nil
+}
+

@@ -105,3 +105,41 @@ func TestList_sortItems_SizeTieBreaker(t *testing.T) {
 	assert.Equal(t, "apple.txt", items[0].Name)
 	assert.Equal(t, "zebra.txt", items[1].Name)
 }
+
+func TestList_BuildTree_UnsortedFiles(t *testing.T) {
+	l := NewList()
+
+	r := &Resource{
+		ID:   "dummy",
+		Name: "dummy",
+		Files: []*File{
+			{Path: []string{"dummy", "01. Season 1 + Special", "file1.mkv"}, Size: 100},
+			{Path: []string{"dummy", "02. OVA", "file2.mkv"}, Size: 200},
+			{Path: []string{"dummy", "01. Season 1 + Special", "file3.mkv"}, Size: 300},
+		},
+	}
+
+	args := &ListGetArgs{
+		Output: ListOutputTypeTree,
+		Path:   []string{"dummy"},
+		Sort:   ListSortTypeName,
+	}
+
+	resp, err := l.Get(r, args)
+	assert.NoError(t, err)
+
+	// We expect two directories: "01. Season 1 + Special" and "02. OVA"
+	// "01. Season 1 + Special" should have Size: 400 (100 + 300)
+	// "02. OVA" should have Size: 200
+	assert.Equal(t, 2, len(resp.Items))
+
+	// Under SortTypeName, "01. Season 1 + Special" comes first, then "02. OVA"
+	assert.Equal(t, "01. Season 1 + Special", resp.Items[0].Name)
+	assert.Equal(t, int64(400), resp.Items[0].Size)
+	assert.Equal(t, ListTypeDirectory, resp.Items[0].Type)
+
+	assert.Equal(t, "02. OVA", resp.Items[1].Name)
+	assert.Equal(t, int64(200), resp.Items[1].Size)
+	assert.Equal(t, ListTypeDirectory, resp.Items[1].Type)
+}
+

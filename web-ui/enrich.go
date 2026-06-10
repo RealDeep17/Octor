@@ -36,7 +36,11 @@ func configureEnrich(c *cli.Command) {
 	runCmd.Flags = append(runCmd.Flags,
 		cli.BoolFlag{
 			Name:  "force",
-			Usage: "force enrichment",
+			Usage: "force enrichment (active library & vault resources)",
+		},
+		cli.BoolFlag{
+			Name:  "force-everything",
+			Usage: "force enrichment of absolutely all resources in database",
 		},
 		cli.BoolFlag{
 			Name:  "force-error",
@@ -141,6 +145,7 @@ func enrichPopular(c *cli.Context) error {
 
 func enrich(c *cli.Context) error {
 	force := c.Bool("force")
+	forceEverything := c.Bool("force-everything")
 	forceError := c.Bool("force-error")
 	if forceError {
 		force = true
@@ -190,8 +195,10 @@ func enrich(c *cli.Context) error {
 	} else {
 		if forceError {
 			resources, err = models.GetErrorResources(ctx, db)
-		} else if force {
+		} else if forceEverything {
 			resources, err = models.GetAllResources(ctx, db)
+		} else if force {
+			resources, err = models.GetActiveResources(ctx, db)
 		} else {
 			resources, err = models.GetResourcesWithoutMediaInfo(ctx, db)
 		}

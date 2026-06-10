@@ -654,6 +654,16 @@ cmd_benchmark() {
 # ------------------------------------------------------------------------------
 
 cmd_prune() {
+    # Run database pruning for inactive one-timers (>30 days)
+    if [[ -f "$ENV_FILE" ]]; then
+        export $(grep -v '^#' "$ENV_FILE" | xargs)
+    fi
+    export GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
+    if [[ -f "$BIN_DIR/web-ui" ]]; then
+        echo "🗑️  Pruning inactive one-timer database resources (>30 days)..."
+        "$BIN_DIR"/web-ui prune --days 30 || true
+    fi
+
     local ALL=false
     if [[ "${1:-}" == "--all" || "${1:-}" == "-a" ]]; then ALL=true; fi
     echo "🧹 Pruning caches..."
@@ -915,15 +925,21 @@ cmd_enrich() {
             "$BIN_DIR"/web-ui enrich run "${@:2}"
             ;;
         force-all|force)
-            echo "⚡ Force All — re-enriching EVERY resource (including Abandoned)..."
-            echo "    (Resets retry_count. Use after a major pipeline fix.)"
+            echo "⚡ Force All Active — re-enriching library & vault resources (including Abandoned)..."
+            echo "    (Resets retry_count.)"
             "$BIN_DIR"/web-ui enrich run --force "${@:2}"
+            ;;
+        force-everything)
+            echo "⚡ Force Everything — re-enriching absolutely ALL resources in DB (including Abandoned)..."
+            echo "    (Resets retry_count.)"
+            "$BIN_DIR"/web-ui enrich run --force-everything "${@:2}"
             ;;
         *)
             echo "Usage:"
             echo "  ./run.sh enrich refresh [DAYS]   Smart refresh — stale/missing (default 7d)"
             echo "  ./run.sh enrich run              Enrich resources missing metadata only"
-            echo "  ./run.sh enrich force-all        Force re-enrich everything (incl. abandoned)"
+            echo "  ./run.sh enrich force-all        Force re-enrich library/vault (incl. abandoned)"
+            echo "  ./run.sh enrich force-everything Force re-enrich absolutely everything in DB"
             ;;
     esac
 }

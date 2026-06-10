@@ -451,6 +451,7 @@
     "toast.enrichmentRefreshStarted": "Запущен фоновый сброс и обновление метаданных",
     "toast.enrichmentStarted": "Metadata refresh started",
     "toast.forceAllEnrichmentStarted": "Full metadata re-enrichment started",
+    "toast.forceEverythingEnrichmentStarted": "Absolutely all metadata re-enrichment started",
     "speedtest.badge": "Тест скорости",
     "speedtest.title": "Тест скорости соединения",
     "speedtest.subtitle": "Измерьте скорость загрузки с серверов Octor и узнайте, какое качество видео доступно без буферизации.",

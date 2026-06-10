@@ -145,6 +145,7 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 	gr.GET("/drive/*path", h.driveIndex)
 	gr.POST("/enrichment/refresh", h.refreshEnrichment)
 	gr.POST("/enrichment/force-all", h.forceAllEnrichment)
+	gr.POST("/enrichment/force-everything", h.forceEverythingEnrichment)
 }
 
 func escapePath(p string) string {
@@ -1130,8 +1131,7 @@ func (h *Handler) refreshEnrichment(c *gin.Context) {
 }
 
 // forceAllEnrichment is the "Force All" button.
-// Re-enriches every resource regardless of status, including Abandoned (resets retry_count).
-// Use after a major pipeline fix (e.g. sidecar was down, new mapper added).
+// Re-enriches active resources in library/vault regardless of status, including Abandoned (resets retry_count).
 // Runs 25 concurrent API calls.
 func (h *Handler) forceAllEnrichment(c *gin.Context) {
 	go func() {
@@ -1144,9 +1144,9 @@ func (h *Handler) forceAllEnrichment(c *gin.Context) {
 			return
 		}
 
-		resources, err := models.GetAllResources(bgCtx, db)
+		resources, err := models.GetActiveResources(bgCtx, db)
 		if err != nil {
-			log.WithError(err).Error("Force All: failed to query all resources")
+			log.WithError(err).Error("Force All: failed to query active resources")
 			return
 		}
 
@@ -1158,6 +1158,36 @@ func (h *Handler) forceAllEnrichment(c *gin.Context) {
 	}()
 
 	web.RedirectWithSuccessAndMessage(c, "toast.forceAllEnrichmentStarted")
+}
+
+// forceEverythingEnrichment is the "Force Everything" button.
+// Re-enriches absolutely every resource in the database regardless of status, including Abandoned.
+// Runs 25 concurrent API calls.
+func (h *Handler) forceEverythingEnrichment(c *gin.Context) {
+	go func() {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+		defer cancel()
+
+		db, err := h.db()
+		if err != nil {
+			log.WithError(err).Error("Force Everything: failed to get DB")
+			return
+		}
+
+		resources, err := models.GetAllResources(bgCtx, db)
+		if err != nil {
+			log.WithError(err).Error("Force Everything: failed to query all resources")
+			return
+		}
+
+		ids := make([]string, len(resources))
+		for i, r := range resources {
+			ids[i] = r.ResourceID
+		}
+		h.runEnrichPool(bgCtx, ids, true, "Force Everything")
+	}()
+
+	web.RedirectWithSuccessAndMessage(c, "toast.forceEverythingEnrichmentStarted")
 }
 
 

@@ -134,9 +134,8 @@
         <div class="flex items-start gap-4">
             <div class="flex-1">
                 <p class="text-xs text-o-muted leading-relaxed">
-                    <strong class="text-error font-semibold">Force All</strong> —
-                    re-enriches every resource regardless of status, including abandoned ones.
-                    Use after a major pipeline fix (e.g. sidecar was down, new mapper added).
+                    <strong class="text-error font-semibold">Force All Active</strong> —
+                    re-enriches resources currently in library or vault (all users), regardless of status, including abandoned ones.
                 </p>
             </div>
             <div class="shrink-0">
@@ -144,7 +143,27 @@
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                     </svg>
-                    Force All
+                    Force All Active
+                </button>
+            </div>
+        </div>
+
+        <div class="border-t border-o-line/30 my-4"></div>
+
+        {{/* ── Force Everything ── */}}
+        <div class="flex items-start gap-4">
+            <div class="flex-1">
+                <p class="text-xs text-o-muted leading-relaxed">
+                    <strong class="text-error font-semibold">Force Everything</strong> —
+                    re-enriches absolutely every resource in the database, including stream-only and abandoned ones.
+                </p>
+            </div>
+            <div class="shrink-0">
+                <button type="button" class="btn btn-outline btn-error btn-sm" data-umami-event="admin-enrichment-force-everything" onclick="document.getElementById('force-everything-modal').showModal()">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
+                    Force Everything
                 </button>
             </div>
         </div>
@@ -181,14 +200,34 @@
       <div class="modal-box max-w-sm bg-base-300 border border-o-line rounded-2xl shadow-xl">
           <h3 class="text-lg font-bold text-error flex items-center gap-2 mb-2">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
-              Re-enrich All?
+              Re-enrich Active?
           </h3>
-          <p class="text-sm text-o-muted leading-relaxed mb-4">Are you sure you want to re-enrich all resources? This will run in the background and may take a long time to complete.</p>
+          <p class="text-sm text-o-muted leading-relaxed mb-4">Are you sure you want to re-enrich all resources currently in user libraries or vault? This will run in the background and may take a long time to complete.</p>
           <div class="modal-action justify-end gap-2">
               <form method="dialog" class="inline">
                   <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
               </form>
               <form method="post" action="{{ langPath $.Lang "/admin/enrichment/force-all" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('force-all-modal').close()">
+                  <button type="submit" class="btn btn-sm btn-error">Proceed</button>
+              </form>
+          </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  {{/* ── Custom Force Everything Confirmation Modal ── */}}
+  <dialog id="force-everything-modal" class="modal">
+      <div class="modal-box max-w-sm bg-base-300 border border-o-line rounded-2xl shadow-xl">
+          <h3 class="text-lg font-bold text-error flex items-center gap-2 mb-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              Re-enrich Absolutely All?
+          </h3>
+          <p class="text-sm text-o-muted leading-relaxed mb-4">Are you sure you want to re-enrich absolutely every resource in the database? This will run in the background and may take a long time to complete.</p>
+          <div class="modal-action justify-end gap-2">
+              <form method="dialog" class="inline">
+                  <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
+              </form>
+              <form method="post" action="{{ langPath $.Lang "/admin/enrichment/force-everything" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('force-everything-modal').close()">
                   <button type="submit" class="btn btn-sm btn-error">Proceed</button>
               </form>
           </div>

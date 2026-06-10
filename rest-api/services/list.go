@@ -287,39 +287,31 @@ func (s *List) buildFile(f *File) ListItem {
 func (s *List) buildTree(r *Resource, args *ListGetArgs) ListResponse {
 	items := []ListItem{}
 	var size int64
-	var dir *ListItem
+	dirMap := make(map[string]int)
 	for _, f := range r.Files {
 		if !pathBeginsWith(f.Path, args.Path) {
 			continue
 		}
 		size += f.Size
 		if len(args.Path)+1 == len(f.Path) {
-			if dir != nil {
-				items = append(items, *dir)
-				dir = nil
-			}
 			items = append(items, s.buildFile(f))
 		} else {
 			fps := "/" + strings.Join(f.Path[0:len(args.Path)+1], "/")
-			if dir != nil && dir.PathStr != fps {
-				items = append(items, *dir)
-				dir = nil
-			}
-			if dir == nil {
-				dir = &ListItem{
+			if idx, found := dirMap[fps]; found {
+				items[idx].Size += f.Size
+			} else {
+				dirItem := ListItem{
 					ID:      fmt.Sprintf("%x", sha1.Sum([]byte(fps))),
 					Name:    f.Path[len(args.Path)],
 					PathStr: fps,
 					Path:    f.Path[0 : len(args.Path)+1],
 					Type:    ListTypeDirectory,
+					Size:    f.Size,
 				}
+				dirMap[fps] = len(items)
+				items = append(items, dirItem)
 			}
-			dir.Size += f.Size
 		}
-	}
-	if dir != nil {
-		items = append(items, *dir)
-		dir = nil
 	}
 
 	// Sort items with folders first, then by selected criteria
