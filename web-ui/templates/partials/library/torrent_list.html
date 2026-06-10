@@ -53,6 +53,10 @@
         {{ $lib := .Data.Item }}
         <div class="library-item flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group
              {{ if eq .Data.Category "movie" }}hover:bg-sky-500/5 hover:shadow-[0_2px_8px_-2px_rgba(56,189,248,0.15)]{{ else if eq .Data.Category "series" }}hover:bg-violet-500/5 hover:shadow-[0_2px_8px_-2px_rgba(139,92,246,0.15)]{{ else if eq .Data.Category "adult" }}hover:bg-rose-500/5 hover:shadow-[0_2px_8px_-2px_rgba(244,63,94,0.15)]{{ else }}hover:bg-amber-500/5 hover:shadow-[0_2px_8px_-2px_rgba(245,158,11,0.15)]{{ end }}">
+            
+            <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap">
+                <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ $lib.ResourceID }}" />
+            </div>
             <a href="{{ langPath $.Ctx.Lang (printf "/%s" $lib.ResourceID) }}" data-async-target="main"
                class="flex-1 min-w-0 flex items-center gap-4 text-w-text
                       {{ if eq .Data.Category "movie" }}hover:text-sky-300{{ else if eq .Data.Category "series" }}hover:text-violet-300{{ else if eq .Data.Category "adult" }}hover:text-rose-300{{ else }}hover:text-amber-300{{ end }} transition-colors">
@@ -84,7 +88,7 @@
                     <div class="text-xs text-o-muted shrink-0 text-right whitespace-nowrap">{{ if $lib.Torrent }}{{ $lib.Torrent.SizeBytes | bitsForHumans }}{{ if $lib.Torrent.FileCount }} · {{ $lib.Torrent.FileCount }} {{ t $.Ctx.Lang "library.files" }}{{ end }}{{ else }}0 B{{ end }} · {{ timeAgoLang $.Ctx.Lang $lib.CreatedAt }}</div>
                 </div>
             </a>
-            <form method="post" action="{{ langPath $.Ctx.Lang "/lib/remove" }}" data-async-target="main" data-async-push-state="false" class="shrink-0">
+            <form method="post" action="{{ langPath $.Ctx.Lang "/lib/remove" }}" data-async-target="main" data-async-no-scroll="true" data-async-push-state="false" class="shrink-0">
                 <input type="hidden" name="resource_id" value="{{ $lib.ResourceID }}" />
                 <button type="submit" class="p-1.5 text-o-muted/40 hover:text-o-primary transition-colors rounded hover:bg-base-300" title="{{ t $.Ctx.Lang "library.remove" }}">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
@@ -92,6 +96,10 @@
                     </svg>
                 </button>
             </form>
+            
+            <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap">
+                <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ $lib.ResourceID }}" />
+            </div>
             <a href="{{ langPath $.Ctx.Lang (printf "/%s" $lib.ResourceID) }}" data-async-target="main" class="text-o-muted/40 hover:text-o-purpleL shrink-0 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />

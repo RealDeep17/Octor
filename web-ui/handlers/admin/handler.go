@@ -138,8 +138,11 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 	gr.GET("/library", h.library)
 	gr.GET("/library/:type", h.library)
 	gr.POST("/library/remove", h.remove)
+	gr.POST("/library/remove-multiple", h.removeMultiple)
 	gr.GET("/vault", h.vaultIndex)
 	gr.POST("/vault/remove", h.removePledge)
+	gr.POST("/vault/remove-multiple", h.removeMultiplePledge)
+	gr.POST("/vault/retry-multiple", h.retryMultiplePledge)
 	gr.GET("/status", h.status)
 	gr.GET("/drive", h.driveIndex)
 	gr.GET("/drive/*path", h.driveIndex)
@@ -317,6 +320,107 @@ func (h *Handler) removePledge(c *gin.Context) {
 	}
 
 	web.RedirectWithSuccessAndMessage(c, "toast.removedFromVault")
+}
+
+func (h *Handler) removeMultiplePledge(c *gin.Context) {
+	var req struct {
+		UserIDs     []string `form:"user_ids[]"`
+		ResourceIDs []string `form:"resource_ids[]"`
+	}
+
+	if err := c.ShouldBind(&req); err != nil || len(req.UserIDs) != len(req.ResourceIDs) {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	for i, rIDRaw := range req.ResourceIDs {
+		rID := strings.TrimSpace(rIDRaw)
+		uIDRaw := strings.TrimSpace(req.UserIDs[i])
+
+		if rID == "" || uIDRaw == "" {
+			continue
+		}
+
+		uID, err := uuid.FromString(uIDRaw)
+		if err != nil {
+			continue
+		}
+
+		resource, err := h.vault.GetResource(ctx, rID)
+		if err != nil || resource == nil {
+			continue
+		}
+
+		user := &auth.User{ID: uID}
+		pledge, err := h.vault.GetPledge(ctx, user, resource)
+		if err != nil || pledge == nil {
+			continue
+		}
+
+		if err := h.vault.RemovePledge(ctx, pledge); err != nil {
+			log.WithError(err).WithField("resource_id", rID).Warn("admin failed to bulk delete pledge")
+			continue
+		}
+
+		if h.api != nil {
+			claims := api.GetClaimsFromContext(c)
+			purgeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			if purgeErr := h.api.PurgeResourceCache(purgeCtx, claims, rID); purgeErr != nil {
+				log.WithError(purgeErr).WithField("resource_id", rID).Warn("failed to purge seeder cache after admin bulk vault removal")
+			}
+			cancel()
+		}
+	}
+
+	web.RedirectWithSuccessAndMessage(c, "toast.removedFromVault")
+}
+
+func (h *Handler) retryMultiplePledge(c *gin.Context) {
+	var req struct {
+		UserIDs     []string `form:"user_ids[]"`
+		ResourceIDs []string `form:"resource_ids[]"`
+	}
+
+	if err := c.ShouldBind(&req); err != nil || len(req.UserIDs) != len(req.ResourceIDs) {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	for i, rIDRaw := range req.ResourceIDs {
+		rID := strings.TrimSpace(rIDRaw)
+		uIDRaw := strings.TrimSpace(req.UserIDs[i])
+
+		if rID == "" || uIDRaw == "" {
+			continue
+		}
+
+		uID, err := uuid.FromString(uIDRaw)
+		if err != nil {
+			continue
+		}
+
+		resource, err := h.vault.GetResource(ctx, rID)
+		if err != nil || resource == nil {
+			continue
+		}
+
+		user := &auth.User{ID: uID}
+		pledge, err := h.vault.GetPledge(ctx, user, resource)
+		if err != nil || pledge == nil {
+			continue
+		}
+
+		_, err = h.vault.PutResource(ctx, rID)
+		if err != nil {
+			log.WithError(err).WithField("resource_id", rID).Warn("admin failed to bulk retry pledge")
+		}
+	}
+
+	web.RedirectWithSuccessAndMessage(c, "toast.vaultRetrying")
 }
 
 type StatusData struct {
@@ -511,6 +615,42 @@ func (h *Handler) remove(c *gin.Context) {
 	if err := models.RemoveFromLibrary(ctx, db, uID, rID); err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to remove from library"))
 		return
+	}
+	web.RedirectWithSuccessAndMessage(c, "toast.removedFromLibrary")
+}
+
+func (h *Handler) removeMultiple(c *gin.Context) {
+	db, err := h.db()
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	ctx := c.Request.Context()
+	
+	var req struct {
+		UserIDs     []string `form:"user_ids[]"`
+		ResourceIDs []string `form:"resource_ids[]"`
+	}
+
+	if err := c.ShouldBind(&req); err != nil || len(req.UserIDs) != len(req.ResourceIDs) {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	for i, rIDRaw := range req.ResourceIDs {
+		rID := strings.TrimSpace(rIDRaw)
+		uIDRaw := strings.TrimSpace(req.UserIDs[i])
+
+		if rID == "" || uIDRaw == "" {
+			continue
+		}
+
+		uID, err := uuid.FromString(uIDRaw)
+		if err != nil {
+			continue
+		}
+
+		_ = models.RemoveFromLibrary(ctx, db, uID, rID)
 	}
 	web.RedirectWithSuccessAndMessage(c, "toast.removedFromLibrary")
 }

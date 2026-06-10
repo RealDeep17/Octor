@@ -36,6 +36,7 @@
         </div>
         
         <form method="get" action="{{ langPath $.Lang $.Path }}" data-async-target="main" class="flex flex-col sm:flex-row sm:items-center gap-2" id="admin-library-search-form">
+            <button type="button" id="library-toggle-select" onclick="window.toggleLibraryMode && window.toggleLibraryMode()" class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple/30 hover:text-o-purpleL whitespace-nowrap shrink-0 w-32">Select</button>
           <div class="relative flex-1 isolate">
               <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="Search by name..." class="input input-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full pl-10" />
               <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-o-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -67,11 +68,28 @@
             <option value="3" {{ if eq .Data.Args.Sort 3 }}selected{{ end }}>Rating</option>
             {{ end }}
           </select>
+          
         </form>
       </div>
     </div>
 
     {{ if .Data.Items }}
+
+    <!-- Bulk Action Bar -->
+    <div id="library-bulk-actions" class="hidden mb-4 border border-o-line rounded-xl transition-all duration-300 transform scale-95 opacity-0 data-[active=true]:scale-100 data-[active=true]:opacity-100 px-4 py-2 bg-base-300 min-h-[44px] border border-o-line rounded-xl flex items-center justify-between transition-all duration-300 transform scale-95 opacity-0 data-[active=true]:scale-100 data-[active=true]:opacity-100">
+        <div class="flex items-center gap-3">
+            <input type="checkbox" id="library-select-all" class="checkbox checkbox-sm checkbox-primary shrink-0 rounded-md" />
+            <span class="text-sm font-semibold text-w-text"><span id="library-selected-count">0</span> Selected</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <form method="post" action="{{ langPath $.Lang "/admin/library/remove-multiple" }}" id="library-bulk-remove-form" onsubmit="return window.submitLibraryBulk('library-bulk-remove-form')" data-async-target="main" data-async-no-scroll="true">
+                <button type="submit" class="btn btn-xs btn-outline border-error/50 text-error hover:bg-error/10 hover:border-error" title="Delete Selected">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                    Delete
+                </button>
+            </form>
+        </div>
+    </div>
       <div id="admin-library-search-empty" class="bg-base-300/50 border border-o-line rounded-2xl p-14 text-center mb-6 hidden">
         <svg class="w-14 h-14 mx-auto text-o-muted/30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.637 10.637Z" />
@@ -92,7 +110,10 @@
         <a href="{{ langPath $.Lang (.Content | getCardHref) }}?user={{ if $.Data.SelectedUser }}{{ $.Data.SelectedUser }}{{ else }}all{{ end }}" data-async-target="main" class="admin-library-item group flex [&:has(input:checked)]:col-span-2"
            data-adult-type="{{ if .Content | isAdultJAV }}jav{{ else }}porn{{ end }}"
            data-series-type="{{ if .Content | isSeriesAnime }}anime{{ else }}tv{{ end }}">
-          <div class="w-card-frame w-full">
+          <div class="w-card-frame w-full relative">
+            <div class="absolute top-2 right-2 z-20 hidden library-item-cb-wrap">
+                <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md shadow-md" data-resource-id="{{ .ResourceID }}" data-user-id="{{ .PrimaryUserID }}" />
+            </div>
             <input type="checkbox" id="toggle-{{ .ResourceID }}" class="layout-toggle-checkbox peer hidden"
                    data-video-type="{{ .Content | getVideoType }}"
                    data-video-id="{{ .Content | getVideoID }}"
@@ -194,209 +215,107 @@
 </section>
 
 <script>
-(function() {
-    const searchForm = document.getElementById('admin-library-search-form');
-    const searchInput = searchForm ? searchForm.querySelector('input[name="q"]') : null;
-    if (!searchInput) return;
+window.toggleLibraryMode = function() {
+    const prefix = 'library';
+    const btnId = 'library-toggle-select';
+    const barId = 'library-bulk-actions';
+    const stateKey = '_' + prefix + 'SelectModeActive';
+    
+    window[stateKey] = !window[stateKey];
+    const active = window[stateKey];
+    
+    const btn = document.getElementById(btnId);
+    const bar = document.getElementById(barId);
+    const wraps = document.querySelectorAll('.' + prefix + '-item-cb-wrap');
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    
+    if (btn) {
+        btn.textContent = active ? 'Done' : 'Select';
+        btn.classList.toggle('bg-o-purple/15', active && prefix === 'library');
+        btn.classList.toggle('text-o-purpleL', active && prefix === 'library');
+        btn.classList.toggle('border-o-purple/30', active && prefix === 'library');
+        btn.classList.toggle('bg-o-primary/15', active && prefix === 'vault');
+        btn.classList.toggle('text-o-primaryL', active && prefix === 'vault');
+        btn.classList.toggle('border-o-primary/30', active && prefix === 'vault');
+        btn.classList.toggle('text-o-sub', !active);
+        btn.classList.toggle('border-o-line', !active);
+    }
+    
+    if (active) {
+        bar?.classList.remove('hidden');
+        wraps.forEach(el => el.classList.remove('hidden'));
+        requestAnimationFrame(() => bar?.setAttribute('data-active', 'true'));
+    } else {
+        bar?.removeAttribute('data-active');
+        wraps.forEach(el => el.classList.add('hidden'));
+        cbs.forEach(cb => cb.checked = false);
+        if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
+        setTimeout(() => { if (!window[stateKey]) bar?.classList.add('hidden'); }, 300);
+    }
+};
 
-    // Prevent enter key from submitting form, keeping focus and live search intact
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
+window.updateLibraryBulkBar = function() {
+    const prefix = 'library';
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    const allCb = document.getElementById(prefix + '-select-all');
+    const countEl = document.getElementById(prefix + '-selected-count');
+    const retryForm = document.getElementById(prefix + '-bulk-retry-form');
+    
+    let count = 0;
+    let canRetry = 0;
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            count++;
+            if (cb.dataset.canRetry === 'true') canRetry++;
         }
     });
+    
+    if (countEl) countEl.textContent = count;
+    if (allCb) {
+        allCb.checked = count > 0 && count === cbs.length;
+        allCb.indeterminate = count > 0 && count < cbs.length;
+    }
+    if (retryForm) {
+        if (canRetry > 0) retryForm.classList.remove('hidden');
+        else retryForm.classList.add('hidden');
+    }
+};
 
-    const adultSelect = document.getElementById('adult-type-select');
-    const seriesSelect = document.getElementById('series-type-select');
-
-    const filterItems = () => {
-        const query = searchInput.value.trim().toLowerCase();
-        const emptyState = document.getElementById('admin-library-search-empty');
-        const adultType = adultSelect ? adultSelect.value : 'all';
-        const seriesType = seriesSelect ? seriesSelect.value : 'all';
-        
-        const torrentContainer = document.getElementById('admin-torrent-container');
-        const cardContainer = document.querySelector('.grid[class*="grid-cols-"].gap-4');
-        const activeContainer = torrentContainer || cardContainer;
-        
-        let visibleCount = 0;
-        const isTorrentSection = {{ if eq .Data.Args.Section "torrents" }}true{{ else }}false{{ end }};
-
-        if (isTorrentSection && torrentContainer) {
-            const showAllDescendants = (container) => {
-                const children = container.children;
-                for (let i = 0; i < children.length; i++) {
-                    const child = children[i];
-                    child.classList.remove('hidden');
-                    if (child.classList.contains('admin-library-item')) {
-                        visibleCount++;
-                    }
-                    if (child.tagName.toLowerCase() === 'details') {
-                        const subContainer = child.querySelector('div');
-                        if (subContainer) {
-                            showAllDescendants(subContainer);
-                        }
-                    }
-                }
-            };
-
-            const filterTorrentNode = (node) => {
-                if (node.classList.contains('admin-library-item')) {
-                    const nameEl = node.querySelector('.font-medium, .w-card-title');
-                    const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
-                    const matches = nameText.includes(query);
-                    if (matches) {
-                        node.classList.remove('hidden');
-                        visibleCount++;
-                        return true;
-                    } else {
-                        node.classList.add('hidden');
-                        return false;
-                    }
-                }
-
-                if (node.tagName.toLowerCase() === 'details') {
-                    const summaryEl = node.querySelector('summary');
-                    const summaryText = summaryEl ? summaryEl.textContent.trim().toLowerCase() : '';
-                    const folderMatches = summaryText.includes(query);
-
-                    const childContainer = node.querySelector('div');
-                    let hasVisibleChild = false;
-                    if (childContainer) {
-                        const children = childContainer.children;
-                        for (let i = 0; i < children.length; i++) {
-                            const childMatches = filterTorrentNode(children[i]);
-                            if (childMatches) {
-                                hasVisibleChild = true;
-                            }
-                        }
-                    }
-
-                    if (folderMatches || hasVisibleChild) {
-                        node.classList.remove('hidden');
-                        if (folderMatches && childContainer) {
-                            showAllDescendants(childContainer);
-                        }
-                        return true;
-                    } else {
-                        node.classList.add('hidden');
-                        return false;
-                    }
-                }
-                return false;
-            };
-
-            const topLevelNodes = torrentContainer.children;
-            for (let i = 0; i < topLevelNodes.length; i++) {
-                filterTorrentNode(topLevelNodes[i]);
-            }
-        } else {
-            const items = document.querySelectorAll('.admin-library-item');
-            items.forEach((item) => {
-                const nameEl = item.querySelector('.font-medium, .w-card-title');
-                const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
-                const matchesQuery = nameText.includes(query);
-
-                let matchesAdult = true;
-                if (adultSelect && adultType !== 'all') {
-                    const itemAdultType = item.getAttribute('data-adult-type');
-                    matchesAdult = (itemAdultType === adultType);
-                }
-
-                let matchesSeries = true;
-                if (seriesSelect && seriesType !== 'all') {
-                    const itemSeriesType = item.getAttribute('data-series-type');
-                    matchesSeries = (itemSeriesType === seriesType);
-                }
-
-                if (matchesQuery && matchesAdult && matchesSeries) {
-                    item.classList.remove('hidden');
-                    visibleCount++;
-                } else {
-                    item.classList.add('hidden');
-                }
-            });
-        }
-
-        if (emptyState) {
-            const totalItems = isTorrentSection
-                ? (torrentContainer ? torrentContainer.children.length : 0)
-                : document.querySelectorAll('.admin-library-item').length;
-
-            if (visibleCount === 0 && totalItems > 0) {
-                emptyState.classList.remove('hidden');
-                if (activeContainer) activeContainer.classList.add('hidden');
-            } else {
-                emptyState.classList.add('hidden');
-                if (activeContainer) activeContainer.classList.remove('hidden');
+window.submitLibraryBulk = function(formId) {
+    const prefix = 'library';
+    const form = document.getElementById(formId);
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    if (!form) return;
+    
+    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
+    
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            const r = document.createElement('input');
+            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
+            form.appendChild(r);
+            if (cb.dataset.userId) {
+                const u = document.createElement('input');
+                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
+                form.appendChild(u);
             }
         }
-    };
+    });
+    window['toggle' + 'Library' + 'Mode']();
+    return true;
+};
 
-    searchInput.addEventListener('input', filterItems);
-    if (adultSelect) {
-        adultSelect.addEventListener('change', filterItems);
-    }
-    if (seriesSelect) {
-        seriesSelect.addEventListener('change', filterItems);
-    }
-
-    if (searchInput.value) {
-        filterItems();
-    }
-
-    const observer = new MutationObserver(filterItems);
-    const observeTarget = document.querySelector('.bg-base-200\\/50.rounded-xl.divide-y.divide-w-line, .grid[class*="grid-cols-"].gap-4');
-    if (observeTarget) {
-        observer.observe(observeTarget.parentNode, { childList: true, subtree: true });
-    }
-})();
-
-if (typeof window.togglePosterLayout !== 'function') {
-    window.togglePosterLayout = function(event, resourceId, videoType, videoId) {
-        event.preventDefault();
-        event.stopPropagation();
-        
-        if (!videoType || !videoId) return;
-        
-        const checkbox = document.getElementById('toggle-' + resourceId);
-        if (!checkbox) return;
-        
-        checkbox.checked = !checkbox.checked;
-        const newLayout = checkbox.checked ? 'horizontal' : 'vertical';
-        
-        // Save to localStorage
-        localStorage.setItem('octor-layout-' + videoType + '-' + videoId, newLayout);
-        
-        fetch('/library/' + videoType + '/' + videoId + '/layout', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': window._CSRF || ''
-            },
-            body: JSON.stringify({ layout: newLayout })
-        }).catch(err => console.error('Failed to save poster layout preference:', err));
-    };
-}
-
-// Auto-apply from localStorage on load
 (function() {
-    const hasAuth = "{{ if $.User | hasAuth }}true{{ else }}false{{ end }}" === "true";
-    document.querySelectorAll('.layout-toggle-checkbox').forEach(cb => {
-        const type = cb.getAttribute('data-video-type');
-        const id = cb.getAttribute('data-video-id');
-        if (type && id) {
-            if (hasAuth) {
-                // Sync localStorage with DB preference which is already rendered
-                localStorage.setItem('octor-layout-' + type + '-' + id, cb.checked ? 'horizontal' : 'vertical');
-            } else {
-                const local = localStorage.getItem('octor-layout-' + type + '-' + id);
-                if (local === 'horizontal') {
-                    cb.checked = true;
-                } else if (local === 'vertical') {
-                    cb.checked = false;
-                }
-            }
+    const prefix = 'library';
+    if (window['_' + prefix + 'GlobalInit']) return;
+    window['_' + prefix + 'GlobalInit'] = true;
+    
+    document.addEventListener('change', (e) => {
+        if (e.target.classList.contains(prefix + '-item-cb')) window['update' + 'Library' + 'BulkBar']();
+        if (e.target.id === prefix + '-select-all') {
+            document.querySelectorAll('.' + prefix + '-item-cb').forEach(cb => cb.checked = e.target.checked);
+            window['update' + 'Library' + 'BulkBar']();
         }
     });
 })();
@@ -450,6 +369,10 @@ if (typeof window.togglePosterLayout !== 'function') {
         {{ $lib := .Data.Item }}
         <div class="admin-library-item flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group
              {{ if eq .Data.Category "movie" }}hover:bg-sky-500/5 hover:shadow-[0_2px_8px_-2px_rgba(56,189,248,0.15)]{{ else if eq .Data.Category "series" }}hover:bg-violet-500/5 hover:shadow-[0_2px_8px_-2px_rgba(139,92,246,0.15)]{{ else if eq .Data.Category "adult" }}hover:bg-rose-500/5 hover:shadow-[0_2px_8px_-2px_rgba(244,63,94,0.15)]{{ else }}hover:bg-amber-500/5 hover:shadow-[0_2px_8px_-2px_rgba(245,158,11,0.15)]{{ end }}">
+            
+            <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap">
+                <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ $lib.ResourceID }}" data-user-id="{{ $lib.UserID }}" />
+            </div>
             <a href="{{ langPath $.Ctx.Lang (printf "/%s" $lib.ResourceID) }}" data-async-target="main"
                class="flex-1 min-w-0 flex items-center gap-4 text-w-text
                       {{ if eq .Data.Category "movie" }}hover:text-sky-300{{ else if eq .Data.Category "series" }}hover:text-violet-300{{ else if eq .Data.Category "adult" }}hover:text-rose-300{{ else }}hover:text-amber-300{{ end }} transition-colors">
@@ -486,7 +409,7 @@ if (typeof window.togglePosterLayout !== 'function') {
                     </div>
                 </div>
             </a>
-            <form method="post" action="{{ langPath $.Ctx.Lang "/admin/library/remove" }}" data-async-target="main" data-async-push-state="false" class="shrink-0">
+            <form method="post" action="{{ langPath $.Ctx.Lang "/admin/library/remove" }}" data-async-target="main" data-async-no-scroll="true" data-async-push-state="false" class="shrink-0">
                 <input type="hidden" name="resource_id" value="{{ $lib.ResourceID }}" />
                 <input type="hidden" name="user_id" value="{{ $lib.UserID }}" />
                 <button type="submit" class="p-1.5 text-o-muted/40 hover:text-o-primary transition-colors rounded hover:bg-base-300" title="Remove from Library">
@@ -495,6 +418,10 @@ if (typeof window.togglePosterLayout !== 'function') {
                     </svg>
                 </button>
             </form>
+            
+            <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap">
+                <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ $lib.ResourceID }}" data-user-id="{{ $lib.UserID }}" />
+            </div>
             <a href="{{ langPath $.Ctx.Lang (printf "/%s" $lib.ResourceID) }}" data-async-target="main" class="text-o-muted/40 hover:text-o-purpleL shrink-0 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
@@ -503,3 +430,110 @@ if (typeof window.togglePosterLayout !== 'function') {
         </div>
     {{ end }}
 {{ end }}
+
+<script>
+window.toggleLibraryMode = function() {
+    const prefix = 'library';
+    const btnId = 'library-toggle-select';
+    const barId = 'library-bulk-actions';
+    const stateKey = '_' + prefix + 'SelectModeActive';
+    
+    window[stateKey] = !window[stateKey];
+    const active = window[stateKey];
+    
+    const btn = document.getElementById(btnId);
+    const bar = document.getElementById(barId);
+    const wraps = document.querySelectorAll('.' + prefix + '-item-cb-wrap');
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    
+    if (btn) {
+        btn.textContent = active ? 'Done' : 'Select';
+        btn.classList.toggle('bg-o-purple/15', active && prefix === 'library');
+        btn.classList.toggle('text-o-purpleL', active && prefix === 'library');
+        btn.classList.toggle('border-o-purple/30', active && prefix === 'library');
+        btn.classList.toggle('bg-o-primary/15', active && prefix === 'vault');
+        btn.classList.toggle('text-o-primaryL', active && prefix === 'vault');
+        btn.classList.toggle('border-o-primary/30', active && prefix === 'vault');
+        btn.classList.toggle('text-o-sub', !active);
+        btn.classList.toggle('border-o-line', !active);
+    }
+    
+    if (active) {
+        bar?.classList.remove('hidden');
+        wraps.forEach(el => el.classList.remove('hidden'));
+        requestAnimationFrame(() => bar?.setAttribute('data-active', 'true'));
+    } else {
+        bar?.removeAttribute('data-active');
+        wraps.forEach(el => el.classList.add('hidden'));
+        cbs.forEach(cb => cb.checked = false);
+        if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
+        setTimeout(() => { if (!window[stateKey]) bar?.classList.add('hidden'); }, 300);
+    }
+};
+
+window.updateLibraryBulkBar = function() {
+    const prefix = 'library';
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    const allCb = document.getElementById(prefix + '-select-all');
+    const countEl = document.getElementById(prefix + '-selected-count');
+    const retryForm = document.getElementById(prefix + '-bulk-retry-form');
+    
+    let count = 0;
+    let canRetry = 0;
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            count++;
+            if (cb.dataset.canRetry === 'true') canRetry++;
+        }
+    });
+    
+    if (countEl) countEl.textContent = count;
+    if (allCb) {
+        allCb.checked = count > 0 && count === cbs.length;
+        allCb.indeterminate = count > 0 && count < cbs.length;
+    }
+    if (retryForm) {
+        if (canRetry > 0) retryForm.classList.remove('hidden');
+        else retryForm.classList.add('hidden');
+    }
+};
+
+window.submitLibraryBulk = function(formId) {
+    const prefix = 'library';
+    const form = document.getElementById(formId);
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    if (!form) return;
+    
+    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
+    
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            const r = document.createElement('input');
+            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
+            form.appendChild(r);
+            if (cb.dataset.userId) {
+                const u = document.createElement('input');
+                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
+                form.appendChild(u);
+            }
+        }
+    });
+    window['toggle' + 'Library' + 'Mode']();
+    return true;
+};
+
+(function() {
+    const prefix = 'library';
+    if (window['_' + prefix + 'GlobalInit']) return;
+    window['_' + prefix + 'GlobalInit'] = true;
+    
+    document.addEventListener('change', (e) => {
+        if (e.target.classList.contains(prefix + '-item-cb')) window['update' + 'Library' + 'BulkBar']();
+        if (e.target.id === prefix + '-select-all') {
+            document.querySelectorAll('.' + prefix + '-item-cb').forEach(cb => cb.checked = e.target.checked);
+            window['update' + 'Library' + 'BulkBar']();
+        }
+    });
+})();
+</script>

@@ -114,7 +114,11 @@
                     </button>
                 </form>
                 {{ end }}
-                {{/* Layout toggle (bottom-left) */}}
+                
+              <div class="absolute top-2 right-2 z-10 hidden library-item-cb-wrap">
+                  <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md shadow-md" data-resource-id="{{ . | getResourceID }}" />
+              </div>
+              {{/* Layout toggle (bottom-left) */}}
                 {{ if and (. | hasPoster) (. | hasPosterHorizontal) }}
                 <button type="button" class="w-card-badge-ghost bottom-2 left-2 cursor-pointer hover:text-o-primary z-10 peer-checked:[&_.vertical-icon]:hidden peer-checked:[&_.horizontal-icon]:block"
                         title="Toggle aspect ratio"

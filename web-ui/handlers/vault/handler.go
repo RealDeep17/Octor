@@ -63,7 +63,9 @@ func RegisterHandler(r *gin.Engine, v *vault.Vault, tm *template.Manager[*web.Co
 	gr.GET("", h.index)
 	gr.POST("/add", auth.HasAuth, h.addPledge)
 	gr.POST("/remove", auth.HasAuth, h.removePledge)
+	gr.POST("/remove-multiple", auth.HasAuth, h.removeMultiple)
 	gr.POST("/retry", auth.HasAuth, h.retryResource)
+	gr.POST("/retry-multiple", auth.HasAuth, h.retryMultiple)
 
 	// Backwards-compat redirect: old /vault/pledge URL was renamed to /vault.
 	// 302 (not 301) so the redirect can be removed later without poisoning

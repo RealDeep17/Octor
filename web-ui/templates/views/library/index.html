@@ -28,6 +28,7 @@
           </div>
         </div>
         <form method="get" action="{{ langPath $.Lang $.Path }}" data-async-target="#list" class="flex items-center gap-2" id="library-search-form">
+            <button type="button" id="library-toggle-select" onclick="window.toggleLibraryMode && window.toggleLibraryMode()" class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple/30 hover:text-o-purpleL whitespace-nowrap shrink-0 w-32">Select</button>
           <div class="relative flex-1 isolate">
               <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="{{ t $.Lang "library.searchPlaceholder" }}" class="input input-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full pl-10" />
               <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-o-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -47,11 +48,28 @@
           </select>
           {{ end }}
           <button type="submit" class="hidden">Submit</button>
+          
         </form>
       </div>
     </div>
 
     <!-- Content -->
+
+    <!-- Bulk Action Bar -->
+    <div id="library-bulk-actions" class="hidden mb-4 border border-o-line rounded-xl transition-all duration-300 transform scale-95 opacity-0 data-[active=true]:scale-100 data-[active=true]:opacity-100 px-4 py-2 bg-base-300 min-h-[44px] border border-o-line rounded-xl flex items-center justify-between transition-all duration-300 transform scale-95 opacity-0 data-[active=true]:scale-100 data-[active=true]:opacity-100">
+        <div class="flex items-center gap-3">
+            <input type="checkbox" id="library-select-all" class="checkbox checkbox-sm checkbox-primary shrink-0 rounded-md" />
+            <span class="text-sm font-semibold text-w-text"><span id="library-selected-count">0</span> Selected</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <form method="post" action="{{ langPath $.Lang "/lib/remove-multiple" }}" id="library-bulk-remove-form" onsubmit="return window.submitLibraryBulk('library-bulk-remove-form')" data-async-target="main" data-async-no-scroll="true">
+                <button type="submit" class="btn btn-xs btn-outline border-error/50 text-error hover:bg-error/10 hover:border-error" title="Delete Selected">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                    Delete
+                </button>
+            </form>
+        </div>
+    </div>
     <div id="library-search-empty" class="bg-base-300/50 border border-o-line rounded-2xl p-14 text-center mb-6 hidden">
       <svg class="w-14 h-14 mx-auto text-o-muted/30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.637 10.637Z" />
@@ -79,167 +97,216 @@
 </section>
 
 <script>
+window.toggleLibraryMode = function() {
+    const prefix = 'library';
+    const btnId = 'library-toggle-select';
+    const barId = 'library-bulk-actions';
+    const stateKey = '_' + prefix + 'SelectModeActive';
+    
+    window[stateKey] = !window[stateKey];
+    const active = window[stateKey];
+    
+    const btn = document.getElementById(btnId);
+    const bar = document.getElementById(barId);
+    const wraps = document.querySelectorAll('.' + prefix + '-item-cb-wrap');
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    
+    if (btn) {
+        btn.textContent = active ? 'Done' : 'Select';
+        btn.classList.toggle('bg-o-purple/15', active && prefix === 'library');
+        btn.classList.toggle('text-o-purpleL', active && prefix === 'library');
+        btn.classList.toggle('border-o-purple/30', active && prefix === 'library');
+        btn.classList.toggle('bg-o-primary/15', active && prefix === 'vault');
+        btn.classList.toggle('text-o-primaryL', active && prefix === 'vault');
+        btn.classList.toggle('border-o-primary/30', active && prefix === 'vault');
+        btn.classList.toggle('text-o-sub', !active);
+        btn.classList.toggle('border-o-line', !active);
+    }
+    
+    if (active) {
+        bar?.classList.remove('hidden');
+        wraps.forEach(el => el.classList.remove('hidden'));
+        requestAnimationFrame(() => bar?.setAttribute('data-active', 'true'));
+    } else {
+        bar?.removeAttribute('data-active');
+        wraps.forEach(el => el.classList.add('hidden'));
+        cbs.forEach(cb => cb.checked = false);
+        if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
+        setTimeout(() => { if (!window[stateKey]) bar?.classList.add('hidden'); }, 300);
+    }
+};
+
+window.updateLibraryBulkBar = function() {
+    const prefix = 'library';
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    const allCb = document.getElementById(prefix + '-select-all');
+    const countEl = document.getElementById(prefix + '-selected-count');
+    const retryForm = document.getElementById(prefix + '-bulk-retry-form');
+    
+    let count = 0;
+    let canRetry = 0;
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            count++;
+            if (cb.dataset.canRetry === 'true') canRetry++;
+        }
+    });
+    
+    if (countEl) countEl.textContent = count;
+    if (allCb) {
+        allCb.checked = count > 0 && count === cbs.length;
+        allCb.indeterminate = count > 0 && count < cbs.length;
+    }
+    if (retryForm) {
+        if (canRetry > 0) retryForm.classList.remove('hidden');
+        else retryForm.classList.add('hidden');
+    }
+};
+
+window.submitLibraryBulk = function(formId) {
+    const prefix = 'library';
+    const form = document.getElementById(formId);
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    if (!form) return;
+    
+    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
+    
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            const r = document.createElement('input');
+            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
+            form.appendChild(r);
+            if (cb.dataset.userId) {
+                const u = document.createElement('input');
+                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
+                form.appendChild(u);
+            }
+        }
+    });
+    window['toggle' + 'Library' + 'Mode']();
+    return true;
+};
+
 (function() {
-    const searchForm = document.getElementById('library-search-form');
-    const searchInput = searchForm ? searchForm.querySelector('input[name="q"]') : null;
-    if (!searchInput) return;
-
-    // Prevent enter key from submitting form, keeping focus and live search intact
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
+    const prefix = 'library';
+    if (window['_' + prefix + 'GlobalInit']) return;
+    window['_' + prefix + 'GlobalInit'] = true;
+    
+    document.addEventListener('change', (e) => {
+        if (e.target.classList.contains(prefix + '-item-cb')) window['update' + 'Library' + 'BulkBar']();
+        if (e.target.id === prefix + '-select-all') {
+            document.querySelectorAll('.' + prefix + '-item-cb').forEach(cb => cb.checked = e.target.checked);
+            window['update' + 'Library' + 'BulkBar']();
         }
     });
-
-    searchForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-    });
-
-    const adultSelect = document.getElementById('adult-type-select');
-    const seriesSelect = document.getElementById('series-type-select');
-
-    const filterItems = () => {
-        const query = searchInput.value.trim().toLowerCase();
-        const emptyState = document.getElementById('library-search-empty');
-        const contentContainer = document.getElementById('list');
-        const adultType = adultSelect ? adultSelect.value : 'all';
-        const seriesType = seriesSelect ? seriesSelect.value : 'all';
-        let visibleCount = 0;
-
-        const isTorrentSection = {{ if eq .Data.Args.Section "torrents" }}true{{ else }}false{{ end }};
-
-        if (isTorrentSection && contentContainer) {
-            const torrentContainer = contentContainer.firstElementChild;
-            if (torrentContainer) {
-                const showAllDescendants = (container) => {
-                    const children = container.children;
-                    for (let i = 0; i < children.length; i++) {
-                        const child = children[i];
-                        child.classList.remove('hidden');
-                        if (child.classList.contains('library-item')) {
-                            visibleCount++;
-                        }
-                        if (child.tagName.toLowerCase() === 'details') {
-                            const subContainer = child.querySelector('div');
-                            if (subContainer) {
-                                showAllDescendants(subContainer);
-                            }
-                        }
-                    }
-                };
-
-                const filterTorrentNode = (node) => {
-                    if (node.classList.contains('library-item')) {
-                        const nameEl = node.querySelector('.font-medium, .w-card-title');
-                        const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
-                        const matches = nameText.includes(query);
-                        if (matches) {
-                            node.classList.remove('hidden');
-                            visibleCount++;
-                            return true;
-                        } else {
-                            node.classList.add('hidden');
-                            return false;
-                        }
-                    }
-
-                    if (node.tagName.toLowerCase() === 'details') {
-                        const summaryEl = node.querySelector('summary');
-                        const summaryText = summaryEl ? summaryEl.textContent.trim().toLowerCase() : '';
-                        const folderMatches = summaryText.includes(query);
-
-                        const childContainer = node.querySelector('div');
-                        let hasVisibleChild = false;
-                        if (childContainer) {
-                            const children = childContainer.children;
-                            for (let i = 0; i < children.length; i++) {
-                                const childMatches = filterTorrentNode(children[i]);
-                                if (childMatches) {
-                                    hasVisibleChild = true;
-                                }
-                            }
-                        }
-
-                        if (folderMatches || hasVisibleChild) {
-                            node.classList.remove('hidden');
-                            if (folderMatches && childContainer) {
-                                showAllDescendants(childContainer);
-                            }
-                            return true;
-                        } else {
-                            node.classList.add('hidden');
-                            return false;
-                        }
-                    }
-                    return false;
-                };
-
-                const topLevelNodes = torrentContainer.children;
-                for (let i = 0; i < topLevelNodes.length; i++) {
-                    filterTorrentNode(topLevelNodes[i]);
-                }
-            }
-        } else {
-            const items = document.querySelectorAll('.library-item');
-            items.forEach((item) => {
-                const nameEl = item.querySelector('.font-medium, .w-card-title');
-                const nameText = nameEl ? nameEl.textContent.trim().toLowerCase() : '';
-                const matchesQuery = nameText.includes(query);
-
-                let matchesAdult = true;
-                if (adultSelect && adultType !== 'all') {
-                    const itemAdultType = item.getAttribute('data-adult-type');
-                    matchesAdult = (itemAdultType === adultType);
-                }
-
-                let matchesSeries = true;
-                if (seriesSelect && seriesType !== 'all') {
-                    const itemSeriesType = item.getAttribute('data-series-type');
-                    matchesSeries = (itemSeriesType === seriesType);
-                }
-
-                if (matchesQuery && matchesAdult && matchesSeries) {
-                    item.classList.remove('hidden');
-                    visibleCount++;
-                } else {
-                    item.classList.add('hidden');
-                }
-            });
-        }
-
-        if (emptyState) {
-            const totalItems = isTorrentSection 
-                ? (contentContainer && contentContainer.firstElementChild ? contentContainer.firstElementChild.children.length : 0)
-                : document.querySelectorAll('.library-item').length;
-
-            if (visibleCount === 0 && totalItems > 0) {
-                emptyState.classList.remove('hidden');
-                if (contentContainer) contentContainer.classList.add('hidden');
-            } else {
-                emptyState.classList.add('hidden');
-                if (contentContainer) contentContainer.classList.remove('hidden');
-            }
-        }
-    };
-
-    searchInput.addEventListener('input', filterItems);
-    if (adultSelect) {
-        adultSelect.addEventListener('change', filterItems);
-    }
-    if (seriesSelect) {
-        seriesSelect.addEventListener('change', filterItems);
-    }
-
-    if (searchInput.value) {
-        filterItems();
-    }
-
-    const contentContainer = document.getElementById('list');
-    if (contentContainer) {
-        const observer = new MutationObserver(filterItems);
-        observer.observe(contentContainer, { childList: true, subtree: true });
-    }
 })();
 </script>
 {{ end }}
+
+<script>
+window.toggleLibraryMode = function() {
+    const prefix = 'library';
+    const btnId = 'library-toggle-select';
+    const barId = 'library-bulk-actions';
+    const stateKey = '_' + prefix + 'SelectModeActive';
+    
+    window[stateKey] = !window[stateKey];
+    const active = window[stateKey];
+    
+    const btn = document.getElementById(btnId);
+    const bar = document.getElementById(barId);
+    const wraps = document.querySelectorAll('.' + prefix + '-item-cb-wrap');
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    
+    if (btn) {
+        btn.textContent = active ? 'Done' : 'Select';
+        btn.classList.toggle('bg-o-purple/15', active && prefix === 'library');
+        btn.classList.toggle('text-o-purpleL', active && prefix === 'library');
+        btn.classList.toggle('border-o-purple/30', active && prefix === 'library');
+        btn.classList.toggle('bg-o-primary/15', active && prefix === 'vault');
+        btn.classList.toggle('text-o-primaryL', active && prefix === 'vault');
+        btn.classList.toggle('border-o-primary/30', active && prefix === 'vault');
+        btn.classList.toggle('text-o-sub', !active);
+        btn.classList.toggle('border-o-line', !active);
+    }
+    
+    if (active) {
+        bar?.classList.remove('hidden');
+        wraps.forEach(el => el.classList.remove('hidden'));
+        requestAnimationFrame(() => bar?.setAttribute('data-active', 'true'));
+    } else {
+        bar?.removeAttribute('data-active');
+        wraps.forEach(el => el.classList.add('hidden'));
+        cbs.forEach(cb => cb.checked = false);
+        if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
+        setTimeout(() => { if (!window[stateKey]) bar?.classList.add('hidden'); }, 300);
+    }
+};
+
+window.updateLibraryBulkBar = function() {
+    const prefix = 'library';
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    const allCb = document.getElementById(prefix + '-select-all');
+    const countEl = document.getElementById(prefix + '-selected-count');
+    const retryForm = document.getElementById(prefix + '-bulk-retry-form');
+    
+    let count = 0;
+    let canRetry = 0;
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            count++;
+            if (cb.dataset.canRetry === 'true') canRetry++;
+        }
+    });
+    
+    if (countEl) countEl.textContent = count;
+    if (allCb) {
+        allCb.checked = count > 0 && count === cbs.length;
+        allCb.indeterminate = count > 0 && count < cbs.length;
+    }
+    if (retryForm) {
+        if (canRetry > 0) retryForm.classList.remove('hidden');
+        else retryForm.classList.add('hidden');
+    }
+};
+
+window.submitLibraryBulk = function(formId) {
+    const prefix = 'library';
+    const form = document.getElementById(formId);
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    if (!form) return;
+    
+    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
+    
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            const r = document.createElement('input');
+            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
+            form.appendChild(r);
+            if (cb.dataset.userId) {
+                const u = document.createElement('input');
+                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
+                form.appendChild(u);
+            }
+        }
+    });
+    window['toggle' + 'Library' + 'Mode']();
+    return true;
+};
+
+(function() {
+    const prefix = 'library';
+    if (window['_' + prefix + 'GlobalInit']) return;
+    window['_' + prefix + 'GlobalInit'] = true;
+    
+    document.addEventListener('change', (e) => {
+        if (e.target.classList.contains(prefix + '-item-cb')) window['update' + 'Library' + 'BulkBar']();
+        if (e.target.id === prefix + '-select-all') {
+            document.querySelectorAll('.' + prefix + '-item-cb').forEach(cb => cb.checked = e.target.checked);
+            window['update' + 'Library' + 'BulkBar']();
+        }
+    });
+})();
+</script>

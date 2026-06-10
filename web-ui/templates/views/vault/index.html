@@ -6,7 +6,7 @@
     <!-- Dashboard Header Area -->
     <div class="mb-5 sm:mb-8">
       <!-- Badge (hidden on mobile to save vertical space) -->
-      <div class="hidden sm:inline-flex badge badge-lg bg-o-purple/10 border-o-purple/30 text-o-purpleL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+      <div class="hidden sm:inline-flex badge badge-lg bg-o-purple/10 border-o-primary/30 text-o-primaryL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
         </svg>
@@ -57,17 +57,43 @@
     {{ end }}
 
     <div class="mb-4">
-        <form method="get" action="{{ langPath $.Lang "/vault" }}" class="flex items-center" id="vault-search-form">
+        <form method="get" action="{{ langPath $.Lang "/vault" }}" class="flex items-center gap-2" id="vault-search-form">
+            <button type="button" id="vault-toggle-select" onclick="window.toggleVaultMode && window.toggleVaultMode()" class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-primary/30 hover:text-o-primaryL whitespace-nowrap shrink-0 w-32">Select</button>
             <div class="relative flex-1 isolate">
                 <input type="text" name="q" value="{{ .Data.Args.Query }}" placeholder="Search downloads..." class="input input-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full pl-10" />
                 <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-o-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             </div>
             <button type="submit" class="hidden">Submit</button>
+            
         </form>
     </div>
 
     {{/* ── Download list ────────────────────────────────────── */}}
     {{ if .Data.Pledges }}
+
+    <!-- Bulk Action Bar -->
+    <div id="vault-bulk-actions" class="hidden mb-4 border border-o-line rounded-xl transition-all duration-300 transform scale-95 opacity-0 data-[active=true]:scale-100 data-[active=true]:opacity-100 px-4 py-2 bg-base-300 min-h-[44px] border border-o-line rounded-xl flex items-center justify-between transition-all duration-300 transform scale-95 opacity-0 data-[active=true]:scale-100 data-[active=true]:opacity-100">
+        <div class="flex flex-row items-start gap-3">
+            <input type="checkbox" id="vault-select-all" class="checkbox checkbox-sm checkbox-primary shrink-0 rounded-md" />
+            <span class="text-sm font-semibold text-w-text"><span id="vault-selected-count">0</span> Selected</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <form method="post" action="{{ langPath $.Lang "/vault/retry-multiple" }}" id="vault-bulk-retry-form" onsubmit="return window.submitVaultBulk('vault-bulk-retry-form')" data-async-target="main" data-async-no-scroll="true" class="hidden">
+                <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
+                <button type="submit" class="btn btn-xs btn-outline text-o-cyan hover:bg-o-cyan/10 hover:border-o-cyan" title="Retry Selected">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+                    Retry
+                </button>
+            </form>
+            <form method="post" action="{{ langPath $.Lang "/vault/remove-multiple" }}" id="vault-bulk-remove-form" onsubmit="return window.submitVaultBulk('vault-bulk-remove-form')" data-async-target="main" data-async-no-scroll="true">
+                <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
+                <button type="submit" class="btn btn-xs btn-outline border-error/50 text-error hover:bg-error/10 hover:border-error" title="Delete Selected">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                    Delete
+                </button>
+            </form>
+        </div>
+    </div>
     <div id="vault-search-empty" class="bg-base-300/50 border border-o-line rounded-2xl p-14 text-center mb-6 hidden">
       <svg class="w-14 h-14 mx-auto text-o-muted/30 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.637 10.637Z" />
@@ -76,9 +102,15 @@
       <p class="text-sm text-o-muted max-w-xs mx-auto">Try checking your spelling or search for another term.</p>
     </div>
 
-    <div class="space-y-2 mb-6" id="vault-download-list">
+    {{ $hasVaulting := false }}
+    {{ range .Data.Pledges }}{{ if and .Resource (or .ShowProgress (not .Resource.Vaulted)) }}{{ $hasVaulting = true }}{{ end }}{{ end }}
+
+    {{ if $hasVaulting }}
+    <h2 class="text-sm font-semibold tracking-widest uppercase text-o-muted mb-3">Vaulting</h2>
+    <div class="space-y-2 mb-8" id="vault-vaulting-list">
       {{ range .Data.Pledges }}
-        {{ if .Resource }}
+        {{ if and .Resource (or .ShowProgress (not .Resource.Vaulted)) }}
+{{ if .Resource }}
         <div
           class="vault-item bg-base-300/50 border border-o-line rounded-2xl overflow-hidden transition-all"
           {{ if .ShowProgress }}
@@ -89,7 +121,11 @@
           {{ end }}
         >
           {{/* Row: icon + name + status */}}
-          <div class="flex items-center gap-3 px-4 py-3">
+          <div class="flex flex-row items-start gap-3 p-4 group">
+            <div class="shrink-0 flex items-center pr-2 hidden vault-item-cb-wrap">
+                <input type="checkbox" class="vault-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ .ResourceID }}" {{ if .ShowProgress }}data-can-retry="true"{{ end }} />
+            </div>
+            
             {{/* Icon */}}
             <div class="shrink-0">
               {{ if .Resource.Vaulted }}
@@ -115,7 +151,7 @@
 
             {{/* Name */}}
             <div class="flex-1 min-w-0">
-              <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" class="text-sm font-medium text-base-content hover:text-o-primaryL transition-colors truncate block" data-async-target="main">
+              <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" class="text-sm font-medium text-base-content hover:text-o-primaryL transition-colors line-clamp-2 block whitespace-normal min-h-[2.5rem]" data-async-target="main">
                 {{ .Resource.Name }}
               </a>
               <div class="flex items-center gap-2 mt-0.5 text-xs text-o-muted min-w-0">
@@ -125,10 +161,10 @@
               </div>
               {{/* Sub-line: live stats when downloading */}}
               {{ if .ShowProgress }}
-              <div class="flex items-center gap-3 mt-1 text-xs text-o-muted hidden" data-vault-stats-line>
+              <div class="flex flex-row items-start gap-3 mt-1 text-xs text-o-muted hidden" data-vault-stats-line>
                 <span data-vault-stat-speed class="hidden text-o-cyan font-medium"></span>
                 <span data-vault-stat-size class="hidden text-o-sub"></span>
-                <span data-vault-stat-eta class="hidden text-o-purpleL font-medium"></span>
+                <span data-vault-stat-eta class="hidden text-o-primaryL font-medium"></span>
                 <span data-vault-stat-peers class="hidden text-o-cyan"></span>
               </div>
               {{ end }}
@@ -175,7 +211,7 @@
               {{ end }}
 
               {{/* Remove button */}}
-              <form method="POST" action="{{ langPath $.Lang "/vault/remove" }}" class="inline ml-2" data-async-target="main">
+              <form method="POST" action="{{ langPath $.Lang "/vault/remove" }}" class="inline ml-2" data-async-no-scroll="true" data-async-target="main">
                 <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
                 <input type="hidden" name="resource_id" value="{{ .ResourceID }}">
                 <button type="submit" class="btn btn-xs btn-ghost text-o-muted hover:text-error" title="Remove">
@@ -197,8 +233,148 @@
           {{ end }}
         </div>
         {{ end }}
+
+        {{ end }}
       {{ end }}
     </div>
+    {{ end }}
+
+    {{ $hasVaulted := false }}
+    {{ range .Data.Pledges }}{{ if and .Resource .Resource.Vaulted (not .ShowProgress) }}{{ $hasVaulted = true }}{{ end }}{{ end }}
+
+    {{ if $hasVaulted }}
+    <h2 class="text-sm font-semibold tracking-widest uppercase text-o-muted mb-3">Vaulted</h2>
+    <div class="space-y-2 mb-6" id="vault-vaulted-list">
+      {{ range .Data.Pledges }}
+        {{ if and .Resource .Resource.Vaulted (not .ShowProgress) }}
+{{ if .Resource }}
+        <div
+          class="vault-item bg-base-300/50 border border-o-line rounded-2xl overflow-hidden transition-all"
+          {{ if .ShowProgress }}
+            data-vault-progress
+            data-resource-id="{{ .ResourceID }}"
+            data-csrf="{{ $.CSRF }}"
+            data-vault-saved-label="{{ if gt (len .Resource.SelectedFiles) 0 }}{{ t $.Lang "vault.dashboard.vaultedSelective" }}{{ else }}{{ t $.Lang "vault.dashboard.vaulted" }}{{ end }}"
+          {{ end }}
+        >
+          {{/* Row: icon + name + status */}}
+          <div class="flex flex-row items-start gap-3 p-4 group">
+            <div class="shrink-0 flex items-center pr-2 hidden vault-item-cb-wrap">
+                <input type="checkbox" class="vault-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ .ResourceID }}" {{ if .ShowProgress }}data-can-retry="true"{{ end }} />
+            </div>
+            
+            {{/* Icon */}}
+            <div class="shrink-0">
+              {{ if .Resource.Vaulted }}
+                <div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-green-400">
+                    <path fill-rule="evenodd" d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353 8.493-12.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              {{ else if .ShowProgress }}
+                <div class="w-8 h-8 rounded-lg bg-o-cyan/15 flex items-center justify-center" data-vault-progress-icon>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-o-cyan vault-pulse">
+                    <path fill-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75Zm-9 13.5a.75.75 0 0 1 .75.75v2.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V16.5a.75.75 0 0 1 1.5 0v2.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V16.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              {{ else }}
+                <div class="w-8 h-8 rounded-lg bg-w-muted/10 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-o-primaryL">
+                    <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+              {{ end }}
+            </div>
+
+            {{/* Name */}}
+            <div class="flex-1 min-w-0">
+              <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" class="text-sm font-medium text-base-content hover:text-o-primaryL transition-colors line-clamp-2 block whitespace-normal min-h-[2.5rem]" data-async-target="main">
+                {{ .Resource.Name }}
+              </a>
+              <div class="flex items-center gap-2 mt-0.5 text-xs text-o-muted min-w-0">
+                <span>{{ printf "%.2f" .Amount }} GB</span>
+                <span>·</span>
+                <span>{{ timeAgoLang $.Lang .CreatedAt }}</span>
+              </div>
+              {{/* Sub-line: live stats when downloading */}}
+              {{ if .ShowProgress }}
+              <div class="flex flex-row items-start gap-3 mt-1 text-xs text-o-muted hidden" data-vault-stats-line>
+                <span data-vault-stat-speed class="hidden text-o-cyan font-medium"></span>
+                <span data-vault-stat-size class="hidden text-o-sub"></span>
+                <span data-vault-stat-eta class="hidden text-o-primaryL font-medium"></span>
+                <span data-vault-stat-peers class="hidden text-o-cyan"></span>
+              </div>
+              {{ end }}
+            </div>
+
+            {{/* Status badge */}}
+            <div class="shrink-0 text-right">
+              {{ if not .Funded }}
+                <span class="badge badge-sm bg-o-primary/10 border-o-primary/30 text-o-primaryL">Expiring</span>
+              {{ else if .ShowProgress }}
+                <span data-vault-progress-badge>
+                  {{ if .WorkerStatus }}
+                    <div class="flex flex-col items-end gap-1">
+                      <span class="badge badge-sm bg-o-cyan/10 border-o-cyan/30 text-o-cyan font-semibold animate-pulse">
+                        Vaulting {{ printf "%.1f" .WorkerStatus.GetProgress }}%
+                      </span>
+                      <div class="text-[10px] text-o-muted tabular-nums">{{ .WorkerStatus.StoredSize | bitsForHumans }} / {{ .WorkerStatus.TotalSize | bitsForHumans }}</div>
+                    </div>
+                  {{ else }}
+                    <span class="badge badge-sm bg-o-cyan/10 border-o-cyan/30 text-o-cyan gap-1.5">
+                      <span class="loading loading-dots loading-xs"></span>
+                    </span>
+                  {{ end }}
+                </span>
+              {{ else if .Resource.Vaulted }}
+                {{ if gt (len .Resource.SelectedFiles) 0 }}
+                  <span class="badge badge-sm bg-green-500/10 border-green-500/30 text-green-400">{{ t $.Lang "vault.dashboard.vaultedSelective" }}</span>
+                {{ else }}
+                  <span class="badge badge-sm bg-green-500/10 border-green-500/30 text-green-400">{{ t $.Lang "vault.dashboard.vaulted" }}</span>
+                {{ end }}
+              {{ end }}
+
+              {{/* Retry button */}}
+              {{ if .ShowProgress }}
+              <form method="POST" action="{{ langPath $.Lang "/vault/retry" }}" class="inline ml-2 hidden" data-vault-retry-form data-async-target="main">
+                <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
+                <input type="hidden" name="resource_id" value="{{ .ResourceID }}">
+                <button type="submit" class="btn btn-xs btn-ghost text-o-cyan hover:text-o-cyanL" title="Force Retry">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                  </svg>
+                </button>
+              </form>
+              {{ end }}
+
+              {{/* Remove button */}}
+              <form method="POST" action="{{ langPath $.Lang "/vault/remove" }}" class="inline ml-2" data-async-no-scroll="true" data-async-target="main">
+                <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
+                <input type="hidden" name="resource_id" value="{{ .ResourceID }}">
+                <button type="submit" class="btn btn-xs btn-ghost text-o-muted hover:text-error" title="Remove">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                  </svg>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {{/* Progress bar — only shown while downloading */}}
+          {{ if .ShowProgress }}
+          <div class="px-4 pb-3.5" data-vault-progress-bar-wrap>
+            <div class="w-full bg-base-200 rounded-full h-1.5 overflow-hidden">
+              <div class="h-full rounded-full bg-o-cyan transition-all duration-500" data-vault-progress-bar style="width:0%"></div>
+            </div>
+          </div>
+          {{ end }}
+        </div>
+        {{ end }}
+
+        {{ end }}
+      {{ end }}
+    </div>
+    {{ end }}
 
     {{ else }}
     {{/* Empty state */}}
@@ -214,4 +390,112 @@
   </div>
 </section>
 {{ "vault/progress.js" | asset }}
+
+<script>
+window.toggleVaultMode = function() {
+    const prefix = 'vault';
+    const btnId = 'vault-toggle-select';
+    const barId = 'vault-bulk-actions';
+    const stateKey = '_' + prefix + 'SelectModeActive';
+    
+    window[stateKey] = !window[stateKey];
+    const active = window[stateKey];
+    
+    const btn = document.getElementById(btnId);
+    const bar = document.getElementById(barId);
+    const wraps = document.querySelectorAll('.' + prefix + '-item-cb-wrap');
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    
+    if (btn) {
+        btn.textContent = active ? 'Done' : 'Select';
+        btn.classList.toggle('bg-o-purple/15', active && prefix === 'library');
+        btn.classList.toggle('text-o-purpleL', active && prefix === 'library');
+        btn.classList.toggle('border-o-purple/30', active && prefix === 'library');
+        btn.classList.toggle('bg-o-primary/15', active && prefix === 'vault');
+        btn.classList.toggle('text-o-primaryL', active && prefix === 'vault');
+        btn.classList.toggle('border-o-primary/30', active && prefix === 'vault');
+        btn.classList.toggle('text-o-sub', !active);
+        btn.classList.toggle('border-o-line', !active);
+    }
+    
+    if (active) {
+        bar?.classList.remove('hidden');
+        wraps.forEach(el => el.classList.remove('hidden'));
+        requestAnimationFrame(() => bar?.setAttribute('data-active', 'true'));
+    } else {
+        bar?.removeAttribute('data-active');
+        wraps.forEach(el => el.classList.add('hidden'));
+        cbs.forEach(cb => cb.checked = false);
+        if (window.updateVaultBulkBar) window.updateVaultBulkBar();
+        setTimeout(() => { if (!window[stateKey]) bar?.classList.add('hidden'); }, 300);
+    }
+};
+
+window.updateVaultBulkBar = function() {
+    const prefix = 'vault';
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    const allCb = document.getElementById(prefix + '-select-all');
+    const countEl = document.getElementById(prefix + '-selected-count');
+    const retryForm = document.getElementById(prefix + '-bulk-retry-form');
+    
+    let count = 0;
+    let canRetry = 0;
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            count++;
+            if (cb.dataset.canRetry === 'true') canRetry++;
+        }
+    });
+    
+    if (countEl) countEl.textContent = count;
+    if (allCb) {
+        allCb.checked = count > 0 && count === cbs.length;
+        allCb.indeterminate = count > 0 && count < cbs.length;
+    }
+    if (retryForm) {
+        if (canRetry > 0) retryForm.classList.remove('hidden');
+        else retryForm.classList.add('hidden');
+    }
+};
+
+window.submitVaultBulk = function(formId) {
+    const prefix = 'vault';
+    const form = document.getElementById(formId);
+    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
+    if (!form) return;
+    
+    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
+    
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            const r = document.createElement('input');
+            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
+            form.appendChild(r);
+            if (cb.dataset.userId) {
+                const u = document.createElement('input');
+                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
+                form.appendChild(u);
+            }
+        }
+    });
+    window['toggle' + 'Vault' + 'Mode']();
+    return true;
+};
+
+(function() {
+    const prefix = 'vault';
+    if (window['_' + prefix + 'GlobalInit']) return;
+    window['_' + prefix + 'GlobalInit'] = true;
+    
+    document.addEventListener('change', (e) => {
+        if (e.target.classList.contains(prefix + '-item-cb')) window['update' + 'Vault' + 'BulkBar']();
+        if (e.target.id === prefix + '-select-all') {
+            document.querySelectorAll('.' + prefix + '-item-cb').forEach(cb => cb.checked = e.target.checked);
+            window['update' + 'Vault' + 'BulkBar']();
+        }
+    });
+})();
+</script>
+
 {{ end }}
