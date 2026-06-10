@@ -177,7 +177,7 @@ func (s *ProwlarrClient) getTopIndexerIDs() ([]int, error) {
 
 	var ids []int
 	for _, idx := range indexers {
-		if idx.Enable && idx.Priority <= 10 {
+		if idx.Enable {
 			ids = append(ids, idx.ID)
 		}
 	}
@@ -301,8 +301,8 @@ func (s *ProwlarrClient) Search(query string) ([]ProwlarrResultItem, error) {
 	select {
 	case <-doneChan:
 		log.Debug("All Prowlarr indexers completed search in time")
-	case <-time.After(6 * time.Second):
-		log.Warn("Prowlarr search timed out after 6s waiting for slow indexers, returning partial results")
+	case <-time.After(15 * time.Second):
+		log.Warn("Prowlarr search timed out after 15s waiting for slow indexers, returning partial results")
 	}
 
 	var deduped []ProwlarrResultItem
