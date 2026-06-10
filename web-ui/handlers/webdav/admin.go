@@ -71,16 +71,20 @@ func NewAdminDirectory(pg *services.PG, sapi *api.Api, jobs *j.Jobs, admin *admi
 				pg:               pg,
 				AllUsers:         true,
 			},
-			"users": &AdminUsersDirectory{pg: pg, api: sapi, jobs: jobs},
+			"users": &AdminUsersDirectory{pg: pg, api: sapi, jobs: jobs, admin: admin},
 		},
 	}
 }
 
+// AdminUsersDirectory lists all users and lets the admin browse each user's files.
+// The admin field is used to determine whether to show adult content for a given user
+// (admin users browsing their own entry see adult; normal users browsed by admin do not).
 type AdminUsersDirectory struct {
 	BaseDirectory
-	pg   *services.PG
-	api  *api.Api
-	jobs *j.Jobs
+	pg    *services.PG
+	api   *api.Api
+	jobs  *j.Jobs
+	admin *adminsvc.Admin
 }
 
 func (s *AdminUsersDirectory) Open(ctx context.Context, path string) (io.ReadCloser, *url.URL, error) {
@@ -216,13 +220,18 @@ func (s *AdminUsersDirectory) userFileSystem(ctx context.Context, path string) (
 	if len(parts) == 2 {
 		newPath = "/" + parts[1]
 	}
-	return newUserScopedRoot(s.pg, s.api, s.jobs, user.UserID), newPath, nil
+	// Give admin users browsing another user's subtree the adult folder only if
+	// that target user is themselves an admin.
+	isTargetAdmin := s.admin != nil && s.admin.IsAdminEmail(user.Email)
+	return newUserScopedRoot(s.pg, s.api, s.jobs, user.UserID, isTargetAdmin), newPath, nil
 }
 
-func newUserScopedRoot(pg *services.PG, sapi *api.Api, jobs *j.Jobs, userID uuid.UUID) webdav.FileSystem {
+// newUserScopedRoot builds the per-user filesystem for use inside users/<email>/.
+// includeAdult controls whether the adult folder is exposed.
+func newUserScopedRoot(pg *services.PG, sapi *api.Api, jobs *j.Jobs, userID uuid.UUID, includeAdult bool) webdav.FileSystem {
 	td := &TorrentDirectory{api: sapi}
 	uid := userID
-	return &RootDirectory{Children: map[string]webdav.FileSystem{
+	children := map[string]webdav.FileSystem{
 		"torrents": &TorrentLibraryDirectory{pg: pg, api: sapi, jobs: jobs, UserID: &uid},
 		"all": &ContentDirectory{
 			Library:          &AllLibrary{},
@@ -242,7 +251,16 @@ func newUserScopedRoot(pg *services.PG, sapi *api.Api, jobs *j.Jobs, userID uuid
 			pg:               pg,
 			UserID:           &uid,
 		},
-	}}
+	}
+	if includeAdult {
+		children["adult"] = &ContentDirectory{
+			Library:          &AdultLibrary{},
+			TorrentDirectory: td,
+			pg:               pg,
+			UserID:           &uid,
+		}
+	}
+	return &RootDirectory{Children: children}
 }
 
 var _ webdav.FileSystem = (*AdminUsersDirectory)(nil)

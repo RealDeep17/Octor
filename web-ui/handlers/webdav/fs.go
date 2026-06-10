@@ -12,8 +12,33 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 	td := &TorrentDirectory{
 		api: sapi,
 	}
-	// personalChildren defines the standard folders for a regular user
-	personalChildren := map[string]webdav.FileSystem{
+
+	// userChildren: standard folders for a regular (non-admin) user — no adult folder.
+	userChildren := map[string]webdav.FileSystem{
+		"torrents": &TorrentLibraryDirectory{
+			pg:   pg,
+			api:  sapi,
+			jobs: jobs,
+		},
+		"all": &ContentDirectory{
+			Library:          &AllLibrary{},
+			TorrentDirectory: td,
+			pg:               pg,
+		},
+		"movies": &ContentDirectory{
+			Library:          &MovieLibrary{},
+			TorrentDirectory: td,
+			pg:               pg,
+		},
+		"series": &ContentDirectory{
+			Library:          &SeriesLibrary{},
+			TorrentDirectory: td,
+			pg:               pg,
+		},
+	}
+
+	// adminPersonalChildren: like userChildren but also includes the admin's own adult folder.
+	adminPersonalChildren := map[string]webdav.FileSystem{
 		"torrents": &TorrentLibraryDirectory{
 			pg:   pg,
 			api:  sapi,
@@ -43,10 +68,9 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 
 	var root webdav.FileSystem
 	if admin != nil {
-		// Admin Root: see everything as folders at the top level
-		// We use separate maps to avoid recursion
+		// adminChildren: shown only when the requesting user IS an admin.
 		adminChildren := map[string]webdav.FileSystem{
-			"my": &RootDirectory{Children: personalChildren},
+			"my": &RootDirectory{Children: adminPersonalChildren},
 			"system": &RootDirectory{
 				Children: map[string]webdav.FileSystem{
 					"torrents": &TorrentLibraryDirectory{pg: pg, api: sapi, jobs: jobs, AllUsers: true},
@@ -76,17 +100,20 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 					},
 				},
 			},
-			"users": &AdminUsersDirectory{pg: pg, api: sapi, jobs: jobs},
+			"users": &AdminUsersDirectory{pg: pg, api: sapi, jobs: jobs, admin: admin},
 			"drive": &LocalDirectory{Root: "/srv/octor/infra-data/drive-mount-vfs"},
 		}
-		root = &RootDirectory{
-			Admin:    admin,
-			Children: adminChildren,
+
+		// DualRootDirectory: serves adminChildren for admin users, userChildren for everyone else.
+		root = &DualRootDirectory{
+			Admin:         admin,
+			AdminChildren: adminChildren,
+			UserChildren:  userChildren,
 		}
 	} else {
-		// User Root: see only their personal folders
+		// No admin service configured: everyone gets the plain user tree.
 		root = &RootDirectory{
-			Children: personalChildren,
+			Children: userChildren,
 		}
 	}
 

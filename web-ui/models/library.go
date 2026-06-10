@@ -298,7 +298,7 @@ func GetLibraryMovieTorrentList(ctx context.Context, db *pg.DB, uID uuid.UUID, s
 		Join("left join movie_metadata as mmd").
 		JoinOn("m.movie_metadata_id = mmd.movie_metadata_id").
 		Where("library.user_id = ?", uID).
-		Where("(mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
+		Where("(mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND m.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
 		Relation("Torrent")
 
 	if q != "" {
@@ -737,7 +737,7 @@ func GetLibraryMovieTorrentListAll(ctx context.Context, db *pg.DB, sort SortType
 		JoinOn("m.resource_id = library.resource_id").
 		Join("left join movie_metadata as mmd").
 		JoinOn("m.movie_metadata_id = mmd.movie_metadata_id").
-		Where("(mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND movie.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
+		Where("(mmd.video_id IS NULL OR (mmd.video_id NOT LIKE 'tpdb:%' AND mmd.video_id NOT LIKE 'tpdb_jav:%' AND mmd.video_id NOT LIKE 'stash:%')) AND m.path !~* '(porn|adult|xxx|jav|brazzers|bangbros|hentai|slut|pornstar|nude)'").
 		Relation("Torrent")
 
 	if q != "" {

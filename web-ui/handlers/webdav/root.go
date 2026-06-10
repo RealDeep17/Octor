@@ -156,3 +156,64 @@ func (s *RootDirectory) canUseAdmin(ctx context.Context) bool {
 	}
 	return s.Admin.IsAdminUser(wcc.User)
 }
+
+// DualRootDirectory presents AdminChildren to admin users and UserChildren to everyone else.
+// This is evaluated per-request so the tree is access-controlled without needing to build
+// separate filesystem trees per user at server startup.
+type DualRootDirectory struct {
+	Admin         *adminsvc.Admin
+	AdminChildren map[string]webdav.FileSystem
+	UserChildren  map[string]webdav.FileSystem
+}
+
+func (s *DualRootDirectory) effectiveChildren(ctx context.Context) map[string]webdav.FileSystem {
+	if s.Admin == nil {
+		return s.UserChildren
+	}
+	wcc, err := getWebContext(ctx)
+	if err != nil {
+		return s.UserChildren
+	}
+	if s.Admin.IsAdminUser(wcc.User) {
+		return s.AdminChildren
+	}
+	return s.UserChildren
+}
+
+func (s *DualRootDirectory) toRoot(ctx context.Context) *RootDirectory {
+	return &RootDirectory{Children: s.effectiveChildren(ctx)}
+}
+
+func (s *DualRootDirectory) Open(ctx context.Context, path string) (io.ReadCloser, *url.URL, error) {
+	return s.toRoot(ctx).Open(ctx, path)
+}
+
+func (s *DualRootDirectory) ReadDir(ctx context.Context, path string, recursive bool) ([]webdav.FileInfo, error) {
+	return s.toRoot(ctx).ReadDir(ctx, path, recursive)
+}
+
+func (s *DualRootDirectory) Stat(ctx context.Context, path string) (*webdav.FileInfo, error) {
+	return s.toRoot(ctx).Stat(ctx, path)
+}
+
+func (s *DualRootDirectory) RemoveAll(ctx context.Context, path string, opts *webdav.RemoveAllOptions) error {
+	return s.toRoot(ctx).RemoveAll(ctx, path, opts)
+}
+
+func (s *DualRootDirectory) Create(ctx context.Context, path string, body io.ReadCloser, opts *webdav.CreateOptions) (*webdav.FileInfo, bool, error) {
+	return s.toRoot(ctx).Create(ctx, path, body, opts)
+}
+
+func (s *DualRootDirectory) Move(ctx context.Context, path, dest string, options *webdav.MoveOptions) (bool, error) {
+	return s.toRoot(ctx).Move(ctx, path, dest, options)
+}
+
+func (s *DualRootDirectory) Mkdir(ctx context.Context, path string) error {
+	return s.toRoot(ctx).Mkdir(ctx, path)
+}
+
+func (s *DualRootDirectory) Copy(ctx context.Context, path, dest string, options *webdav.CopyOptions) (bool, error) {
+	return s.toRoot(ctx).Copy(ctx, path, dest, options)
+}
+
+var _ webdav.FileSystem = (*DualRootDirectory)(nil)
