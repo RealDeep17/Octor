@@ -180,7 +180,7 @@ func main() {
 	vaultDir := filepath.Join(storagePath, "vault")
 	if entries, err := os.ReadDir(vaultDir); err == nil {
 		for _, entry := range entries {
-			if entry.IsDir() && len(entry.Name()) == 40 {
+			if entry.IsDir() && len(entry.Name()) == 64 {
 				fileHash := strings.ToLower(entry.Name())
 				if !activeHashesSet[fileHash] {
 					orphanedVaultDirs = append(orphanedVaultDirs, filepath.Join(vaultDir, entry.Name()))
