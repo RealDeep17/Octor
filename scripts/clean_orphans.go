@@ -3,13 +3,11 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/go-pg/pg/v10"
 )
