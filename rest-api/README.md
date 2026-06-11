@@ -19,23 +19,32 @@ systemctl status octor-rest-api
 
 ## Configuration
 
-Primary configuration is stored in `custom.env`. 
+Primary configuration is managed via environment variables (usually loaded from `custom.env`) or CLI flags.
 
-- **Port:** 8080 (default)
-- **Torrent Store:** 50051
-- **Magnet2Torrent:** 50051
+| Flag | Environment Variable | Default | Description |
+|------|----------------------|---------|-------------|
+| `--port` | `WEB_PORT` | `8080` | HTTP listening port |
+| `--pprof-port` | `PPROF_PORT` | `8080` | pprof listening port (Octor default: `51080`) |
+| `--probe-port` | `PROBE_PORT` | `8081` | probe listening port (Octor default: `52080`) |
+| `--torrent-store-host` | `TORRENT_STORE_HOST` | `127.0.0.1` | Torrent Store host |
+| `--torrent-store-port` | `TORRENT_STORE_PORT` | `50051` | Torrent Store gRPC port |
+| `--magnet2torrent-host` | `MAGNET2TORRENT_HOST` | `127.0.0.1` | Magnet2Torrent host |
+| `--magnet2torrent-port` | `MAGNET2TORRENT_PORT` | `50051` | Magnet2Torrent gRPC port (Octor default: `50053`) |
+| `--video-info-host` | `VIDEO_INFO_HOST` | `127.0.0.1` | Video Info host |
+| `--video-info-port` | `VIDEO_INFO_PORT` | `50051` | Video Info gRPC port (Octor default: `50056`) |
+| `--export-domain` | `OCTOR_DOMAIN` | `""` | Public domain for generated URLs |
 
-Example environment variables:
-```env
-WEB_PORT=8080
-TORRENT_STORE_HOST=localhost
-TORRENT_STORE_PORT=50051
-```
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **HTTP:** `8080`
+- **Pprof:** `51080`
+- **Probe:** `52080`
 
 ## Swagger (OpenAPI)
 
 Once running, the Swagger UI is available at:
-http://localhost:8080/swagger/index.html
+`http://localhost:8080/swagger/index.html`
 ## Transmission RPC compatibility
 
 The REST API includes a Transmission RPC-compatible endpoint for automation and ARR clients. It tracks added torrents in `/srv/octor/infra-data/transmission_torrents.json` by default and creates that file's parent directory dynamically.

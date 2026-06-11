@@ -52,35 +52,59 @@ go run . migrate up                      # apply PostgreSQL migrations
 make protoc                              # regenerate proto/*.pb.go
 ```
 
-### Server flags
+| `--grpc-port`        | `GRPC_PORT`             | `50051`   | gRPC listening port (Octor default: `50059`) |
+| `--pprof-port`       | `PPROF_PORT`            | `8080`    | pprof listening port (Octor default: `51059`) |
+| `--probe-port`       | `PROBE_PORT`            | `8081`    | probe listening port (Octor default: `52059`) |
+| `--sync-interval`    | `STORE_SYNC_INTERVAL`   | `10`      | PG → Badger resync interval, minutes         |
+| `--smtp-host`        | `SMTP_HOST`             | `""`      | SMTP host                                    |
+| `--smtp-port`        | `SMTP_PORT`             | `0`       | SMTP port                                    |
+| `--smtp-user`        | `SMTP_USER`             | `""`      | SMTP user                                    |
+| `--smtp-pass`        | `SMTP_PASS`             | `""`      | SMTP pass                                    |
+| `--smtp-tls`         | `SMTP_TLS`              | `false`   | use implicit TLS (port 465 style)            |
+| `--smtp-start-tls`   | `SMTP_STARTTLS`         | `false`   | use STARTTLS                                 |
+| `--smtp-tls-secure`  | `SMTP_TLS_SECURE`       | `true`    | verify TLS certificates                      |
+| `--mail-sender`      | `MAIL_SENDER`           | `noreply@octor` | mail sender                          |
+| `--mail-support`     | `MAIL_SUPPORT`          | `support@octor` | mail support                          |
 
-```
---probe-host                       probe host                                [$PROBE_HOST]
---probe-port           (8081)      probe port                                [$PROBE_PORT]
---use-probe                        enable probe                              [$USE_PROBE]
---postgres-host                    postgres host                             [$PG_HOST]
---postgres-port        (5433)      postgres port                             [$PG_PORT]
---postgres-user                                                              [$PG_USER]
---postgres-password                                                          [$PG_PASSWORD]
---postgres-database                                                          [$PG_DATABASE]
---postgres-ssl                                                               [$PG_SSL]
---grpc-host                        grpc listening host                       [$GRPC_HOST]
---grpc-port            (50059)     grpc listening port                       [$GRPC_PORT]
---nats-service-host                nats host (auto-injected in K8s)          [$NATS_SERVICE_HOST]
---nats-service-port    (4222)      nats port                                 [$NATS_SERVICE_PORT]
---sync-interval, --si  (10)        PG → Badger resync interval, minutes      [$STORE_SYNC_INTERVAL]
---smtp-host                                                                  [$SMTP_HOST]
---smtp-port                                                                  [$SMTP_PORT]
---smtp-user                                                                  [$SMTP_USER]
---smtp-pass                                                                  [$SMTP_PASS]
---smtp-tls                         use implicit TLS (port 465 style)         [$SMTP_TLS]
---smtp-start-tls                   use STARTTLS over plaintext connection    [$SMTP_STARTTLS]
---smtp-tls-secure      (true)      verify TLS certificates                   [$SMTP_TLS_SECURE]
---mail-sender          (noreply@octor)                                   [$MAIL_SENDER]
---mail-support         (support@octor)                                   [$MAIL_SUPPORT]
+*Postgres and NATS options are provided by `common-services`.*
+
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **gRPC:** `50059`
+- **Pprof:** `51059`
+- **Probe:** `52059`
+
+## gRPC API
+
+Defined in [`proto/abuse-store.proto`](proto/abuse-store.proto):
+
+- `Push(PushRequest) → PushReply` — submit an abuse notice. `infohash` and `email` are validated; `notice_id` and `started_at` default to a fresh UUID and the current time. Only `ILLEGAL_CONTENT` causes a database write; duplicates by infohash are rejected with `ALREADY_EXISTS` but **still publish `resource.banned`** (recovery for a dropped first publish).
+- `Check(CheckRequest) → CheckReply` — returns `exists = true` if the infohash is in the stoplist (Badger lookup).
+
+## NATS events
+
+`ILLEGAL_CONTENT` reports publish to subject **`resource.banned`** with body:
+
+```json
+{ "infohash": "<lowercase hex>" }
 ```
 
-`--smtp-tls` and `--smtp-start-tls` are mutually exclusive. Set `--smtp-tls-secure=false` only against a self-signed dev SMTP.
+The platform's JetStream stream `common` captures `resource.*`, so any consumer in the cluster can subscribe via a durable pull consumer. Existing subscribers:
+
+- `web-ui` — drops the resource from `library`, `watch_history`, `cache_index`, `torrent_resource`, media metadata and the `vault.pledge` / `vault.tx_log` / `vault.resource` tables (refunding VP).
+- `vault` — queues the resource for deletion (S3 + own DB) via `ResourceQueueForDeletion`.
+
+Publishing is best-effort and never fails the RPC. Consumers must be idempotent — duplicate reports re-fire the event by design, which lets a re-submitted form recover from a transient NATS outage.
+
+## Build & run
+
+```bash
+go build ./...                           # main server binary + ./client CLI
+go run . serve [flags...]                # start the server
+go run . migrate up                      # apply PostgreSQL migrations
+make protoc                              # regenerate proto/*.pb.go
+```
 
 ### Client CLI
 

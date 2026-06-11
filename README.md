@@ -101,9 +101,12 @@ Configuration is managed via environment variables. Copy `example.env` to `custo
 
 Octor uses a standardized port mapping system to avoid collisions:
 
-- **8xxx Range:** Public-facing entry points (Web UI: 8082, REST API: 8080, Sidecar: 8000, Vault: 8086).
+- **8xxx Range:** Public-facing entry points (Web UI: `8082`, REST API: `8080`, Sidecar: `8000`, Vault: `8086`).
 - **500xx Range:** Internal gRPC and streaming services.
+- **51xxx Range:** pprof profiling endpoints.
 - **52xxx Range:** Health probes (Liveness/Readiness).
+- **53xxx Range:** Prometheus metrics endpoints.
+- **54xxx Range:** Internal secondary Web interfaces.
 - **9000:** Custom S3 Gateway.
 - **3456:** AI Proxy.
 

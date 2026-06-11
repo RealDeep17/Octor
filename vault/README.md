@@ -14,24 +14,21 @@ The service is managed via `systemd` and configured using `custom.env`.
 systemctl status octor-vault
 ```
 
-The Vault listens on port **8086**.
+| Flag | Environment Variable | Default | Description |
+|------|----------------------|---------|-------------|
+| `--host` | `WEB_HOST` | `""` | listening host |
+| `--port` | `WEB_PORT` | `8080` | HTTP listening port (Octor default: `8086`) |
+| `--pprof-port` | `PPROF_PORT` | `8080` | pprof listening port (Octor default: `51086`) |
+| `--probe-port` | `PROBE_PORT` | `8081` | probe listening port (Octor default: `52086`) |
+| `--prom-port` | `PROM_PORT` | `0` | Prometheus metrics port (Octor default: `53086`) |
 
-## Configuration
+### Standard Octor Ports
 
-Primary configuration is stored in `custom.env`. 
-
-- **Web:** `WEB_PORT=8086`
-- **Postgres:** `PG_HOST`, `PG_PORT=5433`, `PG_USER`, `PG_PASSWORD`, `PG_DATABASE`
-- **Redis:** `REDIS_HOST`, `REDIS_PORT=6380`
-- **S3 Gateway:** `S3_ENDPOINT=http://localhost:9000`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`
-
-Example `custom.env`:
-```env
-WEB_PORT=8086
-PG_PORT=5433
-REDIS_PORT=6380
-S3_ENDPOINT=http://localhost:9000
-```
+When managed by `run.sh`, the following ports are used:
+- **HTTP:** `8086`
+- **Pprof:** `51086`
+- **Probe:** `52086`
+- **Prometheus:** `53086`
 
 Swagger UI: http://localhost:8086/swagger/index.html
 

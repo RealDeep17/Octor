@@ -145,10 +145,23 @@ All configuration via CLI flags and environment variables.
 
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
-| `--use-stat` | `USE_STAT` | `false` | Enable gRPC stat service (port 50054) |
-| `--use-probe` | `USE_PROBE` | `false` | Enable health probe (port 52054) |
-| `--use-pprof` | `USE_PPROF` | `false` | Enable pprof (port 8082) |
-| `--use-prom` | `USE_PROM` | `false` | Enable Prometheus metrics (port 8083) |
+| `--use-stat` | `USE_STAT` | `true` | Enable gRPC stat service |
+| `--grpc-port` | `GRPC_PORT` | `50051` | gRPC stat port (Octor default: `50054`) |
+| `--use-probe` | `USE_PROBE` | `true` | Enable health probe |
+| `--probe-port` | `PROBE_PORT` | `8081` | probe port (Octor default: `52054`) |
+| `--use-pprof` | `USE_PPROF` | `true` | Enable pprof |
+| `--pprof-port` | `PPROF_PORT` | `8082` | pprof port (Octor default: `51054`) |
+| `--use-prom` | `USE_PROM` | `true` | Enable Prometheus metrics |
+| `--prom-port` | `PROM_PORT` | `8083` | Prometheus port (Octor default: `53054`) |
+
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **HTTP:** `50054`
+- **gRPC Stat:** `50054`
+- **Pprof:** `51054`
+- **Probe:** `52054`
+- **Prometheus:** `53054`
 
 ## Docker
 

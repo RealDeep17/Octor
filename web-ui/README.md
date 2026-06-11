@@ -53,29 +53,23 @@ Some features to mention:
   - [x] TorBox
 - [x] i18n
 
-## Setting up connection to Octor REST-API
+| Flag | Environment Variable | Default | Description |
+|------|----------------------|---------|-------------|
+| `--host` | `WEB_HOST` | `""` | listening host |
+| `--port` | `WEB_PORT` | `8080` | HTTP listening port (Octor default: `8082`) |
+| `--pprof-port` | `PPROF_PORT` | `8080` | pprof listening port (Octor default: `51081`) |
+| `--probe-port` | `PROBE_PORT` | `8081` | probe listening port (Octor default: `52081`) |
+| `--octor-rest-api-host` | `REST_API_SERVICE_HOST` | `127.0.0.1` | Octor REST API host |
+| `--octor-rest-api-port` | `REST_API_SERVICE_PORT` | `8080` | Octor REST API port |
+| `--vault-service-host` | `VAULT_SERVICE_HOST` | `127.0.0.1` | Vault service host |
+| `--vault-service-port` | `VAULT_SERVICE_PORT` | `8086` | Vault service port |
 
-The Web UI connects to the Octor REST-API. Ensure the REST-API is running on port `8080`.
+### Standard Octor Ports
 
-Configuration is managed via `custom.env`:
-```env
-REST_API_SERVICE_HOST=localhost
-REST_API_SERVICE_PORT=8080
-```
-
-## Usage
-
-The service is managed via `systemd` and configured using `custom.env`.
-
-```bash
-# Start the service
-./run.sh mode production
-
-# Check status
-systemctl status octor-web-ui
-```
-
-The Web UI listens on port **8082**.
+When managed by `run.sh`, the following ports are used:
+- **HTTP:** `8082`
+- **Pprof:** `51081`
+- **Probe:** `52081`
 
 ## Development
 

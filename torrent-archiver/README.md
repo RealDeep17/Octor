@@ -13,11 +13,21 @@ Configuration can be provided via command-line flags or environment variables (r
 
 | Flag | Environment Variable | Default | Description |
 |------|----------------------|---------|-------------|
-| `--port` | `PORT` | `50057` | HTTP listening port |
-| `--torrent-store-host` | `TORRENT_STORE_HOST` | `""` | Torrent Store host |
+| `--host` | `WEB_HOST` | `""` | listening host |
+| `--port` | `WEB_PORT` | `8080` | HTTP listening port (Octor default: `50057`) |
+| `--pprof-port` | `PPROF_PORT` | `8080` | pprof listening port (Octor default: `51057`) |
+| `--probe-port` | `PROBE_PORT` | `8081` | probe listening port (Octor default: `52057`) |
+| `--prom-port` | `PROM_PORT` | `0` | Prometheus metrics port (Octor default: `53057`) |
+| `--torrent-store-host` | `TORRENT_STORE_HOST` | `127.0.0.1` | Torrent Store host |
 | `--torrent-store-port` | `TORRENT_STORE_PORT` | `50051` | Torrent Store gRPC port |
 
-*Probe and metrics options are provided by the `common-services` package.*
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **HTTP:** `50057`
+- **Pprof:** `51057`
+- **Probe:** `52057`
+- **Prometheus:** `53057`
 
 ## Build & Run
 

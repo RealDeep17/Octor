@@ -14,22 +14,19 @@ The service is managed via `systemd` and configured using `custom.env`.
 systemctl status octor-torrent-store
 ```
 
-The service listens on gRPC port **50051**.
+| Flag | Environment Variable | Default | Description |
+|------|----------------------|---------|-------------|
+| `--grpc-host` | `GRPC_HOST` | `""` | gRPC listening host |
+| `--grpc-port` | `GRPC_PORT` | `50051` | gRPC listening port |
+| `--pprof-port` | `PPROF_PORT` | `8080` | pprof listening port (Octor default: `51051`) |
+| `--probe-port` | `PROBE_PORT` | `8081` | probe listening port (Octor default: `52051`) |
 
-## Configuration
+### Standard Octor Ports
 
-Primary configuration is stored in `custom.env`.
-
-- **gRPC Port:** 50051
-- **Redis:** `REDIS_HOST`, `REDIS_PORT=6380`
-- **S3 Gateway:** `AWS_ENDPOINT=http://localhost:9000`, `AWS_BUCKET=torrent-store`
-
-Example `custom.env`:
-```env
-GRPC_PORT=50051
-REDIS_PORT=6380
-AWS_ENDPOINT=http://localhost:9000
-```
+When managed by `run.sh`, the following ports are used:
+- **gRPC:** `50051`
+- **Pprof:** `51051`
+- **Probe:** `52051`
 
 ## Client usage
 

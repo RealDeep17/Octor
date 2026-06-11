@@ -16,10 +16,18 @@ Configuration can be provided via command-line flags or environment variables (r
 | Flag | Environment Variable | Default | Description |
 |------|----------------------|---------|-------------|
 | `--grpc-host` | `GRPC_HOST` | `""` | gRPC listening host |
-| `--grpc-port` | `GRPC_PORT` | `50061` | gRPC listening port |
-| `--port` | `PORT` | `8080` | Web listening port (Internal) |
+| `--grpc-port` | `GRPC_PORT` | `50051` | gRPC listening port (Octor default: `50061`) |
+| `--port` | `WEB_PORT` | `8080` | Web listening port (Octor default: `54061`) |
+| `--probe-port` | `PROBE_PORT` | `8081` | probe listening port (Octor default: `52061`) |
 | `--postgres-host` | `PG_HOST` | `""` | PostgreSQL host |
 | `--postgres-port` | `PG_PORT` | `5433` | PostgreSQL port |
+
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **gRPC:** `50061`
+- **Web:** `54061`
+- **Probe:** `52061`
 
 *PostgreSQL and Probe options are provided by the `common-services` package.*
 

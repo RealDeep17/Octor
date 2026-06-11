@@ -10,10 +10,19 @@ A specialized gRPC service for resolving Magnet URIs into full BitTorrent metain
 
 ## ⚙️ Configuration
 
-| Variable | Flag | Default |
-|----------|------|---------|
-| `LISTEN_HOST` | `--host` | `0.0.0.0` |
-| `LISTEN_PORT` | `--port` | `50053` |
+| Variable | Flag | Default | Description |
+|----------|------|---------|-------------|
+| `LISTEN_HOST` | `--host` | `""` | listening host |
+| `LISTEN_PORT` | `--port` | `50051` | gRPC listening port (Octor default: `50053`) |
+| `PPROF_PORT` | `--pprof-port` | `8080` | pprof listening port (Octor default: `51053`) |
+| `PROBE_PORT` | `--probe-port` | `8081` | probe listening port (Octor default: `52053`) |
+
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **gRPC:** `50053`
+- **Pprof:** `51053`
+- **Probe:** `52053`
 
 ## 🛠 Usage
 

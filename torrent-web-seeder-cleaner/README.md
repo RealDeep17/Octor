@@ -14,3 +14,10 @@ Useful flags/env:
 | `--data-dir` | `DATA_DIR` | system temp | Seeder media cache directory |
 | `--keep-free` | `CLEANER_KEEP_FREE` | `25%` | Start space cleanup below this free-space threshold |
 | `--free` | `CLEANER_FREE` | `35%` | Free up to this threshold during space cleanup |
+
+### Infrastructure flags
+
+| Flag | Env | Default | Description |
+|------|-----|---------|-------------|
+| `--use-probe` | `USE_PROBE` | `true` | Enable health probe (port 8081) |
+| `--use-pprof` | `USE_PPROF` | `true` | Enable pprof (port 8082) |

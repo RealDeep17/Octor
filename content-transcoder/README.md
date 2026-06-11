@@ -11,15 +11,23 @@ A robust transcoding service that converts HTTP media streams into HLS (HTTP Liv
 
 ## ⚙️ Configuration
 
-| Variable | Flag | Default |
-|----------|------|---------|
-| `WEB_PORT` | `--port` | `50055` |
-| `PROBE_PORT` | `--probe-port` | `52055` |
-| `SOURCE_URL` | `--input` | (Required) |
-| `OUTPUT` | `--output` | `out` |
-| `CONTENT_PROBER_SERVICE_HOST` | `--content-prober-host` | `127.0.0.1` |
-| `CONTENT_PROBER_SERVICE_PORT` | `--content-prober-port` | `50063` |
-| `PRESET` | `--preset` | `ultrafast` |
+| Variable | Flag | Default | Description |
+|----------|------|---------|-------------|
+| `WEB_PORT` | `--port` | `8080` | HTTP listening port (Octor default: `50055`) |
+| `PPROF_PORT` | `--pprof-port` | `8080` | pprof listening port (Octor default: `51055`) |
+| `PROBE_PORT` | `--probe-port` | `8081` | probe listening port (Octor default: `52055`) |
+| `SOURCE_URL` | `--input` | (Required) | Source media URL |
+| `OUTPUT` | `--output` | `out` | Output directory for segments |
+| `CONTENT_PROBER_SERVICE_HOST` | `--content-prober-host` | `127.0.0.1` | Content Prober host |
+| `CONTENT_PROBER_SERVICE_PORT` | `--content-prober-port` | `50051` | Content Prober gRPC port (Octor default: `50063`) |
+| `PRESET` | `--preset` | `ultrafast` | FFmpeg encoding preset |
+
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **HTTP:** `50055`
+- **Pprof:** `51055`
+- **Probe:** `52055`
 
 ## 🛠 Usage
 

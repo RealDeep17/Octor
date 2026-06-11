@@ -13,8 +13,15 @@ Configuration can be provided via command-line flags or environment variables (r
 
 | Flag | Environment Variable | Default | Description |
 |------|----------------------|---------|-------------|
-| `--port` | `PORT` | `50058` | HTTP listening port |
-| `--probe-port` | `PROBE_PORT` | `8081` | Probe listening port |
+| `--host` | `WEB_HOST` | `""` | listening host |
+| `--port` | `WEB_PORT` | `8080` | HTTP listening port (Octor default: `50058`) |
+| `--probe-port` | `PROBE_PORT` | `8081` | probe listening port (Octor default: `52058`) |
+
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **HTTP:** `50058`
+- **Probe:** `52058`
 
 ## Usage Example
 

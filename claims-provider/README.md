@@ -15,7 +15,10 @@ Configuration can be provided via command-line flags or environment variables (r
 | Flag | Environment Variable | Default | Description |
 |------|----------------------|---------|-------------|
 | `--grpc-host` | `GRPC_HOST` | `""` | gRPC listening host |
-| `--grpc-port` | `GRPC_PORT` | `50060` | gRPC listening port |
+| `--grpc-port` | `GRPC_PORT` | `50051` | gRPC listening port (Octor default: `50060`) |
+| `--pprof-port` | `PPROF_PORT` | `8080` | pprof listening port (Octor default: `51060`) |
+| `--probe-port` | `PROBE_PORT` | `8081` | probe listening port (Octor default: `52060`) |
+| `--prom-port` | `PROM_PORT` | `0` | Prometheus metrics port (Octor default: `53060`) |
 | `--store-cache-concurrency` | `STORE_CACHE_CONCURRENCY` | `10` | Maximum concurrent cache builders |
 | `--store-cache-expire` | `STORE_CACHE_EXPIRE` | `60s` | Cache expiration for successful entries |
 | `--store-cache-error-expire` | `STORE_CACHE_ERROR_EXPIRE` | `10s` | Cache expiration for errors |
@@ -24,7 +27,15 @@ Configuration can be provided via command-line flags or environment variables (r
 | `--postgres-host` | `PG_HOST` | `""` | PostgreSQL host |
 | `--postgres-port` | `PG_PORT` | `5433` | PostgreSQL port |
 
-*PostgreSQL and Probe options are provided by the `common-services` package (HTTP probe defaults to `8081`).*
+*Postgres and Probe options are provided by `common-services`.*
+
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **gRPC:** `50060`
+- **Pprof:** `51060`
+- **Probe:** `52060`
+- **Prometheus:** `53060`
 
 ## API
 

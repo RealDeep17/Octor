@@ -46,11 +46,12 @@ If Docker Desktop uses a non-default socket, run `./run.sh doctor` to locate the
 
 ### Port Mapping Strategy (5-Digit System)
 To prevent collisions, all services follow this mapping:
-- **8xxx**: Entry points (REST API=8080, Web UI=8082, Sidecar=8000, Vault=8086).
-- **500xx**: Primary GRPC/Service ports.
-- **51xxx**: Pprof.
-- **52xxx**: Probes (Liveness/Readiness).
-- **53xxx**: Prometheus (Metrics).
+- **8xxx Range:** Public-facing entry points (Web UI: `8082`, REST API: `8080`, Sidecar: `8000`, Vault: `8086`).
+- **500xx Range:** Internal gRPC and streaming services.
+- **51xxx Range:** pprof profiling endpoints.
+- **52xxx Range:** Health probes (Liveness/Readiness).
+- **53xxx Range:** Prometheus metrics endpoints.
+- **54xxx Range:** Internal secondary Web interfaces.
 
 Refer to the port mapping section in the root README for the full detailed map.
 

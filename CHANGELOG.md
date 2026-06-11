@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## [Unreleased] - 2026-06-11
+
+### Added
+- **Comprehensive Documentation Update**: Systematically reviewed and updated README files for all 25 services in the repository.
+  - Standardized port mapping documentation, distinguishing between code defaults and Octor project overrides (managed via `run.sh`).
+  - Created detailed READMEs for services that lacked them (`ai-proxy`, `sidecar`, `video-thumbnails-generator`).
+  - Expanded `common-services` documentation to cover all shared Go packages (`pg`, `nats`, `redis`, `s3`, `pprof`, `prom`).
+  - Updated root `README.md` and `DEVELOPMENT.md` with accurate port ranges and architectural details.
+  - Verified and corrected configuration flags and environment variable references across the codebase.
+
 ## [Unreleased] - 2026-06-10
 
 ### Fixed

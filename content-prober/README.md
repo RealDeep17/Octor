@@ -12,13 +12,22 @@ A high-performance media probing service that wraps `ffprobe`. It provides gRPC 
 
 Configuration is managed via environment variables or CLI flags.
 
-| Variable | Flag | Default |
-|----------|------|---------|
-| `LISTEN_HOST` | `--host` | `0.0.0.0` |
-| `HTTP_PORT` | `--http-port` | `50062` |
-| `GRPC_PORT` | `--port` | `50063` |
-| `REDIS_HOST` | `--redis-host` | `127.0.0.1` |
-| `REDIS_PORT` | `--redis-port` | `6380` |
+| Variable | Flag | Default | Description |
+|----------|------|---------|-------------|
+| `LISTEN_HOST` | `--host` | `""` | listening host |
+| `HTTP_PORT` | `--http-port` | `8080` | HTTP listening port (Octor default: `50062`) |
+| `GRPC_PORT` | `--port` | `50051` | gRPC listening port (Octor default: `50063`) |
+| `PROBE_PORT` | `--probe-port` | `8081` | health probe HTTP port (Octor default: `52062`) |
+| `REDIS_HOST` | `--redis-host` | `127.0.0.1` | hostname of the redis service |
+| `REDIS_PORT` | `--redis-port` | `6379` | port of the redis service (Octor default: `6380`) |
+
+### Standard Octor Ports
+
+When managed by `run.sh`, the following ports are used:
+- **HTTP:** `50062`
+- **gRPC:** `50063`
+- **Probe:** `52062`
+- **Redis:** `6380`
 
 ## 🛠 Usage
 

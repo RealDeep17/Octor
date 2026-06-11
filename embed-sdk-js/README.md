@@ -88,7 +88,7 @@ lang       | Override ui language (optional)
 userLang   | Override user language (optional)
 controls   | Enables all features (true/false, default: true)
 features   | Enables or disables specific player features (optional)
-baseUrl    | Url of Octor instance (By default: https://octor)
+baseUrl    | Url of Octor instance (By default: https://octor.local)
 
 ## Subtitle configuration
 
@@ -117,5 +117,5 @@ opensubtitles | Enables OpenSubtitles support
 
 ## Using with your own self-hosted Octor instance
 
-After installing Octor instance according to the [instruction](https://github.com/webtor-io/self-hosted/) just switch `baseUrl` configuration attribute to your own. 
+Set `baseUrl` to the public/local URL of your Octor instance (e.g., `http://localhost:8082` or your custom domain).
 
