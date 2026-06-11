@@ -66,8 +66,24 @@ const (
 	automationAPIKeyFlag     = "automation-apikey"
 	automationAutoVaultFlag  = "automation-auto-vault"
 	transmissionSessionID    = "octor-transmission-session-id"
-	transmissionPersistDir   = "/srv/octor/infra-data"
-	transmissionSettingsFile = "/srv/octor/infra-data/settings.json"
+)
+
+func getInfraDataPath(subpath string) string {
+	if root := os.Getenv("OCTOR_ROOT"); root != "" {
+		return filepath.Join(root, "infra-data", subpath)
+	}
+	if root := os.Getenv("PROJECT_ROOT"); root != "" {
+		return filepath.Join(root, "infra-data", subpath)
+	}
+	if _, err := os.Stat("/srv/octor"); err == nil {
+		return filepath.Join("/srv/octor/infra-data", subpath)
+	}
+	return filepath.Join("./infra-data", subpath)
+}
+
+var (
+	transmissionPersistDir   = getInfraDataPath("")
+	transmissionSettingsFile = getInfraDataPath("settings.json")
 )
 
 func RegisterTransmissionFlags(f []cli.Flag) []cli.Flag {
@@ -232,8 +248,8 @@ func effectiveWantedIndices(fileCount int, wantedIndices, unwantedIndices []int)
 
 func dummyTemplatePath(name string) string {
 	candidates := []string{
-		filepath.Join("/srv/octor/infra-data", name),
-		filepath.Join("/srv/octor/rest-api/assets/dummy", name),
+		getInfraDataPath(name),
+		filepath.Join("./rest-api/assets/dummy", name),
 		filepath.Join("assets/dummy", name),
 		filepath.Join("rest-api/assets/dummy", name),
 	}
@@ -243,6 +259,13 @@ func dummyTemplatePath(name string) string {
 		}
 	}
 	return candidates[0]
+}
+
+func getDownloadsDir() string {
+	if val := os.Getenv("OCTOR_DOWNLOAD_DIR"); val != "" {
+		return val
+	}
+	return "/downloads"
 }
 
 // autoVaultEnabled checks the runtime settings file first, then falls back to the
@@ -508,7 +531,7 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 		respArgs["version"] = "4.0.0"
 		respArgs["rpc-version-minimum"] = 1
 		respArgs["rpc-version"] = 17
-		respArgs["download-dir"] = "/srv/Big ARRS/downloads"
+		respArgs["download-dir"] = getDownloadsDir()
 		respArgs["download-dir-free-space"] = int64(1099511627776) // 1 TB fake space
 
 	case "session-close":
@@ -722,7 +745,7 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 				"error":         0,
 				"errorString":   "",
 				"isFinished":    completed,
-				"downloadDir":   "/srv/Big ARRS/downloads",
+				"downloadDir":   getDownloadsDir(),
 				"files":         filesList,
 				"fileStats":     fileStatsList,
 			}
@@ -1178,7 +1201,7 @@ func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash str
 		}
 		markerSuffix = "_sel_" + strings.Join(parts, "_")
 	}
-	markerPath := filepath.Join("/srv/Big ARRS/downloads", ".octor_dummy_"+infoHash+markerSuffix)
+	markerPath := filepath.Join(getDownloadsDir(), ".octor_dummy_"+infoHash+markerSuffix)
 	if _, err := os.Stat(markerPath); err == nil {
 		return nil // already created with this exact selection
 	}
@@ -1191,10 +1214,10 @@ func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash str
 			}
 		}
 		fPath := strings.Join(f.Path, "/")
-		fullPath := filepath.Join("/srv/Big ARRS/downloads", fPath)
+		fullPath := filepath.Join(getDownloadsDir(), fPath)
 
 		cleanPath := filepath.Clean(fullPath)
-		if !strings.HasPrefix(cleanPath, "/srv/Big ARRS/downloads/") {
+		if !strings.HasPrefix(cleanPath, filepath.Clean(getDownloadsDir())+string(filepath.Separator)) {
 			log.Warnf("DummyFiles: path traversal attempt blocked: %s", fPath)
 			continue
 		}
@@ -1286,7 +1309,7 @@ func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash str
 }
 
 func (s *TransmissionService) removeDummyFiles(ctx context.Context, infoHash string) {
-	m, _ := filepath.Glob(filepath.Join("/srv/Big ARRS/downloads", ".octor_dummy_"+infoHash+"*"))
+	m, _ := filepath.Glob(filepath.Join(getDownloadsDir(), ".octor_dummy_"+infoHash+"*"))
 	for _, f := range m {
 		_ = os.Remove(f)
 	}
@@ -1297,19 +1320,19 @@ func (s *TransmissionService) removeDummyFiles(ctx context.Context, infoHash str
 	}
 	for _, f := range res.Files {
 		fPath := strings.Join(f.Path, "/")
-		fullPath := filepath.Join("/srv/Big ARRS/downloads", fPath)
+		fullPath := filepath.Join(getDownloadsDir(), fPath)
 
 		cleanPath := filepath.Clean(fullPath)
-		if !strings.HasPrefix(cleanPath, "/srv/Big ARRS/downloads/") {
+		if !strings.HasPrefix(cleanPath, filepath.Clean(getDownloadsDir())+string(filepath.Separator)) {
 			continue
 		}
 
 		// Delete file
 		_ = os.Remove(cleanPath)
 
-		// Clean up empty parent directories up to /srv/Big ARRS/downloads
+		// Clean up empty parent directories up to downloads dir
 		parent := filepath.Dir(cleanPath)
-		for parent != "/srv/Big ARRS/downloads" && parent != "/" && parent != "." {
+		for parent != filepath.Clean(getDownloadsDir()) && parent != "/" && parent != "." {
 			// Try to remove, will fail if not empty
 			if err := os.Remove(parent); err != nil {
 				break

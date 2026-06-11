@@ -3,7 +3,7 @@
 # Reads caching variables from /srv/octor/custom.env and prepares seeder storage.
 set -euo pipefail
 
-ENV_FILE="/srv/octor/custom.env"
+ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/custom.env"
 
 # Parse configuration variables from the env file
 RAM_CACHE_ENABLED=$(grep -E '^RAM_CACHE_ENABLED=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' || true)
@@ -27,7 +27,7 @@ if [ "$RAM_CACHE_ENABLED" != "true" ]; then
     
     # Ensure a clean state for SSD mode by wiping existing cache
     if [ -d "$SSD_DATA_DIR" ]; then
-        if [[ "$SSD_DATA_DIR" == "/" || "$SSD_DATA_DIR" == "/srv" || "$SSD_DATA_DIR" == "/srv/" || "$SSD_DATA_DIR" == "/home/"* ]]; then
+        if [[ "$SSD_DATA_DIR" == "/" || "$SSD_DATA_DIR" == "/srv" || "$SSD_DATA_DIR" == "/srv/" || "$SSD_DATA_DIR" == "/home" || "$SSD_DATA_DIR" == "/home/" || "$SSD_DATA_DIR" == "/home/ubuntu" || "$SSD_DATA_DIR" == "/home/ubuntu/" ]]; then
             echo "❌ Error: SSD_DATA_DIR is set to a protected path ($SSD_DATA_DIR). Refusing to wipe."
             exit 1
         fi

@@ -2,13 +2,22 @@ package main
 
 import (
 	"log"
+	"os"
 	"time"
 
 	"github.com/nats-io/nats.go"
 )
 
 func main() {
-	natsURL := "nats://localhost:4222"
+	natsHost := "localhost"
+	if envHost := os.Getenv("NATS_HOST"); envHost != "" {
+		natsHost = envHost
+	}
+	natsPort := "4222"
+	if envPort := os.Getenv("NATS_PORT"); envPort != "" {
+		natsPort = envPort
+	}
+	natsURL := "nats://" + natsHost + ":" + natsPort
 	log.Printf("Connecting to NATS at %s...", natsURL)
 	nc, err := nats.Connect(natsURL, nats.Timeout(10*time.Second))
 	if err != nil {

@@ -4,13 +4,27 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/webtor-io/web-ui/services/web"
 )
 
-const settingsFilePath = "/srv/octor/infra-data/settings.json"
+func getInfraDataPath(subpath string) string {
+	if root := os.Getenv("OCTOR_ROOT"); root != "" {
+		return filepath.Join(root, "infra-data", subpath)
+	}
+	if root := os.Getenv("PROJECT_ROOT"); root != "" {
+		return filepath.Join(root, "infra-data", subpath)
+	}
+	if _, err := os.Stat("/srv/octor"); err == nil {
+		return filepath.Join("/srv/octor/infra-data", subpath)
+	}
+	return filepath.Join("./infra-data", subpath)
+}
+
+var settingsFilePath = getInfraDataPath("settings.json")
 
 // OctorSettings holds all runtime-configurable settings persisted to disk.
 // The rest-api TransmissionService reads this same file for autoVaultEnabled().
@@ -38,7 +52,7 @@ func LoadSettings() (*OctorSettings, error) {
 }
 
 func SaveSettings(s *OctorSettings) error {
-	if err := os.MkdirAll("/srv/octor/infra-data", 0755); err != nil {
+	if err := os.MkdirAll(getInfraDataPath(""), 0755); err != nil {
 		return errors.Wrap(err, "failed to create infra-data directory")
 	}
 	data, err := json.MarshalIndent(s, "", "  ")

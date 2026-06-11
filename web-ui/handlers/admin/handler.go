@@ -199,7 +199,7 @@ func (i DriveItem) IsPlayable() bool {
 }
 
 func (h *Handler) driveIndex(c *gin.Context) {
-	root := filepath.Clean("/srv/octor/infra-data/drive-mount-vfs")
+	root := filepath.Clean(getInfraDataPath("drive-mount-vfs"))
 	path := strings.TrimPrefix(c.Param("path"), "/")
 	fullPath := filepath.Join(root, path)
 

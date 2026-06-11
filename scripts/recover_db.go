@@ -66,7 +66,9 @@ func main() {
 	flag.Parse()
 
 	// Load custom.env if present
-	loadEnv("/srv/octor/custom.env")
+	loadEnv("custom.env")
+	loadEnv("../custom.env")
+	loadEnv("/home/ubuntu/octor/custom.env")
 
 	log.Println(strings.Repeat("=", 60))
 	log.Printf("Starting Octor Database Recovery")

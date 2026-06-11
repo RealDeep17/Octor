@@ -406,7 +406,11 @@ cmd_mode() {
         fi
 
         echo "=== INITIALIZING NATS JETSTREAM ==="
-        (cd "$PROJECT_ROOT" && go run scripts/create_nats_stream.go >/dev/null) || echo "⚠️  NATS Init failed - services might crash!"
+        if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+            sudo docker exec -i octor-monolith /app/bin/create_nats_stream >/dev/null 2>&1 || echo "⚠️  NATS Init failed - services might crash!"
+        else
+            (cd "$PROJECT_ROOT" && go run scripts/create_nats_stream.go >/dev/null) || echo "⚠️  NATS Init failed - services might crash!"
+        fi
     fi
 
     backup_env

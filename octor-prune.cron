@@ -9,7 +9,7 @@
 echo -e "\n=== Auto-Prune Started: $(date) ===" >> /var/log/octor-prune.log
 
 # 1. Run workspace and Go cleanups as 'ubuntu' user
-sudo -u ubuntu /srv/octor/run.sh prune >> /var/log/octor-prune.log 2>&1
+sudo -u ubuntu /home/ubuntu/octor/run.sh prune >> /var/log/octor-prune.log 2>&1
 
 # 2. Run system-wide log cleaning as root
 echo "  • System log maintenance..." >> /var/log/octor-prune.log

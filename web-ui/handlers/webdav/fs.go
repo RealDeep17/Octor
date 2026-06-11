@@ -1,12 +1,28 @@
 package webdav
 
 import (
+	"os"
+	"path/filepath"
+
 	services "github.com/webtor-io/common-services"
 	j "github.com/webtor-io/web-ui/jobs"
 	adminsvc "github.com/webtor-io/web-ui/services/admin"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/webdav"
 )
+
+func getInfraDataPath(subpath string) string {
+	if root := os.Getenv("OCTOR_ROOT"); root != "" {
+		return filepath.Join(root, "infra-data", subpath)
+	}
+	if root := os.Getenv("PROJECT_ROOT"); root != "" {
+		return filepath.Join(root, "infra-data", subpath)
+	}
+	if _, err := os.Stat("/srv/octor"); err == nil {
+		return filepath.Join("/srv/octor/infra-data", subpath)
+	}
+	return filepath.Join("./infra-data", subpath)
+}
 
 func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, admin *adminsvc.Admin) webdav.FileSystem {
 	td := &TorrentDirectory{
@@ -101,7 +117,7 @@ func NewFileSystem(pg *services.PG, sapi *api.Api, jobs *j.Jobs, sep string, adm
 				},
 			},
 			"users": &AdminUsersDirectory{pg: pg, api: sapi, jobs: jobs, admin: admin},
-			"drive": &LocalDirectory{Root: "/srv/octor/infra-data/drive-mount-vfs"},
+			"drive": &LocalDirectory{Root: getInfraDataPath("drive-mount-vfs")},
 		}
 
 		// DualRootDirectory: serves adminChildren for admin users, userChildren for everyone else.

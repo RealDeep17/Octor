@@ -2,7 +2,7 @@
 # teardown-seeder-cache.sh — called when octor-seeder-cache.service stops
 set -euo pipefail
 
-ENV_FILE="/srv/octor/custom.env"
+ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/custom.env"
 DATA_DIR=$(grep -E '^DATA_DIR=' "$ENV_FILE" | tail -1 | cut -d= -f2- || true)
 DATA_DIR="${DATA_DIR:-/mnt/seeder-cache}"
 IMG_BACKING_DIR="/mnt/seeder-cache-backing"

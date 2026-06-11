@@ -1,0 +1,103 @@
+services:
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=Etc/UTC
+      - URL_BASE=/radarr
+    volumes:
+      - ./config/radarr:/config
+      - ./data:/data
+      - ./downloads:/downloads
+    ports:
+      - 7878:7878
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=Etc/UTC
+      - URL_BASE=/sonarr
+    volumes:
+      - ./config/sonarr:/config
+      - ./data:/data
+      - ./downloads:/downloads
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  whisparr:
+    image: ghcr.io/hotio/whisparr:v3
+    container_name: whisparr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=Etc/UTC
+      - URL_BASE=/whisparr
+    volumes:
+      - ./config/whisparr:/config
+      - ./data:/data
+      - ./downloads:/downloads
+    ports:
+      - 6969:6969
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=Etc/UTC
+      - URL_BASE=/prowlarr
+    volumes:
+      - ./config/prowlarr:/config
+    ports:
+      - 9696:9696
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  byparr:
+    image: ghcr.io/thephaseless/byparr:latest
+    container_name: byparr
+    environment:
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./endpoints.py:/app/src/endpoints.py
+    ports:
+      - 8191:8191
+    restart: unless-stopped
+
+  zilean-db:
+    image: postgres:16
+    container_name: zilean-db
+    environment:
+      - POSTGRES_DB=zilean
+      - POSTGRES_USER=zilean
+      - POSTGRES_PASSWORD=zilean
+    volumes:
+      - ./config/zilean-db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  zilean:
+    image: ipromknight/zilean:latest
+    container_name: zilean
+    ports:
+      - 8182:8181
+    volumes:
+      - ./config/zilean:/app/data
+    depends_on:
+      - zilean-db
+    restart: unless-stopped
