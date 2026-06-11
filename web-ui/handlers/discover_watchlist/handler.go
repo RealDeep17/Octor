@@ -171,8 +171,8 @@ func (h *Handler) add(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errorBody{Status: "error", Code: "bad_type", Message: i18n.T(c, "discover.watchlist.addFailed")})
 		return
 	}
-	if req.VideoID == "" || !strings.HasPrefix(req.VideoID, "tt") {
-		// Discover only renders IMDB-keyed cards; reject anything else early
+	if req.VideoID == "" || (!strings.HasPrefix(req.VideoID, "tt") && !strings.HasPrefix(req.VideoID, "tpdb:") && !strings.HasPrefix(req.VideoID, "tpdb_jav:") && !strings.HasPrefix(req.VideoID, "stash:")) {
+		// Discover only renders IMDB-keyed or adult/NSFW-keyed cards; reject anything else early
 		// so we don't end up with rows that can't be JOINed against
 		// movie_metadata / series_metadata.
 		c.JSON(http.StatusBadRequest, errorBody{Status: "error", Code: "bad_video_id", Message: i18n.T(c, "discover.watchlist.addFailed")})
@@ -391,7 +391,7 @@ func (h *Handler) tryEnrichMetadata(ctx context.Context, db *pg.DB, videoID stri
 
 func parseContentType(s string) (models.ContentType, error) {
 	switch s {
-	case "movie":
+	case "movie", "adult", "porn", "jav":
 		return models.ContentTypeMovie, nil
 	case "series":
 		return models.ContentTypeSeries, nil

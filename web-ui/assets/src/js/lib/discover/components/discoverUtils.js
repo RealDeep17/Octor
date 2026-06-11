@@ -115,7 +115,8 @@ async function apiPost(url, body) {
 
 export async function toggleWatched(videoID, type, currentlyWatched) {
     const action = currentlyWatched ? 'unmark' : 'mark';
-    const data = await apiPost(langPath(`/library/${type}/${videoID}/${action}`));
+    const apiType = (type === 'adult' || type === 'porn' || type === 'jav') ? 'movie' : type;
+    const data = await apiPost(langPath(`/library/${apiType}/${videoID}/${action}`));
     if (!data) return null;
     return { watched: !currentlyWatched, rateForm: !!data['rate-form'] };
 }
@@ -123,12 +124,14 @@ export async function toggleWatched(videoID, type, currentlyWatched) {
 export async function rateVideo(videoID, type, rating) {
     const body = new URLSearchParams();
     body.set('rating', String(rating));
-    const data = await apiPost(langPath(`/library/${type}/${videoID}/rate`), body);
+    const apiType = (type === 'adult' || type === 'porn' || type === 'jav') ? 'movie' : type;
+    const data = await apiPost(langPath(`/library/${apiType}/${videoID}/rate`), body);
     return !!data;
 }
 
 export async function unrateVideo(videoID, type) {
-    const data = await apiPost(langPath(`/library/${type}/${videoID}/unrate`));
+    const apiType = (type === 'adult' || type === 'porn' || type === 'jav') ? 'movie' : type;
+    const data = await apiPost(langPath(`/library/${apiType}/${videoID}/unrate`));
     return !!data;
 }
 
@@ -136,7 +139,7 @@ export async function fetchUserStatuses(ids) {
     const titleIds = (ids || []).filter(id => {
         if (typeof id !== 'string') return false;
         if (id.startsWith('tt')) return !id.includes(':');
-        return id.startsWith('tpdb:') || id.startsWith('stash:');
+        return id.startsWith('tpdb:') || id.startsWith('tpdb_jav:') || id.startsWith('stash:');
     });
     if (titleIds.length === 0) return {};
     try {

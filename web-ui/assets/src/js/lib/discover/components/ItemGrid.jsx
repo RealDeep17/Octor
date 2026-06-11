@@ -232,7 +232,7 @@ function ItemCard({ item, showBadge, watched, rating, layout, inWatchlist, onCli
         setIsHorizontal(nextHorizontal);
         
         const newLayout = nextHorizontal ? 'horizontal' : 'vertical';
-        const type = item.type === 'series' ? 'series' : ((item.type === 'adult' || item.type === 'porn' || item.type === 'jav') ? 'adult' : 'movie');
+        const type = item.type === 'series' ? 'series' : 'movie';
         
         fetch(`/library/${type}/${item.id}/layout`, {
             method: 'POST',

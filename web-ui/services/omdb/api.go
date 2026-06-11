@@ -165,6 +165,10 @@ func (api *Api) SearchByTitleAndYear(ctx context.Context, title string, year *in
 	}
 
 	imdbID, _ := raw["imdbID"].(string)
+	if strings.HasPrefix(imdbID, "stashdb:") {
+		imdbID = "stash:" + strings.TrimPrefix(imdbID, "stashdb:")
+		raw["imdbID"] = imdbID
+	}
 	tpe, _ := raw["Type"].(string)
 
 	return &OmdbResponse{
@@ -220,6 +224,10 @@ func (api *Api) GetByIMDBID(ctx context.Context, imdbID string) (*OmdbResponse, 
 	}
 
 	id, _ := raw["imdbID"].(string)
+	if strings.HasPrefix(id, "stashdb:") {
+		id = "stash:" + strings.TrimPrefix(id, "stashdb:")
+		raw["imdbID"] = id
+	}
 	tpe, _ := raw["Type"].(string)
 
 	return &OmdbResponse{
