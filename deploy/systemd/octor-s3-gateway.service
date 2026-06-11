@@ -5,11 +5,11 @@ Requires=octor-rclone-mount.service
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
-WorkingDirectory=/srv/octor/s3-gateway
-EnvironmentFile=/srv/octor/custom.env
-ExecStart=/srv/octor/bin/s3-gateway
+User=__RUN_USER__
+Group=__RUN_GROUP__
+WorkingDirectory=__PROJECT_ROOT__/s3-gateway
+EnvironmentFile=__PROJECT_ROOT__/custom.env
+ExecStart=__PROJECT_ROOT__/bin/s3-gateway
 Restart=always
 RestartSec=3
 

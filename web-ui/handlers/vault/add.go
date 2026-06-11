@@ -64,16 +64,25 @@ func (h *Handler) createPledge(ctx context.Context, resourceID string, user *aut
 			Limit:  10000,
 		})
 		if err == nil {
-			var selectedBytes int64
-			for _, file := range list.Items {
-				for _, sel := range selectedFiles {
-					if file.PathStr == sel {
-						selectedBytes += file.Size
-						break
+			// If all files are selected, skip selective vaulting
+			if len(selectedFiles) >= len(list.Items) {
+				selectedFiles = nil
+				requiredVP, err = h.vault.GetRequiredVP(ctx, apiClaims, resourceID)
+				if err != nil {
+					return err
+				}
+			} else {
+				var selectedBytes int64
+				for _, file := range list.Items {
+					for _, sel := range selectedFiles {
+						if file.PathStr == sel {
+							selectedBytes += file.Size
+							break
+						}
 					}
 				}
+				requiredVP = float64(selectedBytes) / (1024 * 1024 * 1024)
 			}
-			requiredVP = float64(selectedBytes) / (1024 * 1024 * 1024)
 		} else {
 			var err error
 			requiredVP, err = h.vault.GetRequiredVP(ctx, apiClaims, resourceID)

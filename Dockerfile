@@ -11,17 +11,17 @@ RUN mkdir -p /app/bin && \
     for svc in $SERVICES; do \
         echo "Building $svc..."; \
         if [ -d "$svc/server" ]; then \
-            cd "$svc/server" && go build -o /app/bin/$svc . && cd /app || exit 1; \
+            cd "$svc/server" && go build -ldflags="-s -w" -o /app/bin/$svc . && cd /app || exit 1; \
         else \
-            cd "$svc" && go build -o /app/bin/$svc . && cd /app || exit 1; \
+            cd "$svc" && go build -ldflags="-s -w" -o /app/bin/$svc . && cd /app || exit 1; \
         fi; \
     done && \
     echo "Building create_nats_stream..." && \
-    go build -o /app/bin/create_nats_stream scripts/create_nats_stream.go && \
+    go build -ldflags="-s -w" -o /app/bin/create_nats_stream scripts/create_nats_stream.go && \
     echo "Building recover_db..." && \
-    go build -o /app/bin/recover_db scripts/recover_db.go && \
+    go build -ldflags="-s -w" -o /app/bin/recover_db scripts/recover_db.go && \
     echo "Building clean_orphans..." && \
-    go build -o /app/bin/clean_orphans scripts/clean_orphans.go
+    go build -ldflags="-s -w" -o /app/bin/clean_orphans scripts/clean_orphans.go
 
 
 # --- Stage 2: Web UI & Node Builder ---
@@ -75,7 +75,7 @@ RUN python3 -m venv sidecar/venv && \
     sidecar/venv/bin/pip install --no-cache-dir -r sidecar/requirements.txt
 
 # Copy Supervisor configuration
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY deploy/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Expose public ports
 EXPOSE 8080 8082 8086 9000 50052

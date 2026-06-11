@@ -1,0 +1,16 @@
+[Unit]
+Description=Octor Sidecar
+After=network.target
+
+[Service]
+Type=simple
+User=__RUN_USER__
+Group=__RUN_GROUP__
+WorkingDirectory=__PROJECT_ROOT__/sidecar
+EnvironmentFile=__PROJECT_ROOT__/custom.env
+ExecStart=__PROJECT_ROOT__/sidecar/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

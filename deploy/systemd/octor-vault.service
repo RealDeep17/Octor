@@ -1,0 +1,18 @@
+[Unit]
+Description=Octor Vault
+After=network.target octor-s3-gateway.service
+Requires=octor-s3-gateway.service
+RequiresMountsFor=/srv
+
+[Service]
+Type=simple
+User=__RUN_USER__
+Group=__RUN_GROUP__
+WorkingDirectory=__PROJECT_ROOT__/vault
+EnvironmentFile=__PROJECT_ROOT__/custom.env
+ExecStart=__PROJECT_ROOT__/bin/vault serve --port 8086 --pprof-port 51086 --probe-port 52086 --prom-port 53086 --octor-rest-api-host localhost --octor-rest-api-port 8080 --aws-endpoint ${AWS_ENDPOINT} --aws-region ${AWS_REGION} --aws-access-key-id ${AWS_ACCESS_KEY_ID} --aws-secret-access-key ${AWS_SECRET_ACCESS_KEY} --aws-bucket ${VAULT_AWS_BUCKET} --aws-no-ssl --max-concurrent-jobs ${VAULT_MAX_CONCURRENT_JOBS} --postgres-database vault
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Octor Torrent Web Seeder
+After=network.target
+RequiresMountsFor=/srv
+
+[Service]
+Type=simple
+User=__RUN_USER__
+Group=__RUN_GROUP__
+WorkingDirectory=__PROJECT_ROOT__/torrent-web-seeder/server
+EnvironmentFile=__PROJECT_ROOT__/custom.env
+ExecStart=__PROJECT_ROOT__/bin/torrent-web-seeder --port 50054 --pprof-port 51054 --probe-port 52054 --prom-port 53054
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

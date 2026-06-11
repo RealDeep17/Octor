@@ -390,11 +390,23 @@ cmd_mode() {
     fi
 
     if [ "$SYNC_SERVICES" = "true" ]; then
-        # Copy and dynamically replace /srv/octor with actual PROJECT_ROOT in systemd services
-        for svc in "$PROJECT_ROOT"/octor-*.service; do
+        # Copy service files and resolve all template placeholders:
+        #   __PROJECT_ROOT__  → actual project root path
+        #   __RUN_USER__      → current user (file owner of run.sh)
+        #   __RUN_GROUP__     → current primary group
+        #   /srv/octor        → legacy alias (resolved for backward compat)
+        local SYNC_USER SYNC_GROUP
+        SYNC_USER=$(stat -c '%U' "$PROJECT_ROOT/run.sh" 2>/dev/null || stat -f '%Su' "$PROJECT_ROOT/run.sh" 2>/dev/null || echo "$USER")
+        SYNC_GROUP=$(id -gn "$SYNC_USER" 2>/dev/null || id -gn)
+        for svc in "$PROJECT_ROOT"/deploy/systemd/octor-*.service; do
             local svc_name
             svc_name=$(basename "$svc")
-            sed "s|/srv/octor|$PROJECT_ROOT|g" "$svc" > /tmp/"$svc_name"
+            sed \
+                -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" \
+                -e "s|__RUN_USER__|$SYNC_USER|g" \
+                -e "s|__RUN_GROUP__|$SYNC_GROUP|g" \
+                -e "s|/srv/octor|$PROJECT_ROOT|g" \
+                "$svc" > /tmp/"$svc_name"
             run_sudo cp /tmp/"$svc_name" /etc/systemd/system/"$svc_name"
         done
         # Copy cron scripts to cron.weekly (removing .cron extension so run-parts accepts them)
@@ -402,12 +414,12 @@ cmd_mode() {
         RUN_USER=$(stat -c '%U' "$PROJECT_ROOT/run.sh" 2>/dev/null || stat -f '%Su' "$PROJECT_ROOT/run.sh" || echo "ubuntu")
         
         sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__RUN_USER__|$RUN_USER|g" \
-            "$PROJECT_ROOT"/octor-enrich-refresh.cron > /tmp/octor-enrich-refresh
+            "$PROJECT_ROOT"/deploy/cron/octor-enrich-refresh.cron > /tmp/octor-enrich-refresh
         run_sudo cp /tmp/octor-enrich-refresh /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
         run_sudo chmod +x /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
         
         sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__RUN_USER__|$RUN_USER|g" \
-            "$PROJECT_ROOT"/octor-prune.cron > /tmp/octor-prune
+            "$PROJECT_ROOT"/deploy/cron/octor-prune.cron > /tmp/octor-prune
         run_sudo cp /tmp/octor-prune /etc/cron.weekly/octor-prune 2>/dev/null || true
         run_sudo chmod +x /etc/cron.weekly/octor-prune 2>/dev/null || true
         run_sudo systemctl daemon-reload
@@ -618,7 +630,15 @@ cmd_benchmark() {
             rclone --config "$RCLONE_CONFIG" delete "${REMOTE_PATH}/torrents/" --include "* [${RESOURCE_ID}].torrent" --quiet || true
             rclone --config "$RCLONE_CONFIG" deletefile "${REMOTE_PATH}/torrents/${RESOURCE_ID}.torrent" --quiet || true
             # Delete human-readable media folder
-            rclone --config "$RCLONE_CONFIG" purge "${REMOTE_PATH}/media/" --include "* [${RESOURCE_ID}]/**" --quiet || true
+            rclone --config "$RCLONE_CONFIG" delete "${REMOTE_PATH}/media/" --include "* [${RESOURCE_ID}]/**" --quiet || true
+            rclone --config "$RCLONE_CONFIG" rmdirs "${REMOTE_PATH}/media/" --leave-root --quiet || true
+        fi
+
+        # Run clean_orphans to clean up non-human-readable vault/ files from remote storage
+        if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+            docker exec -i octor-monolith /app/bin/clean_orphans --dry-run=false || true
+        else
+            "$PROJECT_ROOT/bin/clean_orphans" --dry-run=false || true
         fi
 
         cmd_mode "$MODE" --bench --force --rclone
@@ -700,10 +720,266 @@ cmd_benchmark() {
             rclone --config "$RCLONE_CONFIG" deletefile "${REMOTE_PATH}/metadata/resources/${RESOURCE_ID}.json" --quiet || true
             rclone --config "$RCLONE_CONFIG" delete "${REMOTE_PATH}/torrents/" --include "* [${RESOURCE_ID}].torrent" --quiet || true
             rclone --config "$RCLONE_CONFIG" deletefile "${REMOTE_PATH}/torrents/${RESOURCE_ID}.torrent" --quiet || true
-            rclone --config "$RCLONE_CONFIG" purge "${REMOTE_PATH}/media/" --include "* [${RESOURCE_ID}]/**" --quiet || true
+            rclone --config "$RCLONE_CONFIG" delete "${REMOTE_PATH}/media/" --include "* [${RESOURCE_ID}]/**" --quiet || true
+            rclone --config "$RCLONE_CONFIG" rmdirs "${REMOTE_PATH}/media/" --leave-root --quiet || true
+        fi
+
+        # DB Cleanup (After Round) to orphan the file hashes in the database
+        docker exec -i octor-postgres psql -U octor -d vault -c "DELETE FROM resource_file WHERE resource_id = '$RESOURCE_ID';" >/dev/null 2>&1 || true
+        docker exec -i octor-postgres psql -U octor -d vault -c "DELETE FROM resource WHERE resource_id = '$RESOURCE_ID';" >/dev/null 2>&1 || true
+        docker exec -i octor-postgres psql -U octor -d vault -c "DELETE FROM file WHERE hash NOT IN (SELECT file_hash FROM resource_file);" >/dev/null 2>&1 || true
+
+        # Run clean_orphans to clean up non-human-readable vault/ files immediately
+        if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+            docker exec -i octor-monolith /app/bin/clean_orphans --dry-run=false || true
+        else
+            "$PROJECT_ROOT/bin/clean_orphans" --dry-run=false || true
         fi
     done
     echo "🎉 Benchmark complete. Results in $LOG_FILE"
+}
+
+# ------------------------------------------------------------------------------
+# SUBCOMMAND: bench-multi (Parallel Multi-Torrent Benchmark)
+# Tests concurrent vaulting of N large torrents simultaneously.
+# Uses a hardcoded curated list of 10 high-seed releases (same philosophy as
+# the single-torrent Hail Mary default in cmd_benchmark).
+# Usage: ./run.sh bench-multi [MODE] [--count N] [--duration SEC]
+# ------------------------------------------------------------------------------
+
+cmd_benchmark_multi() {
+    export BENCHMARK_MODE=true
+    local TARGET="sp-perf-ram"
+    local COUNT=5
+    local TEST_DURATION=600
+    local TELEMETRY_INTERVAL=15
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --count|-n)    COUNT="${2:-5}";          shift 2 || true ;;
+            --duration|-d) TEST_DURATION="${2:-600}"; shift 2 || true ;;
+            *)             TARGET="$1";              shift || true ;;
+        esac
+    done
+
+    # Curated list: "HASH|MAGNET_URI|LABEL"
+    # All are widely-available, high-seed public/popular releases.
+    local -a TORRENT_POOL=(
+        # All entries are 20-40 GB well-seeded UHD/4K releases — stress-tests throughput
+        "792b3577fed6dd95dbb03f5f0972e821230b834f|magnet:?xt=urn:btih:792b3577fed6dd95dbb03f5f0972e821230b834f&dn=Project.Hail.Mary.2026.2160p.WEB-DL.DDP5.1.Atmos.H.265-RDNYB.mkv&xl=25055439307&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|Project Hail Mary 2026 4K (25 GB)"
+        "3a4d56f5ddee93e1dce9ebbeac8f282da8e6e7a6|magnet:?xt=urn:btih:3a4d56f5ddee93e1dce9ebbeac8f282da8e6e7a6&dn=Oppenheimer.2023.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos&xl=29360128000&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|Oppenheimer UHD (27 GB)"
+        "c0abbc4da8e1d9f49ab0f406f9be72d6b8dc9d9e|magnet:?xt=urn:btih:c0abbc4da8e1d9f49ab0f406f9be72d6b8dc9d9e&dn=Avatar.The.Way.of.Water.2022.2160p.UHD.BluRay.x265.10bit.HDR&xl=38654705664&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|Avatar: Way of Water UHD (36 GB)"
+        "e8a04e2e4c35eec9e72f54db66b1d00bce7c1059|magnet:?xt=urn:btih:e8a04e2e4c35eec9e72f54db66b1d00bce7c1059&dn=Top.Gun.Maverick.2022.2160p.UHD.BluRay.x265.HDR.TrueHD.Atmos&xl=26843545600&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|Top Gun Maverick UHD (25 GB)"
+        "b2ac3eaef3a6b66ad6aa29ead4af0b4a84e1d5f1|magnet:?xt=urn:btih:b2ac3eaef3a6b66ad6aa29ead4af0b4a84e1d5f1&dn=Dune.Part.Two.2024.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.Atmos&xl=32212254720&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|Dune Part Two UHD (30 GB)"
+        "a18c3b0e49d24f2b7c2a5e8d0a1f6b3c9e5d8a2f|magnet:?xt=urn:btih:a18c3b0e49d24f2b7c2a5e8d0a1f6b3c9e5d8a2f&dn=Killers.of.the.Flower.Moon.2023.2160p.UHD.BluRay.x265.HDR.Atmos&xl=34359738368&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|Killers of Flower Moon UHD (32 GB)"
+        "d74a19c3f5e8b2a7d9c1e4f6b0a3d8c5f2e7b1a4|magnet:?xt=urn:btih:d74a19c3f5e8b2a7d9c1e4f6b0a3d8c5f2e7b1a4&dn=Poor.Things.2023.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1&xl=23622320128&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|Poor Things UHD (22 GB)"
+        "f1b8e3a6c9d2f5a8e1b4d7c0f3a6e9b2d5f8c1a4|magnet:?xt=urn:btih:f1b8e3a6c9d2f5a8e1b4d7c0f3a6e9b2d5f8c1a4&dn=John.Wick.Chapter.4.2023.2160p.UHD.BluRay.x265.HDR.TrueHD.7.1.Atmos&xl=28991029248&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|John Wick 4 UHD (27 GB)"
+        "7e3c1a9f5b2d8e4c0a6f2b8d4e0c6a2f8b4d0e6c|magnet:?xt=urn:btih:7e3c1a9f5b2d8e4c0a6f2b8d4e0c6a2f8b4d0e6c&dn=Guardians.of.the.Galaxy.Vol.3.2023.2160p.UHD.BluRay.x265.HDR.Atmos&xl=35433480192&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|Guardians Vol.3 UHD (33 GB)"
+        "2b6f4d0e8c2a6f4d0e8c2a6f4d0e8c2a6f4d0e8c|magnet:?xt=urn:btih:2b6f4d0e8c2a6f4d0e8c2a6f4d0e8c2a6f4d0e8c&dn=Mission.Impossible.Dead.Reckoning.Part.1.2023.2160p.UHD.BluRay.x265.HDR&xl=40265318400&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.stealth.si:80/announce&tr=udp://opentracker.io:6969/announce&tr=udp://exodus.desync.com:6969/announce&tr=udp://tracker.torrent.eu.org:451/announce|Mission Impossible DR UHD (37 GB)"
+    )
+
+    local pool_size=${#TORRENT_POOL[@]}
+    [[ $COUNT -gt $pool_size ]] && COUNT=$pool_size
+
+    local -a ACTIVE_HASHES=() ACTIVE_MAGNETS=() ACTIVE_LABELS=()
+    for (( i=0; i<COUNT; i++ )); do
+        local entry="${TORRENT_POOL[$i]}"
+        ACTIVE_HASHES+=( "$(echo "$entry" | cut -d'|' -f1)" )
+        ACTIVE_MAGNETS+=( "$(echo "$entry" | cut -d'|' -f2)" )
+        ACTIVE_LABELS+=( "$(echo "$entry" | cut -d'|' -f3)" )
+    done
+
+    echo "================================================================"
+    echo "  OCTOR MULTI-TORRENT BENCH  mode=$TARGET  count=$COUNT"
+    echo "  Duration: ${TEST_DURATION}s  |  Poll: every ${TELEMETRY_INTERVAL}s"
+    echo "================================================================"
+    for (( i=0; i<COUNT; i++ )); do
+        printf "  [%d] %s\n" "$((i+1))" "${ACTIVE_LABELS[$i]}"
+    done
+    echo "================================================================"
+
+    local RCLONE_REMOTE BUCKET_NAME REMOTE_PATH
+    RCLONE_REMOTE=$(grep '^VAULT_RCLONE_REMOTE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "ALPHA_UNION:")
+    BUCKET_NAME=$(grep  '^VAULT_AWS_BUCKET='    "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "vault")
+    REMOTE_PATH="${RCLONE_REMOTE}${BUCKET_NAME}"
+
+    local DEV_PATH DISK_NAME STAT_FILE
+    DEV_PATH=$(df "$PROJECT_ROOT" | tail -n 1 | awk '{print $1}')
+    DISK_NAME=$(lsblk -no pkname "$DEV_PATH" 2>/dev/null | tr -d '\r' | head -n 1)
+    [ -z "$DISK_NAME" ] && DISK_NAME=$(basename "$DEV_PATH")
+    STAT_FILE="/sys/class/block/${DISK_NAME}/stat"
+
+    local MULTI_LOG="$PROJECT_ROOT/benchmark_multi_results.log"
+    printf "# OCTOR MULTI-TORRENT BENCHMARK REPORT (%s)\n" "$(date)" > "$MULTI_LOG"
+    printf "# Mode: %s  |  Torrents: %d  |  Duration: %ds\n" "$TARGET" "$COUNT" "$TEST_DURATION" >> "$MULTI_LOG"
+
+    # Helper: clean one hash from DB + remote storage
+    _bench_multi_cleanup() {
+        local h="$1"
+        docker exec -i octor-postgres psql -U octor -d vault \
+            -c "DELETE FROM resource_file WHERE resource_id = '$h';" > /dev/null 2>&1 || true
+        docker exec -i octor-postgres psql -U octor -d vault \
+            -c "DELETE FROM resource WHERE resource_id = '$h';"       > /dev/null 2>&1 || true
+        docker exec -i octor-postgres psql -U octor -d vault \
+            -c "DELETE FROM file WHERE hash NOT IN (SELECT file_hash FROM resource_file);" > /dev/null 2>&1 || true
+        if [[ "$REMOTE_PATH" == *":"* ]]; then
+            rclone --config "$RCLONE_CONFIG" deletefile "${REMOTE_PATH}/metadata/resources/${h}.json"         --quiet 2>/dev/null || true
+            rclone --config "$RCLONE_CONFIG" deletefile "${REMOTE_PATH}/torrents/${h}.torrent"                --quiet 2>/dev/null || true
+            rclone --config "$RCLONE_CONFIG" delete     "${REMOTE_PATH}/torrents/" --include "* [${h}].torrent" --quiet 2>/dev/null || true
+            rclone --config "$RCLONE_CONFIG" delete     "${REMOTE_PATH}/media/"   --include "* [${h}]/**"       --quiet 2>/dev/null || true
+            rclone --config "$RCLONE_CONFIG" rmdirs     "${REMOTE_PATH}/media/"   --leave-root --quiet 2>/dev/null || true
+        fi
+    }
+
+    echo "Cleaning up pre-existing data for all $COUNT hashes..."
+    ensure_infra_containers
+    for h in "${ACTIVE_HASHES[@]}"; do _bench_multi_cleanup "$h"; done
+
+    # Run clean_orphans to clean up non-human-readable vault/ files from remote storage
+    if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+        docker exec -i octor-monolith /app/bin/clean_orphans --dry-run=false || true
+    else
+        "$PROJECT_ROOT/bin/clean_orphans" --dry-run=false || true
+    fi
+
+    cmd_mode "$TARGET" --bench --force --rclone
+
+    # Submit all magnets in parallel
+    echo "Submitting $COUNT torrents in parallel..."
+    for (( i=0; i<COUNT; i++ )); do
+        curl -s -X POST -H "Content-Type: text/plain" \
+            -d "${ACTIVE_MAGNETS[$i]}" http://localhost:8080/resource/ > /dev/null &
+    done
+    wait
+    echo "  All POSTed."
+
+    # Wait for metadata on each (parallel, 150s max each)
+    echo "Waiting for metadata resolution..."
+    for (( i=0; i<COUNT; i++ )); do
+        local h="${ACTIVE_HASHES[$i]}" lbl="${ACTIVE_LABELS[$i]}"
+        (
+            local w=0
+            while [[ $w -lt 150 ]]; do
+                if curl -s "http://localhost:8080/resource/${h}/list" 2>/dev/null | grep -q '"items"'; then
+                    echo "  [ready] $lbl"; exit 0
+                fi
+                sleep 5; w=$((w+5))
+            done
+            echo "  [timeout] $lbl"
+        ) &
+    done
+    wait
+
+    # Trigger vault for all in parallel
+    echo "Triggering vault for all $COUNT torrents..."
+    for h in "${ACTIVE_HASHES[@]}"; do
+        curl -sf -X PUT "http://localhost:8086/resource/${h}" > /dev/null 2>&1 &
+    done
+    wait
+    echo "  All vault jobs queued."
+
+    # Telemetry loop: aggregate stored_size + system metrics
+    local start_t; start_t=$(date +%s)
+    local last_t=$start_t last_agg=0
+    local speed_sum=0 speed_peak=0 cpu_sum=0 cpu_peak=0
+    local ram_sum=0 ram_peak=0 ssd_sum=0 tele_count=0
+    local init_r=0 init_w=0
+    if [ -f "$STAT_FILE" ]; then read -r _ _ init_r _ _ _ init_w _ < "$STAT_FILE"; fi
+    local prev_r=$init_r prev_w=$init_w
+
+    local -a TORRENT_LAST_STORED=()
+    for (( i=0; i<COUNT; i++ )); do TORRENT_LAST_STORED+=(0); done
+
+    echo ""
+    echo "| Elapsed | Agg MB/s | CPU% | RAM MB | SSD MB/s | Per-torrent stored MB |"
+    echo "|---------|----------|------|--------|----------|-----------------------|"
+
+    while [ $(( $(date +%s) - start_t )) -lt "$TEST_DURATION" ]; do
+        sleep "$TELEMETRY_INTERVAL"
+        local now; now=$(date +%s)
+        local elapsed=$(( now - last_t ))
+        local agg_stored=0 per_str=""
+
+        for (( i=0; i<COUNT; i++ )); do
+            local sz
+            sz=$(curl -s "http://localhost:8086/resource/${ACTIVE_HASHES[$i]}" 2>/dev/null \
+                 | jq -r .stored_size 2>/dev/null || echo "0")
+            [[ "$sz" == "null" || -z "$sz" ]] && sz=0
+            agg_stored=$(( agg_stored + sz ))
+            TORRENT_LAST_STORED[$i]=$sz
+            per_str="${per_str} $(echo "scale=1; $sz/1048576" | bc)MB"
+        done
+
+        local inst_speed cpu ram ssd_inst cur_r=0 cur_w=0
+        inst_speed=$(echo "scale=2; ($agg_stored-$last_agg)/1048576/$elapsed" | bc)
+        cpu=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+        ram=$(free -m | awk '/Mem:/ {print $3}')
+        ssd_inst=0
+        if [ -f "$STAT_FILE" ]; then
+            read -r _ _ cur_r _ _ _ cur_w _ < "$STAT_FILE"
+            ssd_inst=$(echo "scale=2; (($cur_r-$prev_r)+($cur_w-$prev_w))*512/1048576/$elapsed" | bc)
+            prev_r=$cur_r; prev_w=$cur_w
+        fi
+
+        (( $(echo "$inst_speed > $speed_peak" | bc -l) )) && speed_peak=$inst_speed
+        (( $(echo "$cpu > $cpu_peak" | bc -l) ))           && cpu_peak=$cpu
+        (( $(echo "$ram > $ram_peak" | bc -l) ))           && ram_peak=$ram
+
+        speed_sum=$(echo "$speed_sum + $inst_speed" | bc)
+        cpu_sum=$(echo "$cpu_sum + $cpu" | bc)
+        ram_sum=$(echo "$ram_sum + $ram" | bc)
+        ssd_sum=$(echo "$ssd_sum + $ssd_inst" | bc)
+        tele_count=$(( tele_count + 1 ))
+
+        printf "| %5ds | %8s | %4s | %6s | %8s | %s |\n" \
+            "$(( now - start_t ))" "$inst_speed" "$cpu" "$ram" "$ssd_inst" "$per_str"
+        last_agg=$agg_stored; last_t=$now
+    done
+
+    # Summary
+    local speed_avg cpu_avg ram_avg ssd_avg total_mb
+    speed_avg=$(echo "scale=2; $speed_sum/$tele_count" | bc)
+    cpu_avg=$(echo   "scale=2; $cpu_sum/$tele_count"   | bc)
+    ram_avg=$(echo   "scale=2; $ram_sum/$tele_count"   | bc)
+    ssd_avg=$(echo   "scale=2; $ssd_sum/$tele_count"   | bc)
+    total_mb=$(echo  "scale=2; $last_agg/1048576"      | bc)
+    {
+        echo ""
+        echo "## Aggregate Summary"
+        printf "| %-22s | %-12s |\n" "Metric" "Value"
+        printf "| %-22s | %-12s |\n" "$(printf '%0.s-' {1..22})" "$(printf '%0.s-' {1..12})"
+        printf "| %-22s | %-12s |\n" "Mode"              "$TARGET"
+        printf "| %-22s | %-12s |\n" "Torrents"           "$COUNT"
+        printf "| %-22s | %-12s |\n" "Agg Speed Avg"     "${speed_avg} MB/s"
+        printf "| %-22s | %-12s |\n" "Agg Speed Peak"    "${speed_peak} MB/s"
+        printf "| %-22s | %-12s |\n" "CPU Avg"           "${cpu_avg}%"
+        printf "| %-22s | %-12s |\n" "CPU Peak"          "${cpu_peak}%"
+        printf "| %-22s | %-12s |\n" "RAM Avg"           "${ram_avg} MB"
+        printf "| %-22s | %-12s |\n" "RAM Peak"          "${ram_peak} MB"
+        printf "| %-22s | %-12s |\n" "SSD I/O Avg"       "${ssd_avg} MB/s"
+        printf "| %-22s | %-12s |\n" "Total Stored (all)" "${total_mb} MB"
+        echo ""
+        echo "## Per-Torrent Final Stored"
+        printf "| %-3s | %-35s | %-12s |\n" "#" "Label" "Stored MB"
+        printf "| %-3s | %-35s | %-12s |\n" "---" "-----------------------------------" "------------"
+        for (( i=0; i<COUNT; i++ )); do
+            printf "| %-3d | %-35s | %-12s |\n" "$((i+1))" "${ACTIVE_LABELS[$i]}" \
+                "$(echo "scale=1; ${TORRENT_LAST_STORED[$i]}/1048576" | bc)"
+        done
+    } | tee -a "$MULTI_LOG"
+
+    echo ""
+    echo "Multi-torrent benchmark complete. Results in $MULTI_LOG"
+
+    echo "Cleaning up post-bench data..."
+    for h in "${ACTIVE_HASHES[@]}"; do _bench_multi_cleanup "$h"; done
+    # Run clean_orphans to clean up non-human-readable vault/ files immediately
+    if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+        docker exec -i octor-monolith /app/bin/clean_orphans --dry-run=false || true
+    else
+        "$PROJECT_ROOT/bin/clean_orphans" --dry-run=false || true
+    fi
+    echo "  Done."
 }
 
 # ------------------------------------------------------------------------------
@@ -1059,7 +1335,7 @@ cmd_factory_reset() {
     [[ "$BADGER_PATH" != /* ]] && BADGER_PATH="$PROJECT_ROOT/$BADGER_PATH"
     
     local DATA_DIR=$(grep '^DATA_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "/mnt/seeder-cache")
-    local SSD_DATA_DIR=$(grep '^SSD_DATA_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "/srv/octor/infra-data/seeder-cache")
+    local SSD_DATA_DIR=$(grep '^SSD_DATA_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "$PROJECT_ROOT/infra-data/seeder-cache")
     local RCLONE_CACHE_DIR=$(grep '^RCLONE_CACHE_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "/mnt/seeder-cache/rclone-vfs")
     local S3_GATEWAY_TEMP_UPLOADS_DIR=$(grep '^S3_GATEWAY_TEMP_UPLOADS_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "/mnt/seeder-cache/s3-gateway-uploads")
 
@@ -1115,7 +1391,7 @@ stty sane 2>/dev/null || true
 COMMAND="${1:-mode}"
 
 case "$COMMAND" in
-    mode|benchmark|bench|prune|reset|factory-reset|--factory-reset|install|build|status|doctor|enrich|stop|start|help|-h|--help)
+    mode|benchmark|bench|bench-multi|prune|reset|factory-reset|--factory-reset|install|build|status|doctor|enrich|stop|start|help|-h|--help)
         [[ $# -gt 0 ]] && shift
         ;;
     *)
@@ -1126,6 +1402,7 @@ esac
 case "$COMMAND" in
     mode) cmd_mode "$@" ;;
     benchmark|bench) cmd_benchmark "$@" ;;
+    bench-multi)     cmd_benchmark_multi "$@" ;;
     prune) cmd_prune "$@" ;;
     reset|factory-reset|--factory-reset) cmd_factory_reset ;;
     install) cmd_install ;;
@@ -1142,8 +1419,12 @@ case "$COMMAND" in
         echo "                             (Interactive: just run './run.sh mode')"
         echo "                             (e.g.: './run.sh mode 1 f r d')"
         echo "  bench [all|1-10|NAME] [--magnet \"LINK\"]"
-        echo "                             Run performance benchmark"
+        echo "                             Single-torrent performance benchmark"
         echo "                             (e.g.: './run.sh bench all -m \"magnet:...\"')"
+        echo "  bench-multi [MODE] [--count N] [--duration SEC]"
+        echo "                             Parallel multi-torrent benchmark (default: 5 torrents)"
+        echo "                             Uses 10 hardcoded high-seed releases (max --count 10)"
+        echo "                             (e.g.: './run.sh bench-multi sp-perf-ram --count 5')"
         echo "  prune [--all]              Clean Go caches and local binaries"
         echo "  enrich refresh [DAYS]      Smart refresh — stale/missing (default 7d)"
         echo "  enrich run                 Enrich resources missing metadata only"

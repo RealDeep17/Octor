@@ -18,9 +18,22 @@ import (
 	"sync"
 )
 
+func getInfraDataPath(subpath string) string {
+	if root := os.Getenv("OCTOR_ROOT"); root != "" {
+		return filepath.Join(root, "infra-data", subpath)
+	}
+	if root := os.Getenv("PROJECT_ROOT"); root != "" {
+		return filepath.Join(root, "infra-data", subpath)
+	}
+	if _, err := os.Stat("/srv/octor"); err == nil {
+		return filepath.Join("/srv/octor/infra-data", subpath)
+	}
+	return filepath.Join("./infra-data", subpath)
+}
+
 var (
-	storageDir     = "/srv/octor/infra-data/drive-mount-vfs"
-	indexDriveDir  = "/srv/octor/infra-data/drive1-index"
+	storageDir     = getInfraDataPath("drive-mount-vfs")
+	indexDriveDir  = getInfraDataPath("drive1-index")
 	tempUploadsDir = "/tmp/octor-s3-uploads"
 	port           = ":9000"
 	uploadPartSize = int64(32 * 1024 * 1024) // Default to 32MB multipart size

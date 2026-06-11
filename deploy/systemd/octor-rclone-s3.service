@@ -1,0 +1,26 @@
+[Unit]
+Description=Octor Rclone S3 Union Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=__RUN_USER__
+Group=__RUN_GROUP__
+EnvironmentFile=__PROJECT_ROOT__/custom.env
+ExecStartPre=/usr/bin/mkdir -p ${DATA_DIR}/rclone-vfs
+ExecStart=/usr/bin/rclone --config ${VAULT_RCLONE_CONFIG} serve s3 ALPHA_UNION: \
+    --addr 127.0.0.1:9000 \
+    --s3-access-key-id octoradmin \
+    --s3-secret-access-key octorpassword \
+    --vfs-cache-mode writes \
+    --vfs-cache-max-age 1h \
+    --vfs-cache-max-size ${RCLONE_VFS_CACHE_MAX_SIZE} \
+    --cache-dir ${DATA_DIR}/rclone-vfs \
+    --transfers ${RCLONE_TRANSFERS} \
+    --drive-chunk-size ${RCLONE_DRIVE_CHUNK_SIZE} \
+    --buffer-size ${RCLONE_BUFFER_SIZE}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

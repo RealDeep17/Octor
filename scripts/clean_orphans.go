@@ -47,6 +47,11 @@ func main() {
 	// Load custom env files
 	loadEnv("custom.env")
 	loadEnv("../custom.env")
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		loadEnv(filepath.Join(execDir, "custom.env"))
+		loadEnv(filepath.Join(execDir, "../custom.env"))
+	}
 	loadEnv("/home/ubuntu/octor/custom.env")
 
 	log.Println(strings.Repeat("=", 60))

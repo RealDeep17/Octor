@@ -14,7 +14,12 @@ sudo -u __RUN_USER__ __PROJECT_ROOT__/run.sh prune >> /var/log/octor-prune.log 2
 
 # 2. Clean up storage orphans from Google Drive
 echo "  • Cleaning up orphaned files from Google Drive..." >> /var/log/octor-prune.log
-docker exec -i octor-monolith /app/bin/clean_orphans --dry-run=false >> /var/log/octor-prune.log 2>&1
+if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+    docker exec -i octor-monolith /app/bin/clean_orphans --dry-run=false >> /var/log/octor-prune.log 2>&1
+else
+    # Hybrid mode: Run the binary on the host as __RUN_USER__ (so it has access to user environment/mount permissions)
+    sudo -u __RUN_USER__ __PROJECT_ROOT__/bin/clean_orphans --dry-run=false >> /var/log/octor-prune.log 2>&1
+fi
 
 # 3. Run system-wide log cleaning as root
 echo "  • System log maintenance..." >> /var/log/octor-prune.log

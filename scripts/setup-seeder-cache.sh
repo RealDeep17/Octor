@@ -3,7 +3,8 @@
 # Reads caching variables from /srv/octor/custom.env and prepares seeder storage.
 set -euo pipefail
 
-ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/custom.env"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="$PROJECT_ROOT/custom.env"
 
 # Parse configuration variables from the env file
 RAM_CACHE_ENABLED=$(grep -E '^RAM_CACHE_ENABLED=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' || true)
@@ -16,7 +17,7 @@ DATA_DIR=$(grep -E '^DATA_DIR=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:
 RAM_CACHE_ENABLED="${RAM_CACHE_ENABLED:-true}"
 RAM_CACHE_SIZE="${RAM_CACHE_SIZE:-10G}"
 RAM_DATA_DIR="${RAM_DATA_DIR:-/mnt/seeder-cache}"
-SSD_DATA_DIR="${SSD_DATA_DIR:-/srv/octor/infra-data/seeder-cache}"
+SSD_DATA_DIR="${SSD_DATA_DIR:-$PROJECT_ROOT/infra-data/seeder-cache}"
 DATA_DIR="${DATA_DIR:-/mnt/seeder-cache}"
 
 echo "setup-seeder-cache: RAM_CACHE_ENABLED=$RAM_CACHE_ENABLED DATA_DIR=$DATA_DIR"
