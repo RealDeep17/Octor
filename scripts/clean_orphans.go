@@ -135,7 +135,7 @@ func main() {
 		storagePath = os.Getenv("S3_GATEWAY_STORAGE_DIR")
 	}
 	if storagePath == "" {
-		storagePath = "/home/ubuntu/octor/infra-data/drive-mount-vfs"
+		storagePath = "./infra-data/drive-mount-vfs"
 	}
 
 	if _, err := os.Stat(storagePath); os.IsNotExist(err) {

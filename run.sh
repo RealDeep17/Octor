@@ -369,11 +369,20 @@ cmd_mode() {
     if [ "$SYNC_SERVICES" = "true" ]; then
         run_sudo cp "$PROJECT_ROOT"/octor-*.service /etc/systemd/system/
         # Copy cron scripts to cron.weekly (removing .cron extension so run-parts accepts them)
-        run_sudo cp "$PROJECT_ROOT"/octor-enrich-refresh.cron /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
+        local RUN_USER
+        RUN_USER=$(stat -c '%U' "$PROJECT_ROOT/run.sh" 2>/dev/null || stat -f '%Su' "$PROJECT_ROOT/run.sh" || echo "ubuntu")
+        
+        sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__RUN_USER__|$RUN_USER|g" \
+            "$PROJECT_ROOT"/octor-enrich-refresh.cron > /tmp/octor-enrich-refresh
+        run_sudo cp /tmp/octor-enrich-refresh /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
         run_sudo chmod +x /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
-        run_sudo cp "$PROJECT_ROOT"/octor-prune.cron /etc/cron.weekly/octor-prune 2>/dev/null || true
+        
+        sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__RUN_USER__|$RUN_USER|g" \
+            "$PROJECT_ROOT"/octor-prune.cron > /tmp/octor-prune
+        run_sudo cp /tmp/octor-prune /etc/cron.weekly/octor-prune 2>/dev/null || true
         run_sudo chmod +x /etc/cron.weekly/octor-prune 2>/dev/null || true
         run_sudo systemctl daemon-reload
+
 
     fi
 

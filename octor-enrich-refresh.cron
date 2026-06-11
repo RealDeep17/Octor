@@ -8,7 +8,8 @@
 
 echo -e "\n=== Auto-Enrich-Refresh Started: $(date) ===" >> /var/log/octor-enrich-refresh.log
 
-# Run enrich refresh command as 'ubuntu' user via run.sh
-sudo -u ubuntu /home/ubuntu/octor/run.sh enrich refresh 7 >> /var/log/octor-enrich-refresh.log 2>&1
+# Run enrich refresh command as '__RUN_USER__' user via run.sh
+sudo -u __RUN_USER__ __PROJECT_ROOT__/run.sh enrich refresh 7 >> /var/log/octor-enrich-refresh.log 2>&1
+
 
 echo -e "=== Auto-Enrich-Refresh Finished: $(date) ===\n" >> /var/log/octor-enrich-refresh.log

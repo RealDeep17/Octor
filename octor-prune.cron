@@ -8,8 +8,9 @@
 
 echo -e "\n=== Auto-Prune Started: $(date) ===" >> /var/log/octor-prune.log
 
-# 1. Run workspace and Go cleanups as 'ubuntu' user
-sudo -u ubuntu /home/ubuntu/octor/run.sh prune >> /var/log/octor-prune.log 2>&1
+# 1. Run workspace and Go cleanups as '__RUN_USER__' user
+sudo -u __RUN_USER__ __PROJECT_ROOT__/run.sh prune >> /var/log/octor-prune.log 2>&1
+
 
 # 2. Clean up storage orphans from Google Drive
 echo "  • Cleaning up orphaned files from Google Drive..." >> /var/log/octor-prune.log

@@ -445,9 +445,9 @@ func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[stri
 		userID = adminUserID
 	}
 
-	// If it's not in the library table, check if it belongs to an active session
-	if userID == "" && !inVault {
-		log.Printf("  [INFO] Skipping %s: Not present in library and no active session (leaked orphan)", infohash)
+	// If it's not in the library or vault table, check if it belongs to an active session
+	if userID == "" && !inVault && !inLibrary {
+		log.Printf("  [INFO] Skipping %s: Not present in library or vault and no active session (leaked orphan)", infohash)
 		return false
 	}
 
