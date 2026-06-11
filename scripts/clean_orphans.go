@@ -201,80 +201,95 @@ func main() {
 
 	if len(orphanedMetadataFiles) > 0 {
 		log.Println("\nOrphaned Metadata Files:")
-		for _, path := range orphanedMetadataFiles {
-			log.Printf("  - %s", filepath.Base(path))
-			if !*dryRun {
-				if err := os.Remove(path); err != nil {
-					log.Printf("    [Error deleting]: %v", err)
-				}
+		if *dryRun {
+			for _, path := range orphanedMetadataFiles {
+				log.Printf("  - %s", filepath.Base(path))
 			}
+		} else {
+			var wg sync.WaitGroup
+			for _, path := range orphanedMetadataFiles {
+				wg.Add(1)
+				go func(p string) {
+					defer wg.Done()
+					log.Printf("  • Deleting: %s", filepath.Base(p))
+					if err := os.Remove(p); err != nil {
+						log.Printf("    [Error deleting %s]: %v", filepath.Base(p), err)
+					}
+				}(path)
+			}
+			wg.Wait()
 		}
 	}
 
 	if len(orphanedTorrentFiles) > 0 {
 		log.Println("\nOrphaned Torrent Files:")
-		for _, path := range orphanedTorrentFiles {
-			log.Printf("  - %s", filepath.Base(path))
-			if !*dryRun {
-				if err := os.Remove(path); err != nil {
-					log.Printf("    [Error deleting]: %v", err)
-				}
+		if *dryRun {
+			for _, path := range orphanedTorrentFiles {
+				log.Printf("  - %s", filepath.Base(path))
 			}
+		} else {
+			var wg sync.WaitGroup
+			for _, path := range orphanedTorrentFiles {
+				wg.Add(1)
+				go func(p string) {
+					defer wg.Done()
+					log.Printf("  • Deleting: %s", filepath.Base(p))
+					if err := os.Remove(p); err != nil {
+						log.Printf("    [Error deleting %s]: %v", filepath.Base(p), err)
+					}
+				}(path)
+			}
+			wg.Wait()
 		}
 	}
 
 	if len(orphanedVaultDirs) > 0 {
 		log.Println("\nOrphaned Vault Directories:")
-		if *dryRun {
-			for _, path := range orphanedVaultDirs {
-				var dirSize int64
-				_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
-					if err == nil && !info.IsDir() {
-						dirSize += info.Size()
-					}
-					return nil
-				})
-				totalFreedBytes += dirSize
-				log.Printf("  - %s (%.2f MB)", filepath.Base(path), float64(dirSize)/(1024*1024))
-			}
-		} else {
-			// Process deletions concurrently (20 workers) to bypass Google Drive FUSE latency
-			numWorkers := 20
-			jobs := make(chan string, len(orphanedVaultDirs))
-			var wg sync.WaitGroup
-			var sizeLock sync.Mutex
+		
+		// Process size calculations and deletions concurrently (20 workers) to bypass Google Drive FUSE latency
+		numWorkers := 20
+		if len(orphanedVaultDirs) < numWorkers {
+			numWorkers = len(orphanedVaultDirs)
+		}
+		
+		jobs := make(chan string, len(orphanedVaultDirs))
+		var wg sync.WaitGroup
+		var sizeLock sync.Mutex
 
-			for w := 0; w < numWorkers; w++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					for path := range jobs {
-						var dirSize int64
-						_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
-							if err == nil && !info.IsDir() {
-								dirSize += info.Size()
-							}
-							return nil
-						})
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for path := range jobs {
+					var dirSize int64
+					_ = filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+						if err == nil && !info.IsDir() {
+							dirSize += info.Size()
+						}
+						return nil
+					})
 
-						sizeLock.Lock()
-						totalFreedBytes += dirSize
-						sizeLock.Unlock()
+					sizeLock.Lock()
+					totalFreedBytes += dirSize
+					sizeLock.Unlock()
 
+					if *dryRun {
+						log.Printf("  - %s (%.2f MB)", filepath.Base(path), float64(dirSize)/(1024*1024))
+					} else {
 						log.Printf("  • Deleting: %s (%.2f MB)", filepath.Base(path), float64(dirSize)/(1024*1024))
 						if err := os.RemoveAll(path); err != nil {
 							log.Printf("    [Error deleting %s]: %v", filepath.Base(path), err)
 						}
 					}
-				}()
-			}
-
-			for _, path := range orphanedVaultDirs {
-				jobs <- path
-			}
-			close(jobs)
-			wg.Wait()
+				}
+			}()
 		}
+
+		for _, path := range orphanedVaultDirs {
+			jobs <- path
+		}
+		close(jobs)
+		wg.Wait()
 	}
 
 	log.Println("\n" + strings.Repeat("=", 60))

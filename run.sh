@@ -8,6 +8,10 @@
 
 set -euo pipefail
 
+# Reset terminal state to fix potential "staircase" rendering issues on start and exit
+stty sane 2>/dev/null || true
+trap 'stty sane 2>/dev/null || true' EXIT
+
 # --- Configuration & Paths ---
 # Auto-detect project root based on script location
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -73,13 +77,26 @@ probe_with_restart() {
     local round=1
     while [ $round -le $max_rounds ]; do
         echo -n "  Probe $url ($round/$max_rounds)... "
-        if curl -sf --max-time 5 "$url" > /dev/null 2>&1; then
+        local ok=false
+        if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+            if sudo docker exec octor-monolith curl -sf --max-time 5 "$url" > /dev/null 2>&1; then
+                ok=true
+            fi
+        else
+            if curl -sf --max-time 5 "$url" > /dev/null 2>&1; then
+                ok=true
+            fi
+        fi
+
+        if [ "$ok" = "true" ]; then
             echo "✓"
             return 0
         fi
         echo "⚠️"
         if [ $round -lt $max_rounds ]; then
-            run_sudo systemctl restart "$owner_svc" 2>/dev/null || true
+            if ! sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+                run_sudo systemctl restart "$owner_svc" 2>/dev/null || true
+            fi
             sleep "$pause"
         fi
         round=$((round + 1))
@@ -125,6 +142,9 @@ ensure_infra_containers() {
 stop_all_octor() {
     echo "=== STOPPING ALL OCTOR SERVICES ==="
     run_sudo systemctl stop "octor-*" 2>/dev/null || true
+    if sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+        run_sudo docker stop octor-monolith >/dev/null 2>&1 || true
+    fi
     echo "✓ Services stopped."
 }
 
@@ -137,6 +157,9 @@ kill_ghosts() {
     run_sudo pkill -9 "^uvicorn$" 2>/dev/null || true
     run_sudo pkill -9 -f "proxy.js" 2>/dev/null || true
     
+    # Reset terminal state in case any killed process left it in raw mode
+    stty sane 2>/dev/null || true
+
     # Target specific directories only. 
     # CRITICAL: Do NOT use 'fuser -m' on a non-mountpoint directory, as it will target the entire parent partition (root)!
     for dir in "$DATA_DIR" "/mnt/seeder-cache-backing"; do
@@ -367,7 +390,13 @@ cmd_mode() {
     fi
 
     if [ "$SYNC_SERVICES" = "true" ]; then
-        run_sudo cp "$PROJECT_ROOT"/octor-*.service /etc/systemd/system/
+        # Copy and dynamically replace /srv/octor with actual PROJECT_ROOT in systemd services
+        for svc in "$PROJECT_ROOT"/octor-*.service; do
+            local svc_name
+            svc_name=$(basename "$svc")
+            sed "s|/srv/octor|$PROJECT_ROOT|g" "$svc" > /tmp/"$svc_name"
+            run_sudo cp /tmp/"$svc_name" /etc/systemd/system/"$svc_name"
+        done
         # Copy cron scripts to cron.weekly (removing .cron extension so run-parts accepts them)
         local RUN_USER
         RUN_USER=$(stat -c '%U' "$PROJECT_ROOT/run.sh" 2>/dev/null || stat -f '%Su' "$PROJECT_ROOT/run.sh" || echo "ubuntu")
@@ -399,8 +428,8 @@ cmd_mode() {
 
     if [ "$REBUILD_DOCKER" = "true" ]; then
         echo "=== REBUILDING DOCKER ==="
-        (cd "$PROJECT_ROOT" && run_sudo docker-compose --ansi never down)
-        (cd "$PROJECT_ROOT" && run_sudo docker-compose --ansi never up -d --build --force-recreate)
+        (cd "$PROJECT_ROOT" && run_sudo docker compose --ansi never down)
+        (cd "$PROJECT_ROOT" && run_sudo docker compose --ansi never up -d --build --force-recreate)
         
         # Wait for NATS and Postgres
         echo -n "  Waiting for infrastructure connectivity"
@@ -484,7 +513,12 @@ cmd_mode() {
     fi
 
     echo "=== STARTING MICROSERVICES ==="
-    for svc in "${SERVICES[@]}"; do start_service_with_retry "$svc" 2 10; done
+    if sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+        echo "  Detected octor-monolith container. Reloading Docker Compose to apply new env..."
+        (cd "$PROJECT_ROOT" && run_sudo docker compose --ansi never up -d)
+    else
+        for svc in "${SERVICES[@]}"; do start_service_with_retry "$svc" 2 10; done
+    fi
 
     if [ "$RESTART_NGINX" = "true" ]; then
         echo "=== RESTARTING NGINX (Reverse Proxy) ==="
@@ -1017,7 +1051,7 @@ cmd_factory_reset() {
 
     # Step 2. Remove Docker infrastructure containers and persistent volumes
     echo "🐳 Wiping Docker infrastructure and volumes..."
-    (cd "$PROJECT_ROOT" && run_sudo docker-compose --ansi never down -v --remove-orphans || true)
+    (cd "$PROJECT_ROOT" && run_sudo docker compose --ansi never down -v --remove-orphans || true)
     
     # Step 3. Retrieve configuration paths
     local CURRENT_MODE=$(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "non-chunker-vfs-ram")
