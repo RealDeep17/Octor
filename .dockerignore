@@ -1,0 +1,9 @@
+infra-data/
+.git/
+.DS_Store
+node_modules/
+web-ui/node_modules/
+sidecar/venv/
+*.log
+*.env
+custom.env

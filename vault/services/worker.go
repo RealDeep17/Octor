@@ -1086,10 +1086,12 @@ func (s *Worker) handleDelete(ctx context.Context, db *pg.DB, id string) (err er
 
 		// 3. Delete metadata file (at root via 'storage' bucket)
 		metaKey := fmt.Sprintf("metadata/resources/%s.json", id)
-		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+		if _, err = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
 			Bucket: aws.String("storage"),
 			Key:    aws.String(metaKey),
-		})
+		}); err != nil {
+			return errors.Wrapf(err, "failed to delete metadata file from S3: %s", metaKey)
+		}
 	}
 
 	// Best-effort orphan sweep: clean up `file` rows that have no

@@ -11,7 +11,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/aws/aws-sdk-go/aws"
@@ -138,35 +140,124 @@ func main() {
 	userMap := buildUserSessionMap(octorDb)
 	log.Printf("Found %d users in Octor database", len(userMap))
 
+	// If there is exactly one user, use it as fallback for session UUID mismatch
+	var fallbackUserID string
+	if len(userMap) == 1 {
+		for _, uid := range userMap {
+			fallbackUserID = uid
+			break
+		}
+		log.Printf("Single user detected. Using User ID %s as fallback for all recovered library mappings.", fallbackUserID)
+	}
+
 	// 3. Scan S3 and Rebuild
 	log.Printf("Scanning S3 Bucket: %s for torrents...", bucket)
 
 	var recoveredCount int
 
-	err := svc.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-		Bucket: aws.String("storage"),
-		Prefix: aws.String("torrents/"),
-	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
-		for _, obj := range page.Contents {
-			key := *obj.Key
-			
-			// Ignore archived torrents (these were deleted by users)
-			if strings.Contains(key, ".archived/") {
+	// First try local directory scanning using VAULT_STORAGE_PATH or S3_GATEWAY_STORAGE_DIR
+	vaultStoragePath := os.Getenv("VAULT_STORAGE_PATH")
+	if vaultStoragePath == "" {
+		vaultStoragePath = os.Getenv("S3_GATEWAY_STORAGE_DIR")
+	}
+	if vaultStoragePath == "" {
+		vaultStoragePath = "./infra-data/drive-mount-vfs"
+	}
+
+	// Pre-load all existing vault file hashes from directory listing to avoid slow sequential os.Stat calls on FUSE mount
+	vaultHashes := make(map[string]bool)
+	localVaultDir := filepath.Join(vaultStoragePath, "vault")
+	log.Printf("Pre-listing local vault directory to build hash index: %s", localVaultDir)
+	if vaultEntries, err := os.ReadDir(localVaultDir); err == nil {
+		for _, entry := range vaultEntries {
+			if entry.IsDir() {
+				vaultHashes[entry.Name()] = true
+			}
+		}
+		log.Printf("Pre-loaded %d file hashes from local vault", len(vaultHashes))
+	} else {
+		log.Printf("Warning: Failed to pre-list local vault (%v). Verification will fallback to individual os.Stat calls.", err)
+	}
+
+	localTorrentsDir := filepath.Join(vaultStoragePath, "recovery", "torrents")
+
+	log.Printf("Checking local torrents directory: %s", localTorrentsDir)
+	files, err := os.ReadDir(localTorrentsDir)
+	if err == nil {
+		log.Printf("Found %d files in local torrents directory, processing concurrently with 30 workers...", len(files))
+		
+		// Set up worker pool to handle rclone FUSE mount latency in parallel
+		numWorkers := 30
+		jobs := make(chan string, len(files))
+		results := make(chan bool, len(files))
+		var wg sync.WaitGroup
+
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for key := range jobs {
+					res := processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, vaultStoragePath, vaultHashes, fallbackUserID)
+					results <- res
+				}
+			}()
+		}
+
+		// Feed jobs
+		for _, file := range files {
+			if file.IsDir() {
 				continue
 			}
-			if !strings.HasSuffix(key, ".torrent") {
+			name := file.Name()
+			if strings.Contains(name, ".archived/") {
 				continue
 			}
-			
-			if processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun) {
+			if !strings.HasSuffix(name, ".torrent") {
+				continue
+			}
+			jobs <- "torrents/" + name
+		}
+		close(jobs)
+
+		// Wait for workers in background
+		go func() {
+			wg.Wait()
+			close(results)
+		}()
+
+		// Collect results
+		for res := range results {
+			if res {
 				recoveredCount++
 			}
 		}
-		return !lastPage
-	})
+	} else {
+		log.Printf("Local scanning failed/unavailable (%v), falling back to S3 ListObjects...", err)
+		err = svc.ListObjectsV2Pages(&s3.ListObjectsV2Input{
+			Bucket: aws.String("storage"),
+			Prefix: aws.String("torrents/"),
+		}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+			for _, obj := range page.Contents {
+				key := *obj.Key
+				
+				// Ignore archived torrents (these were deleted by users)
+				if strings.Contains(key, ".archived/") {
+					continue
+				}
+				if !strings.HasSuffix(key, ".torrent") {
+					continue
+				}
+				
+				if processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, "", vaultHashes, fallbackUserID) {
+					recoveredCount++
+				}
+			}
+			return !lastPage
+		})
 
-	if err != nil {
-		log.Fatalf("Failed to list S3 objects: %v", err)
+		if err != nil {
+			log.Fatalf("Failed to list S3 objects: %v", err)
+		}
 	}
 
 	log.Println(strings.Repeat("-", 60))
@@ -205,18 +296,32 @@ func buildUserSessionMap(db *pg.DB) map[string]string {
 	return userMap
 }
 
-func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[string]string, bucket, key string, dryRun bool) bool {
-	// 1. Download .torrent
-	out, err := svc.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String("storage"),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		log.Printf("  [ERROR] Failed to download %s: %v", key, err)
-		return false
+func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[string]string, bucket, key string, dryRun bool, vaultStoragePath string, vaultHashes map[string]bool, fallbackUserID string) bool {
+	var raw []byte
+	var err error
+	localRead := false
+
+	// 1. Load .torrent
+	if vaultStoragePath != "" {
+		localTorrentPath := filepath.Join(vaultStoragePath, "recovery", key)
+		raw, err = os.ReadFile(localTorrentPath)
+		if err == nil {
+			localRead = true
+		}
 	}
-	defer out.Body.Close()
-	raw, _ := io.ReadAll(out.Body)
+
+	if !localRead {
+		out, err := svc.GetObject(&s3.GetObjectInput{
+			Bucket: aws.String("storage"),
+			Key:    aws.String(key),
+		})
+		if err != nil {
+			log.Printf("  [ERROR] Failed to download %s: %v", key, err)
+			return false
+		}
+		defer out.Body.Close()
+		raw, _ = io.ReadAll(out.Body)
+	}
 
 	// Parse metainfo
 	mi, err := metainfo.Load(bytes.NewReader(raw))
@@ -240,17 +345,29 @@ func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[stri
 
 	// 2. Fetch Ownership Metadata (Crucial for full recovery)
 	var meta ownershipMeta
-	metaKey := fmt.Sprintf("metadata/resources/%s.json", infohash)
-	metaOut, err := svc.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String("storage"),
-		Key:    aws.String(metaKey),
-	})
-	
 	hasMetadata := false
-	if err == nil {
-		defer metaOut.Body.Close()
-		if err := json.NewDecoder(metaOut.Body).Decode(&meta); err == nil {
-			hasMetadata = true
+
+	if vaultStoragePath != "" {
+		localMetaPath := filepath.Join(vaultStoragePath, "recovery", "metadata", "resources", infohash+".json")
+		metaRaw, err := os.ReadFile(localMetaPath)
+		if err == nil {
+			if err := json.Unmarshal(metaRaw, &meta); err == nil {
+				hasMetadata = true
+			}
+		}
+	}
+
+	if !hasMetadata {
+		metaKey := fmt.Sprintf("metadata/resources/%s.json", infohash)
+		metaOut, err := svc.GetObject(&s3.GetObjectInput{
+			Bucket: aws.String("storage"),
+			Key:    aws.String(metaKey),
+		})
+		if err == nil {
+			defer metaOut.Body.Close()
+			if err := json.NewDecoder(metaOut.Body).Decode(&meta); err == nil {
+				hasMetadata = true
+			}
 		}
 	}
 
@@ -261,6 +378,35 @@ func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[stri
 
 	// Determine User ID from Session ID
 	userID := userMap[meta.SessionID]
+	if userID == "" && fallbackUserID != "" {
+		userID = fallbackUserID
+	}
+
+	// VERIFICATION: Ensure all files for this torrent actually exist in the vault directory!
+	if vaultStoragePath != "" {
+		allExist := true
+		for _, f := range meta.Files {
+			if f.Hash == "" {
+				continue
+			}
+			if len(vaultHashes) > 0 {
+				if !vaultHashes[f.Hash] {
+					allExist = false
+					break
+				}
+			} else {
+				localFilePath := filepath.Join(vaultStoragePath, "vault", f.Hash, f.Hash)
+				if _, err := os.Stat(localFilePath); err != nil {
+					allExist = false
+					break
+				}
+			}
+		}
+		if !allExist {
+			log.Printf("  [INFO] Skipping %s: One or more files are missing from the vault (likely deleted)", infohash)
+			return false
+		}
+	}
 
 	log.Printf("Recovering: %s (%s)", infohash, torrentName)
 	if userID != "" {
