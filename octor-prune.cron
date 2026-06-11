@@ -11,8 +11,13 @@ echo -e "\n=== Auto-Prune Started: $(date) ===" >> /var/log/octor-prune.log
 # 1. Run workspace and Go cleanups as 'ubuntu' user
 sudo -u ubuntu /home/ubuntu/octor/run.sh prune >> /var/log/octor-prune.log 2>&1
 
-# 2. Run system-wide log cleaning as root
+# 2. Clean up storage orphans from Google Drive
+echo "  • Cleaning up orphaned files from Google Drive..." >> /var/log/octor-prune.log
+docker exec -i octor-monolith /app/bin/clean_orphans --dry-run=false >> /var/log/octor-prune.log 2>&1
+
+# 3. Run system-wide log cleaning as root
 echo "  • System log maintenance..." >> /var/log/octor-prune.log
 journalctl --vacuum-time=3d >> /var/log/octor-prune.log 2>&1
+
 
 echo -e "=== Auto-Prune Finished: $(date) ===\n" >> /var/log/octor-prune.log

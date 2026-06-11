@@ -150,6 +150,44 @@ func main() {
 		log.Printf("Single user detected. Using User ID %s as fallback for all recovered library mappings.", fallbackUserID)
 	}
 
+	// Load the admin user ID from DB as the fallback recipient for unmapped files
+	var adminUserID string
+	_, err := octorDb.QueryOne(pg.Scan(&adminUserID), `SELECT user_id FROM "user" WHERE email = 'admin' LIMIT 1`)
+	if err != nil {
+		log.Printf("Warning: Failed to fetch admin user ID: %v", err)
+	} else {
+		log.Printf("Found admin user ID %s to use as fallback for orphaned session metadata", adminUserID)
+	}
+
+	// Fetch already mapped resources from library table
+	var libEntries []struct {
+		ResourceId string
+	}
+	_, err = octorDb.Query(&libEntries, `SELECT resource_id FROM library`)
+	if err != nil {
+		log.Printf("Warning: Failed to fetch library entries: %v", err)
+	}
+	libraryMapped := make(map[string]bool)
+	for _, entry := range libEntries {
+		libraryMapped[entry.ResourceId] = true
+	}
+	log.Printf("Loaded %d library entries from Octor database", len(libraryMapped))
+
+	// Fetch already mapped resources from vault.resource table
+	var vaultEntries []struct {
+		ResourceId string
+	}
+	_, err = vaultDb.Query(&vaultEntries, `SELECT resource_id FROM resource`)
+	if err != nil {
+		log.Printf("Warning: Failed to fetch vault entries: %v", err)
+	}
+	vaultMapped := make(map[string]bool)
+	for _, entry := range vaultEntries {
+		vaultMapped[entry.ResourceId] = true
+	}
+	log.Printf("Loaded %d vault entries from Vault database", len(vaultMapped))
+
+
 	// 3. Scan S3 and Rebuild
 	log.Printf("Scanning S3 Bucket: %s for torrents...", bucket)
 
@@ -197,7 +235,7 @@ func main() {
 			go func() {
 				defer wg.Done()
 				for key := range jobs {
-					res := processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, vaultStoragePath, vaultHashes, fallbackUserID)
+					res := processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, vaultStoragePath, vaultHashes, fallbackUserID, libraryMapped, vaultMapped, adminUserID)
 					results <- res
 				}
 			}()
@@ -248,7 +286,7 @@ func main() {
 					continue
 				}
 				
-				if processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, "", vaultHashes, fallbackUserID) {
+				if processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, "", vaultHashes, fallbackUserID, libraryMapped, vaultMapped, adminUserID) {
 					recoveredCount++
 				}
 			}
@@ -296,7 +334,7 @@ func buildUserSessionMap(db *pg.DB) map[string]string {
 	return userMap
 }
 
-func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[string]string, bucket, key string, dryRun bool, vaultStoragePath string, vaultHashes map[string]bool, fallbackUserID string) bool {
+func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[string]string, bucket, key string, dryRun bool, vaultStoragePath string, vaultHashes map[string]bool, fallbackUserID string, libraryMapped map[string]bool, vaultMapped map[string]bool, adminUserID string) bool {
 	var raw []byte
 	var err error
 	localRead := false
@@ -376,10 +414,41 @@ func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[stri
 		return false
 	}
 
-	// Determine User ID from Session ID
+	// Determine if the resource existed in the original database
+	inLibrary := libraryMapped[infohash]
+	inVault := vaultMapped[infohash]
+
+	// Determine User ID from Session ID (used if we need to fall back or verify new active uploads)
 	userID := userMap[meta.SessionID]
 	if userID == "" && fallbackUserID != "" {
 		userID = fallbackUserID
+	}
+
+	if !inLibrary && !inVault {
+		// If it has a valid session, it is a newly added active torrent. Otherwise, it is a deleted leaked orphan.
+		if userID == "" {
+			log.Printf("  [INFO] Skipping %s: Not present in library or vault backup and no active session (leaked orphan)", infohash)
+			return false
+		}
+	}
+
+	if inLibrary {
+		// It is already in the library, so we don't need to insert another library entry.
+		// (The PG dump has already restored the user's library mapping cleanly)
+		userID = ""
+	} else if inVault {
+		// It was vaulted-only (inVault is true, inLibrary is false).
+		// We do NOT map it to any user's library, maintaining its vaulted-only state.
+		userID = ""
+	} else if userID == "" && adminUserID != "" {
+		// Fallback to the admin user so it gets listed in a user's library and isn't orphaned
+		userID = adminUserID
+	}
+
+	// If it's not in the library table, check if it belongs to an active session
+	if userID == "" && !inVault {
+		log.Printf("  [INFO] Skipping %s: Not present in library and no active session (leaked orphan)", infohash)
+		return false
 	}
 
 	// VERIFICATION: Ensure all files for this torrent actually exist in the vault directory!

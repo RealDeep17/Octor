@@ -367,10 +367,14 @@ cmd_mode() {
     fi
 
     if [ "$SYNC_SERVICES" = "true" ]; then
-        echo "=== SYNCING SERVICES ==="
         run_sudo cp "$PROJECT_ROOT"/octor-*.service /etc/systemd/system/
-        run_sudo cp "$PROJECT_ROOT"/octor-*.cron /etc/systemd/system/ 2>/dev/null || true
+        # Copy cron scripts to cron.weekly (removing .cron extension so run-parts accepts them)
+        run_sudo cp "$PROJECT_ROOT"/octor-enrich-refresh.cron /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
+        run_sudo chmod +x /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
+        run_sudo cp "$PROJECT_ROOT"/octor-prune.cron /etc/cron.weekly/octor-prune 2>/dev/null || true
+        run_sudo chmod +x /etc/cron.weekly/octor-prune 2>/dev/null || true
         run_sudo systemctl daemon-reload
+
     fi
 
     stop_all_octor
