@@ -57,7 +57,10 @@
           {{ end }}
           <select name="user" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full sm:w-64" onchange="this.form.requestSubmit()">
             {{ range .Data.Users }}
-              <option value="{{ .ID }}" {{ if .Selected }}selected{{ end }}>{{ .Email }}</option>
+              <option value="{{ .ID }}" {{ if .Selected }}selected{{ end }}>
+                {{- .Email -}}
+                {{- if or .VaultedCount .VaultingCount }} ({{ .VaultedCount }} vaulted / {{ .VaultingCount }} vaulting){{ else if eq .ID "" }} ({{ .VaultedCount }} vaulted / {{ .VaultingCount }} vaulting){{ end -}}
+              </option>
             {{ end }}
           </select>
           <select name="sort" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full sm:w-44" onchange="this.form.requestSubmit()">
@@ -156,10 +159,10 @@
                   <form method="post" enctype="multipart/form-data"
                         action="{{ langPath $.Lang "/admin/library/remove" }}"
                         data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
-                        class="inline">
+                        class="inline" onsubmit="return window.handleConfirmRemove(this, 'library')">
                       <input type="hidden" name="resource_id" value="{{ .ResourceID }}" />
                       <input type="hidden" name="user_id" value="{{ .PrimaryUserID }}" />
-                      <button type="submit" class="p-0.5 text-o-muted hover:text-o-primary transition-colors" title="Remove from Library">
+                      <button type="submit" class="p-0.5 text-o-muted hover:text-error transition-colors" title="Remove from Library">
                           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                               <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                           </svg>
@@ -282,28 +285,22 @@ window.updateLibraryBulkBar = function() {
 };
 
 window.submitLibraryBulk = function(formId) {
-    const prefix = 'library';
     const form = document.getElementById(formId);
+    if (!form) return false;
+    
+    if (form.dataset.confirmed === 'true') {
+        delete form.dataset.confirmed;
+        return true;
+    }
+
+    const prefix = 'library';
     const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
-    if (!form) return;
-    
-    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
-    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
-    
-    cbs.forEach(cb => {
-        if (cb.checked) {
-            const r = document.createElement('input');
-            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
-            form.appendChild(r);
-            if (cb.dataset.userId) {
-                const u = document.createElement('input');
-                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
-                form.appendChild(u);
-            }
-        }
-    });
-    window['toggle' + 'Library' + 'Mode']();
-    return true;
+    let count = 0;
+    cbs.forEach(cb => { if (cb.checked) count++; });
+    if (count === 0) return false;
+
+    window.handleConfirmRemove(form, 'library');
+    return false;
 };
 
 (function() {
@@ -327,6 +324,9 @@ window.submitLibraryBulk = function(formId) {
         <details open class="group/folder select-none">
             <summary class="flex items-center gap-2 cursor-pointer p-3 hover:bg-base-300/30 rounded-xl transition-colors text-w-text
                 {{ if eq .Data.Category "movie" }}hover:text-sky-300{{ else if eq .Data.Category "series" }}hover:text-violet-300{{ else if eq .Data.Category "adult" }}hover:text-rose-300{{ else }}hover:text-amber-300{{ end }}">
+                <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap" onclick="event.stopPropagation()">
+                    <input type="checkbox" class="library-folder-cb checkbox checkbox-sm checkbox-primary rounded-md" />
+                </div>
                 <svg class="w-3.5 h-3.5 text-o-muted/60 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <path d="M9 18l6-6-6-6" />
                 </svg>
@@ -369,7 +369,6 @@ window.submitLibraryBulk = function(formId) {
         {{ $lib := .Data.Item }}
         <div class="admin-library-item flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group
              {{ if eq .Data.Category "movie" }}hover:bg-sky-500/5 hover:shadow-[0_2px_8px_-2px_rgba(56,189,248,0.15)]{{ else if eq .Data.Category "series" }}hover:bg-violet-500/5 hover:shadow-[0_2px_8px_-2px_rgba(139,92,246,0.15)]{{ else if eq .Data.Category "adult" }}hover:bg-rose-500/5 hover:shadow-[0_2px_8px_-2px_rgba(244,63,94,0.15)]{{ else }}hover:bg-amber-500/5 hover:shadow-[0_2px_8px_-2px_rgba(245,158,11,0.15)]{{ end }}">
-            
             <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap">
                 <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ $lib.ResourceID }}" data-user-id="{{ $lib.UserID }}" />
             </div>
@@ -409,19 +408,16 @@ window.submitLibraryBulk = function(formId) {
                     </div>
                 </div>
             </a>
-            <form method="post" action="{{ langPath $.Ctx.Lang "/admin/library/remove" }}" data-async-target="main" data-async-no-scroll="true" data-async-push-state="false" class="shrink-0">
+            <form method="post" action="{{ langPath $.Ctx.Lang "/admin/library/remove" }}" data-async-target="main" data-async-no-scroll="true" data-async-push-state="false" class="shrink-0" onsubmit="return window.handleConfirmRemove(this, 'library')">
                 <input type="hidden" name="resource_id" value="{{ $lib.ResourceID }}" />
                 <input type="hidden" name="user_id" value="{{ $lib.UserID }}" />
-                <button type="submit" class="p-1.5 text-o-muted/40 hover:text-o-primary transition-colors rounded hover:bg-base-300" title="Remove from Library">
+                <button type="submit" class="p-1.5 text-o-muted/40 hover:text-error transition-colors rounded hover:bg-base-300" title="Remove from Library">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                     </svg>
                 </button>
             </form>
             
-            <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap">
-                <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ $lib.ResourceID }}" data-user-id="{{ $lib.UserID }}" />
-            </div>
             <a href="{{ langPath $.Ctx.Lang (printf "/%s" $lib.ResourceID) }}" data-async-target="main" class="text-o-muted/40 hover:text-o-purpleL shrink-0 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
@@ -466,6 +462,10 @@ window.toggleLibraryMode = function() {
         bar?.removeAttribute('data-active');
         wraps.forEach(el => el.classList.add('hidden'));
         cbs.forEach(cb => cb.checked = false);
+        document.querySelectorAll('.library-folder-cb').forEach(cb => {
+            cb.checked = false;
+            cb.indeterminate = false;
+        });
         if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
         setTimeout(() => { if (!window[stateKey]) bar?.classList.add('hidden'); }, 300);
     }
@@ -499,28 +499,22 @@ window.updateLibraryBulkBar = function() {
 };
 
 window.submitLibraryBulk = function(formId) {
-    const prefix = 'library';
     const form = document.getElementById(formId);
+    if (!form) return false;
+    
+    if (form.dataset.confirmed === 'true') {
+        delete form.dataset.confirmed;
+        return true;
+    }
+
+    const prefix = 'library';
     const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
-    if (!form) return;
-    
-    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
-    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
-    
-    cbs.forEach(cb => {
-        if (cb.checked) {
-            const r = document.createElement('input');
-            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
-            form.appendChild(r);
-            if (cb.dataset.userId) {
-                const u = document.createElement('input');
-                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
-                form.appendChild(u);
-            }
-        }
-    });
-    window['toggle' + 'Library' + 'Mode']();
-    return true;
+    let count = 0;
+    cbs.forEach(cb => { if (cb.checked) count++; });
+    if (count === 0) return false;
+
+    window.handleConfirmRemove(form, 'library');
+    return false;
 };
 
 (function() {
@@ -531,7 +525,10 @@ window.submitLibraryBulk = function(formId) {
     document.addEventListener('change', (e) => {
         if (e.target.classList.contains(prefix + '-item-cb')) window['update' + 'Library' + 'BulkBar']();
         if (e.target.id === prefix + '-select-all') {
-            document.querySelectorAll('.' + prefix + '-item-cb').forEach(cb => cb.checked = e.target.checked);
+            document.querySelectorAll('.' + prefix + '-item-cb, .library-folder-cb').forEach(cb => {
+                cb.checked = e.target.checked;
+                cb.indeterminate = false;
+            });
             window['update' + 'Library' + 'BulkBar']();
         }
     });

@@ -167,7 +167,7 @@ func GetSeriesByVideoID(ctx context.Context, db *pg.DB, uID uuid.UUID, videoID s
 
 	query := db.Model(&list).
 		Context(ctx).
-		Join("left join series_metadata as smd").
+		Join("join series_metadata as smd").
 		JoinOn("series.series_metadata_id = smd.series_metadata_id").
 		Where("smd.video_id = ?", videoID).
 		Relation("SeriesMetadata").

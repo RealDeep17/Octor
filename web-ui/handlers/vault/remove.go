@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/webtor-io/web-ui/models"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/web"
@@ -17,12 +18,19 @@ func (h *Handler) removePledge(c *gin.Context) {
 	// Extract parameters from form
 	resourceID := c.PostForm("resource_id")
 	user := auth.GetUserFromContext(c)
+	alsoLibrary := c.PostForm("also_library") == "true"
 
 	// Call business logic
 	err := h.deletePledge(c.Request.Context(), resourceID, user)
 	if err != nil {
 		web.RedirectWithError(c, err)
 		return
+	}
+	if alsoLibrary && h.pg != nil {
+		db := h.pg.Get()
+		if db != nil {
+			_ = models.RemoveFromLibrary(c.Request.Context(), db, user.ID, resourceID)
+		}
 	}
 	if h.api != nil {
 		claims := api.GetClaimsFromContext(c)

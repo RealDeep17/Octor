@@ -14,6 +14,7 @@ import (
 	"github.com/webtor-io/web-ui/services/enrich"
 	"github.com/webtor-io/web-ui/services/template"
 	"github.com/webtor-io/web-ui/services/tpdb"
+	"github.com/webtor-io/web-ui/services/vault"
 	"github.com/webtor-io/web-ui/services/web"
 )
 
@@ -41,10 +42,11 @@ type Handler struct {
 	enricher            *enrich.Enricher
 	admin               *admin.Admin
 	tpdb                *tpdb.Service
+	vault               *vault.Vault
 	posterCacheS3Bucket string
 }
 
-func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs, cl *http.Client, s3Cl *cs.S3Client, en *enrich.Enricher, admin *admin.Admin, tpdb *tpdb.Service) {
+func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs, cl *http.Client, s3Cl *cs.S3Client, en *enrich.Enricher, admin *admin.Admin, tpdb *tpdb.Service, v *vault.Vault) {
 	h := &Handler{
 		tb: tm.MustRegisterViews("library/*").
 			WithHelper(helpers.NewStarsHelper()).
@@ -60,6 +62,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 		enricher:            en,
 		admin:               admin,
 		tpdb:                tpdb,
+		vault:               v,
 		posterCacheS3Bucket: c.String(awsPosterCacheBucket),
 	}
 	lg := r.Group("/lib")

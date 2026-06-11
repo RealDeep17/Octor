@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-pg/pg/v10"
 	uuid "github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
 	"github.com/webtor-io/web-ui/models"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/web"
@@ -128,11 +129,13 @@ func (h *Handler) get(c *gin.Context) {
 		} else {
 			historyQuery.Where("user_id = ?", user.ID)
 		}
-		_ = historyQuery.
+		if err := historyQuery.
 			Where("resource_id IN (?)", pg.In(resourceIDs)).
 			Order("updated_at DESC").
 			Limit(1).
-			Select()
+			Select(); err != nil {
+			log.WithError(err).Warn("failed to fetch watch history for series page")
+		}
 	}
 
 	var activeResourceID, activePath string
@@ -166,7 +169,7 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 			plotStr = md.Plot
 			if md.VideoID != "" {
 				posterURL = fmt.Sprintf("/lib/series/poster/%s/240.jpg", md.VideoID)
-				
+
 				// Replicate Helper.HasEnrichedPosterHorizontal logic
 				hasHorizontal := md.PosterHorizontalURL != "" ||
 					strings.Contains(md.PosterURL, "theporndb.net") ||
@@ -177,7 +180,7 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 					strings.HasPrefix(md.VideoID, "tpdb_jav=") ||
 					strings.HasPrefix(md.VideoID, "stash:") ||
 					strings.HasPrefix(md.VideoID, "stash=")
-				
+
 				if hasHorizontal {
 					posterHorizontalURL = fmt.Sprintf("/lib/series/poster-h/%s/480.jpg", md.VideoID)
 				}
@@ -448,7 +451,6 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 			stillURL = entries[0].stillURL
 		}
 
-
 		torrents := make([]EpisodeTorrent, 0, len(entries))
 		for _, e := range entries {
 			folder, fname := splitPath(e.path)
@@ -460,7 +462,9 @@ func buildPageData(videoID string, seriesList []*models.Series, trMap map[string
 			var size int64 = 0
 			if tr, ok := trMap[e.resourceID]; ok && tr != nil {
 				trName = tr.Name
-				size = tr.SizeBytes
+				if e.size == 0 && tr.FileCount <= 1 {
+					size = tr.SizeBytes
+				}
 			}
 			if e.size > 0 {
 				size = e.size

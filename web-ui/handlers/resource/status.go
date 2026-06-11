@@ -128,6 +128,11 @@ func resolveVaultState(dbResource *vaultModels.Resource, apiResource *vault.Reso
 	}
 	switch apiResource.Status {
 	case vault.StatusProcessing:
+		if apiResource.ClaimExpiresAt != nil && apiResource.ClaimExpiresAt.Before(time.Now()) {
+			status.State = "waiting"
+			status.Progress = apiResource.GetProgress()
+			return status
+		}
 		return status
 	case vault.StatusCompleted:
 		return &TorrentStatus{State: "vaulted", Selective: selective}
@@ -285,7 +290,7 @@ func (s *Handler) status(c *gin.Context) {
 	go s.statusLoop(ctx, claims, resourceID, itemID, active, statusCh)
 
 	c.Stream(func(w io.Writer) bool {
-		ticker := time.NewTicker(200 * time.Millisecond)
+		ticker := time.NewTicker(1 * time.Second)
 		select {
 		case <-ctx.Done():
 			ticker.Stop()
@@ -360,7 +365,7 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 	var maxCompletedSeen int64
 	var lastMonotonicCompleted int64
 
-	ticker := time.NewTicker(200 * time.Millisecond)
+	ticker := time.NewTicker(300 * time.Millisecond)
 	defer ticker.Stop()
 
 	type statsResult struct {
@@ -554,7 +559,6 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 		}
 	}
 }
-
 
 func cachedStatsFromExport(exportResp *ra.ExportResponse) *TorrentStatsData {
 	if exportResp == nil {

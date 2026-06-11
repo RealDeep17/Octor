@@ -31,6 +31,7 @@ func UpsertSeriesStatus(ctx context.Context, db *pg.DB, s *SeriesStatus) error {
 		Set("rating = COALESCE(EXCLUDED.rating, series_status.rating)").
 		Set("source = EXCLUDED.source").
 		Set("watched_at = EXCLUDED.watched_at").
+		Set("poster_layout = COALESCE(EXCLUDED.poster_layout, series_status.poster_layout)").
 		Insert()
 	if err != nil {
 		return errors.Wrap(err, "failed to upsert series status")

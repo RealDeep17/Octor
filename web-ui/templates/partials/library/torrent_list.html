@@ -11,6 +11,9 @@
         <details open class="group/folder select-none">
             <summary class="flex items-center gap-2 cursor-pointer p-3 hover:bg-base-300/30 rounded-xl transition-colors text-w-text
                 {{ if eq .Data.Category "movie" }}hover:text-sky-300{{ else if eq .Data.Category "series" }}hover:text-violet-300{{ else if eq .Data.Category "adult" }}hover:text-rose-300{{ else }}hover:text-amber-300{{ end }}">
+                <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap" onclick="event.stopPropagation()">
+                    <input type="checkbox" class="library-folder-cb checkbox checkbox-sm checkbox-primary rounded-md" />
+                </div>
                 <svg class="w-3.5 h-3.5 text-o-muted/60 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <path d="M9 18l6-6-6-6" />
                 </svg>
@@ -53,7 +56,6 @@
         {{ $lib := .Data.Item }}
         <div class="library-item flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group
              {{ if eq .Data.Category "movie" }}hover:bg-sky-500/5 hover:shadow-[0_2px_8px_-2px_rgba(56,189,248,0.15)]{{ else if eq .Data.Category "series" }}hover:bg-violet-500/5 hover:shadow-[0_2px_8px_-2px_rgba(139,92,246,0.15)]{{ else if eq .Data.Category "adult" }}hover:bg-rose-500/5 hover:shadow-[0_2px_8px_-2px_rgba(244,63,94,0.15)]{{ else }}hover:bg-amber-500/5 hover:shadow-[0_2px_8px_-2px_rgba(245,158,11,0.15)]{{ end }}">
-            
             <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap">
                 <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ $lib.ResourceID }}" />
             </div>
@@ -88,18 +90,15 @@
                     <div class="text-xs text-o-muted shrink-0 text-right whitespace-nowrap">{{ if $lib.Torrent }}{{ $lib.Torrent.SizeBytes | bitsForHumans }}{{ if $lib.Torrent.FileCount }} · {{ $lib.Torrent.FileCount }} {{ t $.Ctx.Lang "library.files" }}{{ end }}{{ else }}0 B{{ end }} · {{ timeAgoLang $.Ctx.Lang $lib.CreatedAt }}</div>
                 </div>
             </a>
-            <form method="post" action="{{ langPath $.Ctx.Lang "/lib/remove" }}" data-async-target="main" data-async-no-scroll="true" data-async-push-state="false" class="shrink-0">
+            <form method="post" action="{{ langPath $.Ctx.Lang "/lib/remove" }}" data-async-target="main" data-async-no-scroll="true" data-async-push-state="false" class="shrink-0" onsubmit="return window.handleConfirmRemove(this, 'library')">
                 <input type="hidden" name="resource_id" value="{{ $lib.ResourceID }}" />
-                <button type="submit" class="p-1.5 text-o-muted/40 hover:text-o-primary transition-colors rounded hover:bg-base-300" title="{{ t $.Ctx.Lang "library.remove" }}">
+                <button type="submit" class="p-1.5 text-o-muted/40 hover:text-error transition-colors rounded hover:bg-base-300" title="Remove from Library">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                     </svg>
                 </button>
             </form>
             
-            <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap">
-                <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ $lib.ResourceID }}" />
-            </div>
             <a href="{{ langPath $.Ctx.Lang (printf "/%s" $lib.ResourceID) }}" data-async-target="main" class="text-o-muted/40 hover:text-o-purpleL shrink-0 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />

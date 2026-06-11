@@ -49,13 +49,14 @@ type ErrorResponse struct {
 
 // Resource represents a resource in the Vault
 type Resource struct {
-	ResourceID string    `json:"resource_id"`
-	Status     int       `json:"status"`
-	StoredSize int64     `json:"stored_size"`
-	TotalSize  int64     `json:"total_size"`
-	Error      string    `json:"error"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ResourceID     string     `json:"resource_id"`
+	Status         int        `json:"status"`
+	StoredSize     int64      `json:"stored_size"`
+	TotalSize      int64      `json:"total_size"`
+	Error          string     `json:"error"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	ClaimExpiresAt *time.Time `json:"claim_expires_at,omitempty"`
 }
 
 // Status constants for Resource

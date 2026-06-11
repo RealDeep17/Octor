@@ -190,7 +190,7 @@ func GetLibraryCounts(ctx context.Context, db *pg.DB, uID uuid.UUID) (torrents, 
 	}
 
 	_, err = db.QueryOneContext(ctx, pg.Scan(&series), `
-		SELECT COUNT(DISTINCT smd.video_id) + COUNT(CASE WHEN smd.video_id IS NULL OR smd.video_id = '' THEN 1 END)
+		SELECT COUNT(DISTINCT COALESCE(NULLIF(smd.video_id, ''), series.series_id::text))
 		FROM series
 		JOIN library as l ON series.resource_id = l.resource_id
 		LEFT JOIN series_metadata as smd ON series.series_metadata_id = smd.series_metadata_id
@@ -501,6 +501,13 @@ func isAnimeText(str string) bool {
 		return false
 	}
 	sLower := strings.ToLower(str)
+	tokens := strings.FieldsFunc(sLower, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9')
+	})
+	tokenSet := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		tokenSet[token] = struct{}{}
+	}
 
 	keywords := []string{
 		"anime", "vostfr", "vost", "subsplease", "horriblesubs", "erai-raws",
@@ -509,15 +516,21 @@ func isAnimeText(str string) bool {
 		"multi-audio", "sub-esp", "sub-english", "sub-eng", "sub_eng",
 	}
 	for _, kw := range keywords {
-		if strings.Contains(sLower, kw) {
+		if strings.Contains(kw, " ") || strings.Contains(kw, "-") || strings.Contains(kw, "_") {
+			if strings.Contains(sLower, kw) {
+				return true
+			}
+			continue
+		}
+		if _, ok := tokenSet[kw]; ok {
 			return true
 		}
 	}
 
 	for _, r := range str {
 		if (r >= 0x3040 && r <= 0x309F) || // Hiragana
-		   (r >= 0x30A0 && r <= 0x30FF) || // Katakana
-		   (r >= 0x4E00 && r <= 0x9FFF) {   // Kanji
+			(r >= 0x30A0 && r <= 0x30FF) || // Katakana
+			(r >= 0x4E00 && r <= 0x9FFF) { // Kanji
 			return true
 		}
 	}

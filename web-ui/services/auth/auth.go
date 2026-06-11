@@ -35,12 +35,14 @@ import (
 )
 
 const (
-	SupertokensHostFlag     = "supertokens-host"
-	SupertokensPortFlag     = "supertokens-port"
-	googleClientIDFlag      = "google-client-id"
-	googleClientSecretFlag  = "google-client-secret"
-	overrideUserEmail       = "override-user-email"
+	SupertokensHostFlag    = "supertokens-host"
+	SupertokensPortFlag    = "supertokens-port"
+	googleClientIDFlag     = "google-client-id"
+	googleClientSecretFlag = "google-client-secret"
+	overrideUserEmail      = "override-user-email"
 )
+
+const userEmailCacheTTL = 5 * time.Minute
 
 func RegisterFlags(f []cli.Flag) []cli.Flag {
 	return append(f,
@@ -73,6 +75,11 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 	)
 }
 
+type cachedUserEmail struct {
+	Email     string
+	ExpiresAt time.Time
+}
+
 type Auth struct {
 	url                string
 	smtpUser           string
@@ -92,19 +99,19 @@ type Auth struct {
 
 func New(c *cli.Context, cl *http.Client, pg *cs.PG) *Auth {
 	return &Auth{
-		url:                 c.String(SupertokensHostFlag) + ":" + c.String(SupertokensPortFlag),
-		hasSupetokens:       c.String(SupertokensHostFlag) != "" && c.String(SupertokensPortFlag) != "",
-		smtpUser:            c.String(sv.SMTPUserFlag),
-		smtpPass:            c.String(sv.SMTPPassFlag),
-		smtpHost:            c.String(sv.SMTPHostFlag),
-		smtpSecure:          c.BoolT(sv.SMTPSecureFlag),
-		smtpPort:            c.Int(sv.SMTPPortFlag),
-		domain:              c.String(sv.DomainFlag),
-		cl:                  cl,
-		pg:                  pg,
-		googleClientID:      c.String(googleClientIDFlag),
-		googleClientSecret:  c.String(googleClientSecretFlag),
-		overrideUserEmail:   c.String(overrideUserEmail),
+		url:                c.String(SupertokensHostFlag) + ":" + c.String(SupertokensPortFlag),
+		hasSupetokens:      c.String(SupertokensHostFlag) != "" && c.String(SupertokensPortFlag) != "",
+		smtpUser:           c.String(sv.SMTPUserFlag),
+		smtpPass:           c.String(sv.SMTPPassFlag),
+		smtpHost:           c.String(sv.SMTPHostFlag),
+		smtpSecure:         c.BoolT(sv.SMTPSecureFlag),
+		smtpPort:           c.Int(sv.SMTPPortFlag),
+		domain:             c.String(sv.DomainFlag),
+		cl:                 cl,
+		pg:                 pg,
+		googleClientID:     c.String(googleClientIDFlag),
+		googleClientSecret: c.String(googleClientSecretFlag),
+		overrideUserEmail:  c.String(overrideUserEmail),
 	}
 }
 
@@ -202,13 +209,13 @@ func (s *Auth) Init() error {
 }
 
 type User struct {
-	ID            uuid.UUID
-	Email         string
-	Expired       bool
-	IsNew         bool
-	Tier          string
-	Skin          string
-	GridDensity   string
+	ID          uuid.UUID
+	Email       string
+	Expired     bool
+	IsNew       bool
+	Tier        string
+	Skin        string
+	GridDensity string
 }
 
 func (s *User) HasAuth() bool {
@@ -328,16 +335,21 @@ func (s *Auth) createUser(ctx context.Context, sess sessmodels.SessionContainer)
 		return models.GetOrCreateUser(ctx, db, s.overrideUserEmail)
 	}
 
-	// Fast path: in-process cache avoids ~1s SuperTokens network call on every request
+	// Fast path: in-process cache avoids ~1s SuperTokens network call on every request.
+	// Keep it time-bound so email changes in SuperTokens eventually converge.
 	if cached, ok := s.userEmailCache.Load(userID); ok {
-		return models.GetOrCreateUser(ctx, db, cached.(string))
+		entry, ok := cached.(cachedUserEmail)
+		if ok && time.Now().Before(entry.ExpiresAt) {
+			return models.GetOrCreateUser(ctx, db, entry.Email)
+		}
+		s.userEmailCache.Delete(userID)
 	}
 
 	// Try passwordless recipe first
 	userInfo, plErr := passwordless.GetUserByID(userID)
 	if plErr == nil && userInfo != nil && userInfo.Email != nil {
 		log.Infof("createUser: found passwordless user email=%s", *userInfo.Email)
-		s.userEmailCache.Store(userID, *userInfo.Email)
+		s.userEmailCache.Store(userID, cachedUserEmail{Email: *userInfo.Email, ExpiresAt: time.Now().Add(userEmailCacheTTL)})
 		return models.GetOrCreateUser(ctx, db, *userInfo.Email)
 	} else if plErr != nil {
 		log.Infof("createUser: passwordless GetUserByID error: %v", plErr)
@@ -347,7 +359,7 @@ func (s *Auth) createUser(ctx context.Context, sess sessmodels.SessionContainer)
 	tpUserInfo, tpErr := thirdparty.GetUserByID(userID)
 	if tpErr == nil && tpUserInfo != nil && tpUserInfo.Email != "" {
 		log.Infof("createUser: found thirdparty user email=%s", tpUserInfo.Email)
-		s.userEmailCache.Store(userID, tpUserInfo.Email)
+		s.userEmailCache.Store(userID, cachedUserEmail{Email: tpUserInfo.Email, ExpiresAt: time.Now().Add(userEmailCacheTTL)})
 		return models.GetOrCreateUser(ctx, db, tpUserInfo.Email)
 	} else if tpErr != nil {
 		log.Errorf("createUser: thirdparty GetUserByID error: %v", tpErr)

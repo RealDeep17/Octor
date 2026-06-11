@@ -79,7 +79,11 @@ function applyRowFill(row, status) {
             pct = 0;
             break;
     }
-    row.style.backgroundImage = `linear-gradient(to right, ${color} ${pct}%, transparent ${pct}%)`;
+    if (pct > 0) {
+        row.style.backgroundImage = `linear-gradient(to right, ${color} ${pct}%, transparent ${pct}%)`;
+    } else {
+        row.style.backgroundImage = 'none';
+    }
 
     const indicator = ensureIndicator(row);
     if (!indicator) return;
@@ -261,50 +265,55 @@ av(async function () {
 
     // Bind interactive client-side search filtering
     const searchInput = root.querySelector('#vault-search-form input[name="q"]');
-    const searchForm = root.querySelector('#vault-search-form');
+    const statusSelect = root.querySelector('#vault-status-filter');
     const items = root.querySelectorAll('.vault-item');
     const emptyState = root.querySelector('#vault-search-empty');
 
-    if (searchInput) {
-        const filterItems = () => {
-            const query = searchInput.value.trim().toLowerCase();
-            let visibleCount = 0;
+    const filterItems = () => {
+        const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+        const status = statusSelect ? statusSelect.value : 'all';
+        let visibleCount = 0;
 
-            items.forEach((item) => {
-                const titleLink = item.querySelector('a[data-async-target="main"], .font-medium');
-                const titleText = titleLink ? titleLink.textContent.trim().toLowerCase() : '';
-                const matches = titleText.includes(query);
+        items.forEach((item) => {
+            const titleLink = item.querySelector('a[data-async-target="main"], .font-medium, .vault-name-link');
+            const titleText = titleLink ? titleLink.textContent.trim().toLowerCase() : '';
+            const matchesQuery = !query || titleText.includes(query);
 
-                if (matches) {
-                    item.classList.remove('hidden');
-                    visibleCount++;
-                } else {
-                    item.classList.add('hidden');
-                }
-            });
+            const rowStatus = item.getAttribute('data-vault-status') || 'vaulting';
+            const matchesStatus = status === 'all' || rowStatus === status;
 
-            if (emptyState) {
-                if (visibleCount === 0 && items.length > 0) {
-                    emptyState.classList.remove('hidden');
-                } else {
-                    emptyState.classList.add('hidden');
-                }
+            if (matchesQuery && matchesStatus) {
+                item.classList.remove('hidden');
+                visibleCount++;
+            } else {
+                item.classList.add('hidden');
             }
-        };
+        });
 
+        if (emptyState) {
+            if (visibleCount === 0 && items.length > 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+            }
+        }
+    };
+
+    if (searchInput) {
         searchInput.addEventListener('input', filterItems);
-
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
             }
         });
-
-        // Trigger filter immediately on load in case search term was pre-populated by Go template
-        if (searchInput.value) {
-            filterItems();
-        }
     }
+
+    if (statusSelect) {
+        statusSelect.addEventListener('change', filterItems);
+    }
+
+    // Trigger filter immediately on load
+    filterItems();
 
     const rows = root.querySelectorAll('[data-vault-progress]');
     if (!rows.length) return;

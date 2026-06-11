@@ -20,8 +20,8 @@ import (
 	uuid "github.com/satori/go.uuid"
 	log "github.com/sirupsen/logrus"
 	cs "github.com/webtor-io/common-services"
-	"github.com/webtor-io/web-ui/handlers/library/shared"
 	libHelpers "github.com/webtor-io/web-ui/handlers/library/helpers"
+	"github.com/webtor-io/web-ui/handlers/library/shared"
 	"github.com/webtor-io/web-ui/models"
 	vaultModels "github.com/webtor-io/web-ui/models/vault"
 	adminsvc "github.com/webtor-io/web-ui/services/admin"
@@ -44,17 +44,20 @@ type Handler struct {
 }
 
 type UserOption struct {
-	ID       string
-	Email    string
-	Selected bool
+	ID            string
+	Email         string
+	Selected      bool
+	Tier          string
+	VaultedCount  int
+	VaultingCount int
 }
 
 type OwnerSummary struct {
-	ResourceID   string    `pg:"resource_id"`
-	UserCount    int       `pg:"user_count"`
-	OwnerEmails  string    `pg:"owner_emails"`
-	OwnerIDs     string    `pg:"owner_ids"`
-	PrimaryEmail string    `pg:"primary_email"`
+	ResourceID    string    `pg:"resource_id"`
+	UserCount     int       `pg:"user_count"`
+	OwnerEmails   string    `pg:"owner_emails"`
+	OwnerIDs      string    `pg:"owner_ids"`
+	PrimaryEmail  string    `pg:"primary_email"`
 	PrimaryUserID uuid.UUID `pg:"primary_user_id"`
 }
 
@@ -280,8 +283,39 @@ func (h *Handler) driveIndex(c *gin.Context) {
 func (h *Handler) removePledge(c *gin.Context) {
 	uIDRaw := c.PostForm("user_id")
 	rID := c.PostForm("resource_id")
+	alsoLibrary := c.PostForm("also_library") == "true"
+	allUsers := c.PostForm("all_users") == "true"
 
-	if uIDRaw == "" || rID == "" {
+	if rID == "" {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	db, err := h.db()
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	if allUsers {
+		pledges, err := vaultModels.GetResourcePledges(c.Request.Context(), db, rID)
+		if err == nil {
+			for _, p := range pledges {
+				pCopy := p
+				_ = h.vault.RemovePledge(c.Request.Context(), &pCopy)
+			}
+		}
+		if alsoLibrary {
+			_, _ = db.Model((*models.Library)(nil)).
+				Context(c.Request.Context()).
+				Where("resource_id = ?", rID).
+				Delete()
+		}
+		web.RedirectWithSuccessAndMessage(c, "toast.removedFromVault")
+		return
+	}
+
+	if uIDRaw == "" {
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -319,6 +353,10 @@ func (h *Handler) removePledge(c *gin.Context) {
 		return
 	}
 
+	if alsoLibrary {
+		_ = models.RemoveFromLibrary(c.Request.Context(), db, uID, rID)
+	}
+
 	web.RedirectWithSuccessAndMessage(c, "toast.removedFromVault")
 }
 
@@ -326,42 +364,73 @@ func (h *Handler) removeMultiplePledge(c *gin.Context) {
 	var req struct {
 		UserIDs     []string `form:"user_ids[]"`
 		ResourceIDs []string `form:"resource_ids[]"`
+		AllUsers    string   `form:"all_users"`
 	}
 
-	if err := c.ShouldBind(&req); err != nil || len(req.UserIDs) != len(req.ResourceIDs) {
+	if err := c.ShouldBind(&req); err != nil {
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
+	allUsers := req.AllUsers == "true"
+	alsoLibrary := c.PostForm("also_library") == "true"
+
 	ctx := c.Request.Context()
+	db, err := h.db()
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
 
 	for i, rIDRaw := range req.ResourceIDs {
 		rID := strings.TrimSpace(rIDRaw)
-		uIDRaw := strings.TrimSpace(req.UserIDs[i])
-
-		if rID == "" || uIDRaw == "" {
+		if rID == "" {
 			continue
 		}
 
-		uID, err := uuid.FromString(uIDRaw)
-		if err != nil {
-			continue
-		}
+		if allUsers {
+			pledges, err := vaultModels.GetResourcePledges(ctx, db, rID)
+			if err == nil {
+				for _, p := range pledges {
+					pCopy := p
+					_ = h.vault.RemovePledge(ctx, &pCopy)
+				}
+			}
+			if alsoLibrary {
+				_, _ = db.Model((*models.Library)(nil)).
+					Context(ctx).
+					Where("resource_id = ?", rID).
+					Delete()
+			}
+		} else {
+			if i >= len(req.UserIDs) {
+				continue
+			}
+			uIDRaw := strings.TrimSpace(req.UserIDs[i])
+			if uIDRaw == "" {
+				continue
+			}
 
-		resource, err := h.vault.GetResource(ctx, rID)
-		if err != nil || resource == nil {
-			continue
-		}
+			uID, err := uuid.FromString(uIDRaw)
+			if err != nil {
+				continue
+			}
 
-		user := &auth.User{ID: uID}
-		pledge, err := h.vault.GetPledge(ctx, user, resource)
-		if err != nil || pledge == nil {
-			continue
-		}
+			resource, err := h.vault.GetResource(ctx, rID)
+			if err != nil || resource == nil {
+				continue
+			}
 
-		if err := h.vault.RemovePledge(ctx, pledge); err != nil {
-			log.WithError(err).WithField("resource_id", rID).Warn("admin failed to bulk delete pledge")
-			continue
+			user := &auth.User{ID: uID}
+			pledge, err := h.vault.GetPledge(ctx, user, resource)
+			if err != nil || pledge == nil {
+				continue
+			}
+
+			if err := h.vault.RemovePledge(ctx, pledge); err != nil {
+				log.WithError(err).WithField("resource_id", rID).Warn("admin failed to bulk delete pledge")
+				continue
+			}
 		}
 
 		if h.api != nil {
@@ -514,7 +583,7 @@ func (h *Handler) getRAMUsed() int64 {
 			fmt.Sscanf(line, "Cached: %d", &cached)
 		}
 	}
-	return int64(total - free - buffers - cached) * 1024
+	return int64(total-free-buffers-cached) * 1024
 }
 
 func (h *Handler) getRAMTotal() int64 {
@@ -540,7 +609,7 @@ func (h *Handler) getDiskUsed() int64 {
 	if err := syscall.Statfs("/srv", &stat); err != nil {
 		return 0
 	}
-	return int64(stat.Blocks - stat.Bfree) * int64(stat.Bsize)
+	return int64(stat.Blocks-stat.Bfree) * int64(stat.Bsize)
 }
 
 func (h *Handler) getDiskTotal() int64 {
@@ -600,8 +669,37 @@ func (h *Handler) remove(c *gin.Context) {
 	ctx := c.Request.Context()
 	rID := c.PostForm("resource_id")
 	uIDRaw := c.PostForm("user_id")
+	alsoVault := c.PostForm("also_vault") == "true"
+	allUsers := c.PostForm("all_users") == "true"
 
-	if rID == "" || uIDRaw == "" {
+	if rID == "" {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	if allUsers {
+		_, err := db.Model((*models.Library)(nil)).
+			Context(ctx).
+			Where("resource_id = ?", rID).
+			Delete()
+		if err != nil {
+			_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to remove from library"))
+			return
+		}
+		if alsoVault && h.vault != nil {
+			pledges, err := vaultModels.GetResourcePledges(ctx, db, rID)
+			if err == nil {
+				for _, p := range pledges {
+					pCopy := p
+					_ = h.vault.RemovePledge(ctx, &pCopy)
+				}
+			}
+		}
+		web.RedirectWithSuccessAndMessage(c, "toast.removedFromLibrary")
+		return
+	}
+
+	if uIDRaw == "" {
 		c.Status(http.StatusBadRequest)
 		return
 	}
@@ -616,6 +714,23 @@ func (h *Handler) remove(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to remove from library"))
 		return
 	}
+
+	if alsoVault && h.vault != nil {
+		resource, err := h.vault.GetResource(ctx, rID)
+		if err == nil && resource != nil {
+			pledge, err := h.vault.GetPledge(ctx, &auth.User{ID: uID}, resource)
+			if err == nil && pledge != nil {
+				_ = h.vault.RemovePledge(ctx, pledge)
+				if h.api != nil {
+					claims := api.GetClaimsFromContext(c)
+					purgeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					defer cancel()
+					_ = h.api.PurgeResourceCache(purgeCtx, claims, rID)
+				}
+			}
+		}
+	}
+
 	web.RedirectWithSuccessAndMessage(c, "toast.removedFromLibrary")
 }
 
@@ -626,31 +741,57 @@ func (h *Handler) removeMultiple(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	
+
 	var req struct {
 		UserIDs     []string `form:"user_ids[]"`
 		ResourceIDs []string `form:"resource_ids[]"`
+		AllUsers    string   `form:"all_users"`
 	}
 
-	if err := c.ShouldBind(&req); err != nil || len(req.UserIDs) != len(req.ResourceIDs) {
+	if err := c.ShouldBind(&req); err != nil {
 		c.Status(http.StatusBadRequest)
 		return
 	}
 
+	allUsers := req.AllUsers == "true"
+	alsoVault := c.PostForm("also_vault") == "true"
+
 	for i, rIDRaw := range req.ResourceIDs {
 		rID := strings.TrimSpace(rIDRaw)
-		uIDRaw := strings.TrimSpace(req.UserIDs[i])
-
-		if rID == "" || uIDRaw == "" {
+		if rID == "" {
 			continue
 		}
 
-		uID, err := uuid.FromString(uIDRaw)
-		if err != nil {
-			continue
-		}
+		if allUsers {
+			_, _ = db.Model((*models.Library)(nil)).
+				Context(ctx).
+				Where("resource_id = ?", rID).
+				Delete()
+			if alsoVault && h.vault != nil {
+				pledges, err := vaultModels.GetResourcePledges(ctx, db, rID)
+				if err == nil {
+					for _, p := range pledges {
+						pCopy := p
+						_ = h.vault.RemovePledge(ctx, &pCopy)
+					}
+				}
+			}
+		} else {
+			if i >= len(req.UserIDs) {
+				continue
+			}
+			uIDRaw := strings.TrimSpace(req.UserIDs[i])
+			if uIDRaw == "" {
+				continue
+			}
 
-		_ = models.RemoveFromLibrary(ctx, db, uID, rID)
+			uID, err := uuid.FromString(uIDRaw)
+			if err != nil {
+				continue
+			}
+
+			_ = models.RemoveFromLibrary(ctx, db, uID, rID)
+		}
 	}
 	web.RedirectWithSuccessAndMessage(c, "toast.removedFromLibrary")
 }
@@ -668,10 +809,62 @@ func (h *Handler) loadUsers(ctx context.Context, db *pg.DB, selected string) ([]
 	if err := db.Model(&users).Context(ctx).Order("email ASC").Select(); err != nil {
 		return nil, errors.Wrap(err, "failed to load users")
 	}
-	opts := []UserOption{{ID: "", Email: "All users", Selected: selected == ""}}
+
+	type UserStats struct {
+		UserID        uuid.UUID `pg:"user_id"`
+		VaultedCount  int       `pg:"vaulted_count"`
+		VaultingCount int       `pg:"vaulting_count"`
+	}
+	var stats []UserStats
+	_, err := db.QueryContext(ctx, &stats, `
+		SELECT 
+			p.user_id,
+			COUNT(CASE WHEN r.vaulted = true AND r.expired = false THEN 1 END) as vaulted_count,
+			COUNT(CASE WHEN r.vaulted = false AND r.expired = false THEN 1 END) as vaulting_count
+		FROM vault.pledge p
+		JOIN vault.resource r ON p.resource_id = r.resource_id
+		GROUP BY p.user_id
+	`)
+
+	statsMap := make(map[uuid.UUID]UserStats)
+	var totalVaulted, totalVaulting int
+	if err == nil {
+		for _, s := range stats {
+			statsMap[s.UserID] = s
+			totalVaulted += s.VaultedCount
+			totalVaulting += s.VaultingCount
+		}
+	} else {
+		log.WithError(err).Warn("failed to load user vault stats for admin dropdown")
+	}
+
+	opts := []UserOption{{
+		ID:            "",
+		Email:         "All users",
+		Selected:      selected == "",
+		Tier:          "",
+		VaultedCount:  totalVaulted,
+		VaultingCount: totalVaulting,
+	}}
 	for _, u := range users {
 		id := u.UserID.String()
-		opts = append(opts, UserOption{ID: id, Email: u.Email, Selected: selected == id})
+		s := statsMap[u.UserID]
+		tier := u.Tier
+		if tier == "paid" {
+			tier = "Paid"
+		} else if tier == "free" || tier == "" {
+			tier = "Free"
+		} else if len(tier) > 0 {
+			tier = strings.ToUpper(tier[:1]) + strings.ToLower(tier[1:])
+		}
+		opts = append(opts, UserOption{
+			ID:            id,
+			Email:         u.Email,
+			Selected:      selected == id,
+			Tier:          tier,
+			VaultedCount:  s.VaultedCount,
+			VaultingCount: s.VaultingCount,
+		})
 	}
 	return opts, nil
 }
@@ -1101,7 +1294,7 @@ func (h *Handler) loadLibraryCounts(ctx context.Context, db *pg.DB, userID *uuid
 		return 0, 0, 0, 0, errors.Wrap(err, "failed to count all-user movies")
 	}
 	_, err = db.QueryOneContext(ctx, pg.Scan(&series), `
-		SELECT COUNT(DISTINCT smd.video_id) + COUNT(CASE WHEN smd.video_id IS NULL OR smd.video_id = '' THEN 1 END)
+		SELECT COUNT(DISTINCT COALESCE(NULLIF(smd.video_id, ''), series.series_id::text))
 		FROM series
 		JOIN (SELECT DISTINCT resource_id FROM library) as l ON series.resource_id = l.resource_id
 		LEFT JOIN series_metadata as smd ON series.series_metadata_id = smd.series_metadata_id
@@ -1187,16 +1380,16 @@ func (h *Handler) getLiveSeeds(ctx context.Context, c *gin.Context, resourceID s
 	if !ok || statsURL.URL == "" {
 		return 0
 	}
-	
+
 	// Create a shorter context for the SSE peek
 	shortCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
-	
+
 	ch, err := h.api.Stats(shortCtx, statsURL.URL)
 	if err != nil {
 		return 0
 	}
-	
+
 	select {
 	case event, ok := <-ch:
 		if ok {
@@ -1329,7 +1522,6 @@ func (h *Handler) forceEverythingEnrichment(c *gin.Context) {
 
 	web.RedirectWithSuccessAndMessage(c, "toast.forceEverythingEnrichmentStarted")
 }
-
 
 func (h *Handler) loadAdultItems(ctx context.Context, db *pg.DB, userID *uuid.UUID, sort models.SortType, q string) ([]any, error) {
 	var list []*models.Movie

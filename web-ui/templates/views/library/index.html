@@ -131,6 +131,10 @@ window.toggleLibraryMode = function() {
         bar?.removeAttribute('data-active');
         wraps.forEach(el => el.classList.add('hidden'));
         cbs.forEach(cb => cb.checked = false);
+        document.querySelectorAll('.library-folder-cb').forEach(cb => {
+            cb.checked = false;
+            cb.indeterminate = false;
+        });
         if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
         setTimeout(() => { if (!window[stateKey]) bar?.classList.add('hidden'); }, 300);
     }
@@ -196,7 +200,10 @@ window.submitLibraryBulk = function(formId) {
     document.addEventListener('change', (e) => {
         if (e.target.classList.contains(prefix + '-item-cb')) window['update' + 'Library' + 'BulkBar']();
         if (e.target.id === prefix + '-select-all') {
-            document.querySelectorAll('.' + prefix + '-item-cb').forEach(cb => cb.checked = e.target.checked);
+            document.querySelectorAll('.' + prefix + '-item-cb, .library-folder-cb').forEach(cb => {
+                cb.checked = e.target.checked;
+                cb.indeterminate = false;
+            });
             window['update' + 'Library' + 'BulkBar']();
         }
     });
@@ -239,6 +246,10 @@ window.toggleLibraryMode = function() {
         bar?.removeAttribute('data-active');
         wraps.forEach(el => el.classList.add('hidden'));
         cbs.forEach(cb => cb.checked = false);
+        document.querySelectorAll('.library-folder-cb').forEach(cb => {
+            cb.checked = false;
+            cb.indeterminate = false;
+        });
         if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
         setTimeout(() => { if (!window[stateKey]) bar?.classList.add('hidden'); }, 300);
     }
@@ -272,28 +283,22 @@ window.updateLibraryBulkBar = function() {
 };
 
 window.submitLibraryBulk = function(formId) {
-    const prefix = 'library';
     const form = document.getElementById(formId);
+    if (!form) return false;
+    
+    if (form.dataset.confirmed === 'true') {
+        delete form.dataset.confirmed;
+        return true;
+    }
+
+    const prefix = 'library';
     const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
-    if (!form) return;
-    
-    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
-    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
-    
-    cbs.forEach(cb => {
-        if (cb.checked) {
-            const r = document.createElement('input');
-            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
-            form.appendChild(r);
-            if (cb.dataset.userId) {
-                const u = document.createElement('input');
-                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
-                form.appendChild(u);
-            }
-        }
-    });
-    window['toggle' + 'Library' + 'Mode']();
-    return true;
+    let count = 0;
+    cbs.forEach(cb => { if (cb.checked) count++; });
+    if (count === 0) return false;
+
+    window.handleConfirmRemove(form, 'library');
+    return false;
 };
 
 (function() {
@@ -304,7 +309,10 @@ window.submitLibraryBulk = function(formId) {
     document.addEventListener('change', (e) => {
         if (e.target.classList.contains(prefix + '-item-cb')) window['update' + 'Library' + 'BulkBar']();
         if (e.target.id === prefix + '-select-all') {
-            document.querySelectorAll('.' + prefix + '-item-cb').forEach(cb => cb.checked = e.target.checked);
+            document.querySelectorAll('.' + prefix + '-item-cb, .library-folder-cb').forEach(cb => {
+                cb.checked = e.target.checked;
+                cb.indeterminate = false;
+            });
             window['update' + 'Library' + 'BulkBar']();
         }
     });

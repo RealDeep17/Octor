@@ -156,20 +156,28 @@ func (s *VideoContentHelper) GetVideoType(m models.VideoContentWithMetadata) str
 	return string(m.GetContentType())
 }
 
+func (s *VideoContentHelper) cachedPosterURL(m models.VideoContentWithMetadata, kind string, width int) string {
+	metadata := m.GetMetadata()
+	if metadata == nil || metadata.VideoID == "" {
+		return ""
+	}
+	return fmt.Sprintf("/lib/%v/%s/%v/%d.jpg", m.GetContentType(), kind, metadata.VideoID, width)
+}
+
 func (s *VideoContentHelper) GetCachedPoster240(m models.VideoContentWithMetadata) string {
-	return fmt.Sprintf("/lib/%v/poster/%v/240.jpg", m.GetContentType(), m.GetMetadata().VideoID)
+	return s.cachedPosterURL(m, "poster", 240)
 }
 
 func (s *VideoContentHelper) GetCachedPosterHorizontal500(m models.VideoContentWithMetadata) string {
-	return fmt.Sprintf("/lib/%v/poster-h/%v/500.jpg", m.GetContentType(), m.GetMetadata().VideoID)
+	return s.cachedPosterURL(m, "poster-h", 500)
 }
 
 func (s *VideoContentHelper) GetCachedPosterHorizontal480(m models.VideoContentWithMetadata) string {
-	return fmt.Sprintf("/lib/%v/poster-h/%v/480.jpg", m.GetContentType(), m.GetMetadata().VideoID)
+	return s.cachedPosterURL(m, "poster-h", 480)
 }
 
 func (s *VideoContentHelper) GetCachedPosterHorizontal720(m models.VideoContentWithMetadata) string {
-	return fmt.Sprintf("/lib/%v/poster-h/%v/720.jpg", m.GetContentType(), m.GetMetadata().VideoID)
+	return s.cachedPosterURL(m, "poster-h", 720)
 }
 
 func (s *VideoContentHelper) HasEpisodeStill(ep *models.Episode) bool {
@@ -223,9 +231,10 @@ func (s *VideoContentHelper) GetStudio(m models.VideoContentWithMetadata) string
 
 // GetEpisodeSummary returns a short human-readable string of which episodes
 // are available in the library for this series item, e.g.:
-//   "S1E3 — Ozymandias"   (single episode with title)
-//   "S2 · 6 Episodes"     (multiple episodes, same season)
-//   "3 Seasons · 24 Episodes"
+//
+//	"S1E3 — Ozymandias"   (single episode with title)
+//	"S2 · 6 Episodes"     (multiple episodes, same season)
+//	"3 Seasons · 24 Episodes"
 func (s *VideoContentHelper) GetEpisodeSummary(m models.VideoContentWithMetadata) string {
 	ser, ok := m.(*models.Series)
 	if !ok || len(ser.Episodes) == 0 {

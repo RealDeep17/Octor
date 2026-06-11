@@ -64,5 +64,224 @@
         {{- if useSuperTokens }}
         {{ "auth.js" | asset }}
         {{ end }}
+
+        <!-- Global Remove Confirmation Modal -->
+        <dialog id="remove-confirm-modal" class="modal">
+            <div class="modal-box max-w-sm bg-base-300 border border-o-line rounded-2xl shadow-xl">
+                <h3 id="modal-remove-title" class="text-lg font-bold text-error flex items-center gap-2 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                    Confirm Removal
+                </h3>
+                <p id="modal-remove-text" class="text-sm text-o-muted leading-relaxed mb-4">
+                    Are you sure you want to remove the selected items?
+                </p>
+                <!-- Option checkbox -->
+                <div class="form-control mb-4">
+                    <label class="label cursor-pointer justify-start gap-3">
+                        <input type="checkbox" id="modal-also-cb" class="checkbox checkbox-primary checkbox-sm rounded-md" />
+                        <span id="modal-also-label-text" class="label-text text-sm font-semibold text-w-text">Also remove from Library</span>
+                    </label>
+                </div>
+                <!-- Admin option checkbox -->
+                <div id="modal-admin-cb-wrap" class="form-control mb-4 hidden">
+                    <label class="label cursor-pointer justify-start gap-3">
+                        <input type="checkbox" id="modal-admin-cb" class="checkbox checkbox-error checkbox-sm rounded-md" />
+                        <span id="modal-admin-label-text" class="label-text text-sm font-semibold text-w-text">Remove from all users</span>
+                    </label>
+                </div>
+                <div class="modal-action justify-end gap-2">
+                    <button type="button" class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple" onclick="document.getElementById('remove-confirm-modal').close()">Cancel</button>
+                    <button type="button" id="modal-confirm-btn" class="btn btn-sm btn-error" onclick="window.confirmModalAction()">Confirm</button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop"><button>close</button></form>
+        </dialog>
+
+        <script>
+            window.handleConfirmRemove = function(form, type) {
+                if (form.dataset.confirmed === 'true') {
+                    delete form.dataset.confirmed;
+                    return true;
+                }
+                
+                window.activeRemoveForm = form;
+                window.activeRemoveType = type;
+                
+                // Customize modal texts
+                const titleEl = document.getElementById('modal-remove-title');
+                const textEl = document.getElementById('modal-remove-text');
+                const labelEl = document.getElementById('modal-also-label-text');
+                const cbEl = document.getElementById('modal-also-cb');
+                const adminCbWrap = document.getElementById('modal-admin-cb-wrap');
+                const adminCb = document.getElementById('modal-admin-cb');
+                
+                if (cbEl) cbEl.checked = false;
+                if (adminCb) adminCb.checked = false;
+                
+                const action = form.getAttribute('action') || '';
+                const isAdminAction = action.indexOf('/admin/') !== -1;
+                if (isAdminAction) {
+                    if (adminCbWrap) adminCbWrap.classList.remove('hidden');
+                } else {
+                    if (adminCbWrap) adminCbWrap.classList.add('hidden');
+                }
+                
+                if (type === 'vault') {
+                    if (titleEl) titleEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg> Remove from Vault';
+                    if (textEl) textEl.textContent = 'Are you sure you want to remove this from your Vault?';
+                    if (labelEl) labelEl.textContent = 'Also remove from Library';
+                } else {
+                    if (titleEl) titleEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg> Remove from Library';
+                    if (textEl) textEl.textContent = 'Are you sure you want to remove this from your Library?';
+                    if (labelEl) labelEl.textContent = 'Also remove from Vault';
+                }
+                
+                const modal = document.getElementById('remove-confirm-modal');
+                if (modal) modal.showModal();
+                return false;
+            };
+
+            window.confirmModalAction = function() {
+                const form = window.activeRemoveForm;
+                const type = window.activeRemoveType;
+                if (!form) return;
+                
+                const alsoCb = document.getElementById('modal-also-cb');
+                const alsoVal = alsoCb && alsoCb.checked ? 'true' : 'false';
+                
+                const adminCb = document.getElementById('modal-admin-cb');
+                const allUsersVal = adminCb && adminCb.checked ? 'true' : 'false';
+                
+                const fieldName = type === 'vault' ? 'also_library' : 'also_vault';
+                
+                // Clear existing inputs of the same name
+                form.querySelectorAll('input[name="' + fieldName + '"]').forEach(el => el.remove());
+                form.querySelectorAll('input[name="all_users"]').forEach(el => el.remove());
+                
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = fieldName;
+                input.value = alsoVal;
+                form.appendChild(input);
+                
+                const adminInput = document.createElement('input');
+                adminInput.type = 'hidden';
+                adminInput.name = 'all_users';
+                adminInput.value = allUsersVal;
+                form.appendChild(adminInput);
+                
+                // If it's a bulk form, populate selected inputs
+                if (form.id === 'vault-bulk-remove-form') {
+                    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+                    document.querySelectorAll('.vault-item-cb').forEach(cb => {
+                        if (cb.checked) {
+                            const r = document.createElement('input');
+                            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
+                            form.appendChild(r);
+                        }
+                    });
+                    if (window.toggleVaultMode) window.toggleVaultMode();
+                } else if (form.id === 'library-bulk-remove-form') {
+                    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+                    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
+                    document.querySelectorAll('.library-item-cb').forEach(cb => {
+                        if (cb.checked) {
+                            const r = document.createElement('input');
+                            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
+                            form.appendChild(r);
+                            if (cb.dataset.userId) {
+                                const u = document.createElement('input');
+                                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
+                                form.appendChild(u);
+                            }
+                        }
+                    });
+                    if (window.toggleLibraryMode) window.toggleLibraryMode();
+                }
+                
+                form.dataset.confirmed = 'true';
+                const modal = document.getElementById('remove-confirm-modal');
+                if (modal) modal.close();
+                
+                // Dispatch submit event to trigger async handlers
+                form.requestSubmit();
+            };
+
+            // Global capture-phase submit event blocker to prevent async submit without confirm
+            document.addEventListener('submit', function(e) {
+                const form = e.target;
+                if (!form) return;
+                const action = form.getAttribute('action') || '';
+                const isRemoveForm = action.indexOf('/remove') !== -1 || action.indexOf('/delete') !== -1;
+                if (isRemoveForm && form.dataset.confirmed !== 'true') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    
+                    var type = 'library';
+                    if (action.indexOf('/vault') !== -1) {
+                        type = 'vault';
+                    }
+                    
+                    const isBulk = form.id && (form.id.indexOf('bulk') !== -1 || form.id.indexOf('multiple') !== -1);
+                    if (isBulk) {
+                        if (type === 'vault') {
+                            window.submitVaultBulk(form.id);
+                        } else {
+                            window.submitLibraryBulk(form.id);
+                        }
+                    } else {
+                        window.handleConfirmRemove(form, type);
+                    }
+                }
+            }, true);
+
+            // Hierarchical select handler for library folders and subfolders
+            document.addEventListener('change', function(e) {
+                if (e.target.classList.contains('library-folder-cb')) {
+                    const details = e.target.closest('details');
+                    if (details) {
+                        const children = details.querySelectorAll('.library-folder-cb, .library-item-cb');
+                        children.forEach(function(cb) {
+                            cb.checked = e.target.checked;
+                            cb.indeterminate = false;
+                        });
+                    }
+                    updateParentFolderStates(e.target);
+                    if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
+                } else if (e.target.classList.contains('library-item-cb')) {
+                    updateParentFolderStates(e.target);
+                    if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
+                }
+            });
+
+            function updateParentFolderStates(el) {
+                let currentDetails = el.closest('details');
+                while (currentDetails) {
+                    const parentDetails = currentDetails.parentElement.closest('details');
+                    const summary = currentDetails.querySelector(':scope > summary');
+                    const folderCb = summary ? summary.querySelector('.library-folder-cb') : null;
+                    
+                    if (folderCb) {
+                        const leafCbs = currentDetails.querySelectorAll('.library-item-cb');
+                        let checkedCount = 0;
+                        leafCbs.forEach(function(cb) {
+                            if (cb.checked) checkedCount++;
+                        });
+                        
+                        if (checkedCount === 0) {
+                            folderCb.checked = false;
+                            folderCb.indeterminate = false;
+                        } else if (checkedCount === leafCbs.length) {
+                            folderCb.checked = true;
+                            folderCb.indeterminate = false;
+                        } else {
+                            folderCb.checked = false;
+                            folderCb.indeterminate = true;
+                        }
+                    }
+                    currentDetails = parentDetails;
+                }
+            }
+        </script>
     </body>
 </html>

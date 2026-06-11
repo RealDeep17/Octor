@@ -76,9 +76,9 @@
                     <form method="post" enctype="multipart/form-data"
                           action="{{ langPath $.Ctx.Lang "/lib/remove" }}"
                           data-async-target="main" data-async-no-scroll="true" data-async-push-state="false"
-                          class="inline">
+                          class="inline" onsubmit="return window.handleConfirmRemove(this, 'library')">
                         <input type="hidden" name="resource_id" value="{{ . | getResourceID }}" />
-                        <button type="submit" class="p-0.5 text-o-muted hover:text-o-primary transition-colors" title="{{ t $.Ctx.Lang "library.remove" }}">
+                        <button type="submit" class="p-0.5 text-o-muted hover:text-error transition-colors" title="Remove from Library">
                             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                             </svg>
