@@ -1,0 +1,284 @@
+# WebSocket and connection keepalive mapping
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      "";
+}
+
+# Upstreams
+upstream octor_webui {
+    server 127.0.0.1:8082;
+    keepalive 32;
+}
+
+upstream octor_s3_gateway {
+    server 127.0.0.1:9000;
+    keepalive 32;
+}
+
+upstream octor_webseed {
+    server 127.0.0.1:8086;
+    keepalive 32;
+}
+
+upstream octor_seeder {
+    server 127.0.0.1:50052;
+    keepalive 32;
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name octor.duckdns.org seedio.duckdns.org;
+    return 301 https://$host$request_uri;
+}
+
+# octor.duckdns.org server block
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name octor.duckdns.org;
+
+    ssl_certificate /etc/letsencrypt/live/144.24.126.158/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/144.24.126.158/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # Performance Tuning for Large Media / SSE Streams
+    client_max_body_size 0; # Unlimited upload size
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Disable Buffering for all Octor locations to support real-time SSE and instant media buffering
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 24h;
+    proxy_send_timeout 24h;
+
+    # 1. Vault WebSeed
+    location /webseed {
+        proxy_pass http://octor_webseed;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    # 2. S3 Gateway
+    # Vault Web UI overrides to prevent S3 hijacking
+    location = /vault {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    location = /vault/ {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    location ^~ /vault/add {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    location ^~ /vault/remove {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    location ^~ /vault/retry {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    location ^~ /vault/pledge {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    location ^~ /vault/ {
+        proxy_pass http://octor_s3_gateway;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+
+    location ^~ /torrent-store/ {
+        proxy_pass http://octor_s3_gateway;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    location ^~ /poster-cache/ {
+        proxy_pass http://octor_s3_gateway;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    # WebDAV Reverse Proxy overrides
+    location ^~ /webdav {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+
+        # WebDAV specific reverse proxy settings
+        # Rewrite the Destination header if it's HTTPS (offloaded by Nginx) so the backend receives plain HTTP URL
+        set $fixed_destination $http_destination;
+        if ($http_destination ~* ^https(.*)$) {
+            set $fixed_destination http$1;
+        }
+        proxy_set_header Destination $fixed_destination;
+
+        # Support all WebDAV methods
+        proxy_method $request_method;
+        proxy_pass_request_headers on;
+    }
+
+    # Ext Web UI overrides to prevent seeder hijacking
+    location ^~ /ext/download {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    location ^~ /ext/magnet {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    # 3. Seeder Services: stats, torrent metadata, etc.
+    location ~* ^/(speedtest/download|torrent|stat|ext) {
+        proxy_pass http://octor_seeder;
+        proxy_set_header X-Accel-Buffering no;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        
+        # Disable buffering and enable keepalives for SSE stream
+        chunked_transfer_encoding off;
+    }
+
+    # 4. Seeder Content: Streaming and direct downloads
+    # Match infohash regex: /:infohash/... but exclude /status (routed to Web UI)
+    location ~* "^/([a-z]{2}/)?[0-9a-fA-F]{40}/(status|.*/status)$" {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    location ~* "^/[0-9a-fA-F]{40}/" {
+        proxy_pass http://octor_seeder;
+        proxy_set_header X-Accel-Buffering no;
+    }
+
+    # --- Big ARRS Stack ---
+    location /radarr {
+        proxy_pass http://127.0.0.1:7878;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /sonarr {
+        proxy_pass http://127.0.0.1:8989;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /whisparr {
+        proxy_pass http://127.0.0.1:6969;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /prowlarr {
+        proxy_pass http://127.0.0.1:9696;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /autobrr/ {
+        proxy_pass http://127.0.0.1:7474/;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /qbittorrent/ {
+        proxy_pass http://127.0.0.1:8085/;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /comet/ {
+        proxy_pass http://127.0.0.1:8001/;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /comet;
+        proxy_redirect / /comet/;
+    }
+
+    location /byparr/ {
+        proxy_pass http://127.0.0.1:8191/;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /byparr;
+        proxy_redirect / /byparr/;
+    }
+
+    # 5. Web UI: Fallback
+    location / {
+        proxy_pass http://octor_webui;
+        proxy_set_header X-Accel-Buffering no;
+    }
+}
+
+# seedio.duckdns.org server block
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name seedio.duckdns.org;
+
+    ssl_certificate /etc/letsencrypt/live/seedio.duckdns.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/seedio.duckdns.org/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    client_max_body_size 0;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    proxy_buffering off;
+    proxy_cache off;
+
+    location / {
+        proxy_pass http://127.0.0.1:8089;
+        proxy_set_header X-Accel-Buffering no;
+    }
+}

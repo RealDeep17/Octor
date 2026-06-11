@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: octor-postgres
+    environment:
+      - POSTGRES_USER=octor
+      - POSTGRES_PASSWORD=octor
+      - POSTGRES_DB=octor
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - ./infra-data/postgres:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: octor-redis
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    volumes:
+      - ./infra-data/redis:/data
+    restart: unless-stopped
+
+  nats:
+    image: nats:2-alpine
+    container_name: octor-nats
+    ports:
+      - "${NATS_HOST_PORT:-4222}:4222"
+      - "${NATS_MONITOR_PORT:-8222}:8222"
+    command: -js
+    restart: unless-stopped
+
+  monolith:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: octor-monolith
+    depends_on:
+      - postgres
+      - redis
+      - nats
+    ports:
+      - "${REST_API_PORT:-8080}:8080" # REST API
+      - "${WEB_UI_PORT:-8082}:8082" # Web UI / WebDAV
+      - "${VAULT_PORT:-8086}:8086" # Vault WebSeed
+      - "${S3_GATEWAY_PORT:-9000}:9000" # Custom S3 Gateway
+      - "${TORRENT_PROXY_PORT:-50052}:50052" # Torrent HTTP Proxy
+    env_file:
+      - custom.env
+    environment:
+      - BADGER_PATH=/app/infra-data/badger
+      - VAULT_STORAGE_PATH=/app/infra-data/drive-mount-vfs
+      - S3_GATEWAY_STORAGE_DIR=/app/infra-data/drive-mount-vfs
+      - SSD_DATA_DIR=/mnt/seeder-cache
+      - DATA_DIR=/mnt/seeder-cache
+    volumes:
+      - ./infra-data:/app/infra-data
+      - /mnt/seeder-cache:/mnt/seeder-cache
+      - ../Big ARRS/downloads:/downloads
+    restart: unless-stopped

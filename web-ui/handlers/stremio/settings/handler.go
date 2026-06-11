@@ -1,0 +1,115 @@
+package settings
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
+	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/models"
+	at "github.com/webtor-io/web-ui/services/access_token"
+	"github.com/webtor-io/web-ui/services/auth"
+	"github.com/webtor-io/web-ui/services/admin"
+	"github.com/webtor-io/web-ui/services/stremio"
+	"github.com/webtor-io/web-ui/services/web"
+)
+
+type Handler struct {
+	at    *at.AccessToken
+	pg    *cs.PG
+	admin *admin.Admin
+}
+
+func NewHandler(at *at.AccessToken, pg *cs.PG, admin *admin.Admin) *Handler {
+	return &Handler{at: at, pg: pg, admin: admin}
+}
+
+func RegisterHandler(r *gin.Engine, at *at.AccessToken, pg *cs.PG, admin *admin.Admin) {
+	h := NewHandler(at, pg, admin)
+	gr := r.Group("/stremio/settings")
+	gr.Use(auth.HasAuth)
+	gr.POST("/update", h.updateSettings)
+}
+
+func (s *Handler) updateSettings(c *gin.Context) {
+	user := auth.GetUserFromContext(c)
+
+	// Parse form data
+	settingsData := &models.StremioSettingsData{}
+
+	// Get preferred resolutions from form
+	resolution8k := c.PostForm("resolution_8k") == "on"
+	resolution4k := c.PostForm("resolution_4k") == "on"
+	resolution1080p := c.PostForm("resolution_1080p") == "on"
+	resolution720p := c.PostForm("resolution_720p") == "on"
+	resolutionOther := c.PostForm("resolution_other") == "on"
+
+	// Parse resolution_order field to determine ordering
+	resolutionOrder := c.PostForm("resolution_order")
+
+	// Create map of resolution settings for easy lookup
+	resolutionSettings := map[string]bool{
+		"8k":    resolution8k,
+		"4k":    resolution4k,
+		"1080p": resolution1080p,
+		"720p":  resolution720p,
+		"other": resolutionOther,
+	}
+
+	// Build PreferredResolutions array according to resolution_order
+	var orderedQualities []models.ResolutionSetting
+	orderSlice := strings.Split(resolutionOrder, ",")
+	if len(orderSlice) == 0 {
+		orderSlice = []string{"8k", "4k", "1080p", "720p", "other"}
+	}
+	// Split the order string (assuming comma-separated values)
+	for _, resolution := range orderSlice {
+		resolution = strings.TrimSpace(resolution)
+		if enabled, exists := resolutionSettings[resolution]; exists {
+			orderedQualities = append(orderedQualities, models.ResolutionSetting{
+				Resolution: resolution,
+				Enabled:    enabled,
+			})
+			// Remove from map to avoid duplicates
+			delete(resolutionSettings, resolution)
+		}
+	}
+	// Add any remaining resolutions that weren't in the order
+	for resolution, enabled := range resolutionSettings {
+		orderedQualities = append(orderedQualities, models.ResolutionSetting{
+			Resolution: resolution,
+			Enabled:    enabled,
+		})
+	}
+
+	settingsData.PreferredResolutions = orderedQualities
+	settingsData.DiscoverOnly = c.PostForm("discover_only") == "on"
+	
+	isAdmin := s.admin.IsAdminUser(user)
+	settingsData.SidecarEnrichment = isAdmin && c.PostForm("sidecar_enrichment") == "on"
+
+	// Validate preferred language against the canonical list. Unknown codes
+	// (and the explicit "any" sentinel) collapse to empty string = no filter.
+	if lang := strings.TrimSpace(c.PostForm("preferred_language")); lang != "" {
+		if stremio.LanguageByCode(lang) != nil {
+			settingsData.PreferredLanguage = lang
+		}
+	}
+
+	// Get database connection
+	db := s.pg.Get()
+	if db == nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("no database connection available"))
+		return
+	}
+
+	// Save to database
+	err := models.CreateOrUpdateStremioSettings(c.Request.Context(), db, user.ID, settingsData)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.Wrap(err, "failed to save stremio settings"))
+		return
+	}
+
+	web.RedirectWithSuccessAndMessage(c, "toast.settingsSaved")
+}

@@ -1,0 +1,118 @@
+function renderAd(el, ad) {
+    ad = Object.assign({}, {
+        trackPrefix: 'ad-',
+    }, ad);
+    if (ad.script) {
+        renderScriptAd(ad);
+    } else if (ad.injectScript) {
+        renderInjectAd(ad);
+    } else {
+        renderMediaAd(el, ad);
+    }
+}
+
+function track(msg) {
+    if (window.umami === undefined) return;
+    window.umami.track(msg);
+}
+
+function  renderScriptAd(ad) {
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    // SAFETY: `ad.script` comes from `window._ads`, which is populated exclusively by
+    // hardcoded string literals in our Go template `templates/partials/extend.html`.
+    // These are developer-controlled ad network loader snippets, not user input.
+    script.innerHTML = ad.script;
+    document.body.appendChild(script);
+    track(`${ad.trackPrefix}${ad.name}-script`)
+}
+
+async function renderInjectAd(ad) {
+    const message = (await import('./message')).default;
+    message.send('inject', ad.injectScript);
+    track(`${ad.trackPrefix}${ad.name}-inject`)
+}
+
+function generateVideoEl(ad = {}) {
+    const el = document.createElement('video');
+    el.src = ad.src;
+    el.autoplay = true;
+    el.playsInline = true;
+    return el;
+}
+
+function generateImageEl(ad) {
+    ad = Object.assign({}, {
+        duration: 10,
+    }, ad);
+    const el = document.createElement('img');
+    el.src = ad.src;
+    el.addEventListener('load', function () {
+        const ev = new CustomEvent('play');
+        el.dispatchEvent(ev);
+        setTimeout(function () {
+            const ev = new CustomEvent('ended');
+            el.dispatchEvent(ev);
+        }, ad.duration * 1000);
+    })
+    return el;
+}
+
+function generateMediaEl(ad = {}) {
+    if (ad.src.endsWith('.mp4')) {
+        return generateVideoEl(ad);
+    } else if (ad.src.endsWith('.jpg')) {
+        return generateImageEl(ad);
+    }
+}
+
+function renderMediaAd(el, ad = {}) {
+    ad = Object.assign({}, {
+        skipDelay: 5,
+    }, ad);
+    const event = new CustomEvent('ads_play');
+    window.dispatchEvent(event);
+    const mediaEl = generateMediaEl(ad);
+    const aEl = document.createElement('a');
+    aEl.classList.add('absolute', 'top-0', 'left-0', 'z-modal');
+    aEl.href = ad.url;
+    aEl.target = '_blank';
+    aEl.setAttribute('data-umami-event', `${ad.trackPrefix}${ad.name}-click`);
+    aEl.appendChild(mediaEl);
+    el.appendChild(aEl);
+    const skipDelay = ad.skipDelay;
+    const closeEl = document.createElement('button');
+    closeEl.classList.add('absolute', 'top-2', 'right-2', 'btn', 'btn-soft-cyan', 'btn-sm', 'z-modal');
+    closeEl.textContent = 'Close (' + skipDelay + ')';
+    closeEl.setAttribute('data-umami-event', `${ad.trackPrefix}${ad.name}-close`);
+    closeEl.disabled = true;
+    mediaEl.addEventListener('ended', function() {
+        aEl.remove();
+        closeEl.remove();
+        const event = new CustomEvent('ads_close');
+        window.dispatchEvent(event);
+    });
+    mediaEl.addEventListener('play', function() {
+        track(`${ad.trackPrefix}${ad.name}-play`)
+        el.appendChild(closeEl);
+        let cnt = 0;
+        const ip = setInterval(function () {
+            cnt++;
+            if (cnt >= skipDelay) {
+                closeEl.disabled = false;
+                clearInterval(ip);
+                closeEl.textContent = 'Close (X)';
+                closeEl.addEventListener('click', function () {
+                    aEl.remove();
+                    closeEl.remove();
+                    const event = new CustomEvent('ads_close');
+                    window.dispatchEvent(event);
+                });
+                return;
+            }
+            closeEl.textContent = 'Close (' + (skipDelay - cnt) + ')';
+        }, 1000);
+    });
+}
+
+export default renderAd;

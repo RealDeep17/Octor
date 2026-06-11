@@ -1,0 +1,229 @@
+package services
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/dgrijalva/jwt-go"
+	"github.com/urfave/cli"
+	"github.com/webtor-io/lazymap"
+
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+)
+
+const (
+	proxyReadBufferSizeFlag  = "proxy-read-buffer-size"
+	proxyWriteBufferSizeFlag = "proxy-write-buffer-size"
+	retryMaxAttemptsFlag     = "retry-max-attempts"
+	retryDelayFlag           = "retry-delay"
+)
+
+type HTTPProxy struct {
+	*lazymap.LazyMap[*httputil.ReverseProxy]
+	r                 *Resolver
+	transport         *http.Transport
+	externalTransport *http.Transport
+	maxRetries        int
+	retryDelay        time.Duration
+	fileSizeCache     *FileSizeCache
+}
+
+func NewHTTPProxy(c *cli.Context, r *Resolver, retryDelay time.Duration, fsc *FileSizeCache) *HTTPProxy {
+	readBuf := c.Int(proxyReadBufferSizeFlag)
+	writeBuf := c.Int(proxyWriteBufferSizeFlag)
+	p := &HTTPProxy{
+		r: r,
+		transport: &http.Transport{
+			MaxIdleConns:        200,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     30 * time.Second,
+			WriteBufferSize:     writeBuf,
+			ReadBufferSize:      readBuf,
+		},
+		maxRetries:    c.Int(retryMaxAttemptsFlag),
+		retryDelay:    retryDelay,
+		fileSizeCache: fsc,
+		LazyMap: lazymap.New[*httputil.ReverseProxy](&lazymap.Config{
+			Expire: 60 * time.Second,
+		}),
+	}
+	p.externalTransport = &http.Transport{
+		MaxIdleConns:        200,
+		MaxIdleConnsPerHost: 20,
+		IdleConnTimeout:     90 * time.Second,
+		WriteBufferSize:     writeBuf,
+		ReadBufferSize:      readBuf,
+	}
+	return p
+}
+
+func RegisterHTTPProxyFlags(f []cli.Flag) []cli.Flag {
+	return append(f,
+		cli.IntFlag{
+			Name:   proxyReadBufferSizeFlag,
+			Usage:  "proxy transport read buffer size in bytes",
+			Value:  512 << 10,
+			EnvVar: "PROXY_READ_BUFFER_SIZE",
+		},
+		cli.IntFlag{
+			Name:   proxyWriteBufferSizeFlag,
+			Usage:  "proxy transport write buffer size in bytes",
+			Value:  512 << 10,
+			EnvVar: "PROXY_WRITE_BUFFER_SIZE",
+		},
+		cli.IntFlag{
+			Name:   retryMaxAttemptsFlag,
+			Usage:  "max retry attempts on upstream failure",
+			Value:  3,
+			EnvVar: "RETRY_MAX_ATTEMPTS",
+		},
+		cli.IntFlag{
+			Name:   retryDelayFlag,
+			Usage:  "delay between retry attempts in milliseconds",
+			Value:  1000,
+			EnvVar: "RETRY_DELAY_MS",
+		},
+	)
+}
+
+var corsHeaders = []string{
+	"Access-Control-Allow-Credentials",
+	"Access-Control-Allow-Origin",
+}
+
+func delCORSHeaders(header http.Header) {
+	for _, h := range corsHeaders {
+		header.Del(h)
+	}
+}
+
+func (s *HTTPProxy) modifyResponse(r *http.Response) error {
+	delCORSHeaders(r.Header)
+	s.captureFileSize(r)
+	return applyResponseRules(r)
+}
+
+// captureFileSize extracts the underlying upstream file size from response
+// headers and stores it in fileSizeCache by (infoHash, path) so that
+// SessionLimiter can classify the path as big/light on subsequent
+// requests. Best-effort and free-running — silently skips when the cache
+// isn't wired, the response lacks a usable size header, or the request
+// context doesn't carry the file key.
+func (s *HTTPProxy) captureFileSize(r *http.Response) {
+	if s.fileSizeCache == nil || r.Request == nil {
+		return
+	}
+	fk := GetFileKey(r.Request)
+	if fk == nil || fk.InfoHash == "" || fk.Path == "" {
+		return
+	}
+	if size := SizeFromHeaders(r.StatusCode, r.ContentLength, r.Header.Get("Content-Range")); size > 0 {
+		s.fileSizeCache.Set(fk.InfoHash, fk.Path, size)
+	}
+}
+
+type stubTransport struct {
+	http.RoundTripper
+}
+
+func (t *stubTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	return &http.Response{
+		Status:        "503 Service Unavailable",
+		StatusCode:    503,
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Body:          io.NopCloser(bytes.NewBufferString("")),
+		ContentLength: int64(0),
+		Request:       req,
+		Header:        make(http.Header),
+	}, nil
+}
+
+// redirectFollowingTransport wraps an http.RoundTripper and follows 302/307
+// redirects transparently, preserving the Range header across hops.
+// This allows httputil.ReverseProxy to proxy the final response (e.g. from S3)
+// instead of passing the redirect back to the client.
+type redirectFollowingTransport struct {
+	http.RoundTripper
+	external http.RoundTripper
+}
+
+func (t *redirectFollowingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.RoundTripper.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < 10; i++ {
+		if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusTemporaryRedirect {
+			break
+		}
+		loc := resp.Header.Get("Location")
+		if loc == "" {
+			break
+		}
+		_ = resp.Body.Close()
+		newReq, err := http.NewRequestWithContext(req.Context(), req.Method, loc, nil)
+		if err != nil {
+			return nil, err
+		}
+		if rng := req.Header.Get("Range"); rng != "" {
+			newReq.Header.Set("Range", rng)
+		}
+		resp, err = t.external.RoundTrip(newReq)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return resp, nil
+}
+
+func (s *HTTPProxy) get(loc *Location) (*httputil.ReverseProxy, error) {
+	u := &url.URL{
+		Host:   fmt.Sprintf("%s:%d", loc.IP.String(), loc.HTTP),
+		Scheme: "http",
+	}
+	var t http.RoundTripper
+	if loc.Unavailable {
+		t = &stubTransport{s.transport}
+	} else {
+		t = &redirectFollowingTransport{s.transport, s.externalTransport}
+		if s.maxRetries > 0 {
+			t = &retryTransport{RoundTripper: t}
+		}
+	}
+	p := httputil.NewSingleHostReverseProxy(u)
+	p.Transport = t
+	p.ModifyResponse = s.modifyResponse
+	p.FlushInterval = -1
+	// Strip Accept-Encoding for .m3u8 paths so backend (nginx-vod, content-transcoder)
+	// returns plain text. modifyResponse rewrites segment tokens via byte-level
+	// substring match, which silently fails on a gzipped body — needle never
+	// found, gzipped body passes through unchanged. Manifests are tiny (<200 KB);
+	// edge gzip via ingress/CDN remains effective for the wire.
+	defaultDirector := p.Director
+	p.Director = func(req *http.Request) {
+		defaultDirector(req)
+		if strings.HasSuffix(req.URL.Path, ".m3u8") {
+			req.Header.Del("Accept-Encoding")
+		}
+	}
+	return p, nil
+}
+
+func (s *HTTPProxy) Get(src *Source, claims jwt.MapClaims, logger *logrus.Entry) (*httputil.ReverseProxy, error) {
+	loc, err := s.r.Resolve(src, claims, logger)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get location")
+	}
+	return s.LazyMap.Get(fmt.Sprintf("%s:%d", loc.IP.String(), loc.HTTP), func() (*httputil.ReverseProxy, error) {
+		return s.get(loc)
+	})
+}

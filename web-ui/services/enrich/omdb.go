@@ -1,0 +1,241 @@
+package enrich
+
+import (
+	"context"
+	"strconv"
+	"strings"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/models"
+	om "github.com/webtor-io/web-ui/models/omdb"
+	"github.com/webtor-io/web-ui/services/omdb"
+)
+
+type OMDB struct {
+	api *omdb.Api
+	pg  *cs.PG
+}
+
+func (s *OMDB) GetName() string {
+	return "OMDB"
+}
+
+func NewOMDB(pg *cs.PG, api *omdb.Api) *OMDB {
+	if api == nil {
+		return nil
+	}
+	return &OMDB{
+		pg:  pg,
+		api: api,
+	}
+}
+
+const NA = "N/A"
+
+type OmdbMetadata struct {
+	*om.Info
+}
+
+func NewOmdbMetadata(info *om.Info) *OmdbMetadata {
+	return &OmdbMetadata{
+		Info: info,
+	}
+}
+
+func (s *OmdbMetadata) MakeVideoMetadata() *models.VideoMetadata {
+	posterURL := s.GetPosterURL()
+	var posterHorizontalURL string
+	if strings.Contains(posterURL, "theporndb.net") {
+		// Extract raw original background image from CDN without signature restrictions
+		var sceneSuffix string
+		if idx := strings.Index(posterURL, "/scene/"); idx != -1 {
+			sceneSuffix = posterURL[idx:]
+		} else if idx := strings.Index(posterURL, "/scene%2F"); idx != -1 {
+			sceneSuffix = posterURL[idx:]
+		} else if idx := strings.Index(posterURL, "/scene%2f"); idx != -1 {
+			sceneSuffix = posterURL[idx:]
+		}
+		if sceneSuffix != "" {
+			sceneSuffix = strings.ReplaceAll(sceneSuffix, "%2F", "/")
+			sceneSuffix = strings.ReplaceAll(sceneSuffix, "%2f", "/")
+			posterHorizontalURL = "https://cdn.theporndb.net" + sceneSuffix
+		}
+	} else if strings.Contains(posterURL, "stashdb.org") ||
+		strings.HasPrefix(s.GetImdbID(), "stash:") || strings.HasPrefix(s.GetImdbID(), "stash=") ||
+		strings.HasPrefix(s.GetImdbID(), "tpdb:") || strings.HasPrefix(s.GetImdbID(), "tpdb=") ||
+		strings.HasPrefix(s.GetImdbID(), "tpdb_jav:") || strings.HasPrefix(s.GetImdbID(), "tpdb_jav=") {
+		posterHorizontalURL = posterURL
+	}
+	return &models.VideoMetadata{
+		VideoID:             s.GetImdbID(),
+		Title:               s.GetTitle(),
+		Year:                s.GetYear(),
+		Plot:                s.GetPlot(),
+		PosterURL:           posterURL,
+		PosterHorizontalURL: posterHorizontalURL,
+		Rating:              s.GetImdbRating(),
+	}
+}
+
+func (s *OmdbMetadata) GetYear() *int16 {
+	return s.Info.Year
+}
+
+func (s *OmdbMetadata) GetTitle() string {
+	return s.Title
+}
+
+func (s *OmdbMetadata) GetPlot() string {
+	poster, _ := s.Metadata["Plot"].(string)
+	if poster == NA {
+		return ""
+	}
+	return poster
+}
+
+func (s *OmdbMetadata) GetImdbID() string {
+	return s.ImdbID
+}
+
+func (s *OmdbMetadata) GetImdbRating() *float64 {
+	rating, _ := s.Metadata["imdbRating"].(string)
+	if rating == NA {
+		return nil
+	}
+	pf, _ := strconv.ParseFloat(rating, 64)
+	return &pf
+}
+
+func (s *OmdbMetadata) GetPosterURL() string {
+	poster, _ := s.Metadata["Poster"].(string)
+	if poster == NA {
+		return ""
+	}
+	return poster
+}
+
+func (s *OMDB) Map(ctx context.Context, m *models.VideoContent, mt models.ContentType, force bool) (*models.VideoMetadata, error) {
+	db := s.pg.Get()
+	if db == nil {
+		return nil, errors.New("db is nil")
+	}
+	otype := om.OmdbTypeMovie
+	if mt == models.ContentTypeSeries {
+		otype = om.OmdbTypeSeries
+	}
+	q, err := om.GetQuery(ctx, db, m.Title, m.Year, otype)
+	if err != nil {
+		return nil, err
+	}
+	if q != nil && !force {
+		if q.ImdbID == nil {
+			return nil, nil
+		}
+		mi, err := om.GetInfoByID(ctx, db, *q.ImdbID)
+		if err != nil {
+			return nil, err
+		}
+		if mi == nil {
+			return nil, nil
+		}
+
+		return NewOmdbMetadata(mi).MakeVideoMetadata(), nil
+	}
+	omdbType := omdb.OmdbTypeMovie
+	if otype == om.OmdbTypeSeries {
+		omdbType = omdb.OmdbTypeSeries
+	}
+	omData, err := s.api.SearchByTitleAndYear(ctx, m.Title, m.Year, omdbType, m.Duration)
+	if err != nil {
+		return nil, err
+	}
+	if omData == nil {
+		log.Infof("no omdb found for title %v and year %v", m.Title, m.Year)
+		_, err = om.InsertQueryIgnoreConflict(ctx, db, m.Title, m.Year, otype, nil)
+		if err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	_, err = om.InsertQueryIgnoreConflict(ctx, db, m.Title, m.Year, otype, &omData.ImdbID)
+	if err != nil {
+		return nil, err
+	}
+	omdbInfo, err := om.UpsertInfo(ctx, db, omData.ImdbID, otype, omData.Raw)
+	if err != nil {
+		return nil, err
+	}
+	if omdbInfo == nil {
+		return nil, nil
+	}
+	return NewOmdbMetadata(omdbInfo).MakeVideoMetadata(), nil
+}
+
+func (s *OMDB) MapByID(ctx context.Context, videoID string, ct models.ContentType, force bool) (*models.VideoMetadata, error) {
+	if strings.HasPrefix(videoID, "tpdb=") {
+		videoID = "tpdb:" + strings.TrimPrefix(videoID, "tpdb=")
+	} else if strings.HasPrefix(videoID, "tpdb_jav=") {
+		videoID = "tpdb_jav:" + strings.TrimPrefix(videoID, "tpdb_jav=")
+	} else if strings.HasPrefix(videoID, "stash=") {
+		videoID = "stash:" + strings.TrimPrefix(videoID, "stash=")
+	}
+	if !strings.HasPrefix(videoID, "tt") && !strings.HasPrefix(videoID, "tpdb:") && !strings.HasPrefix(videoID, "tpdb_jav:") && !strings.HasPrefix(videoID, "stash:") {
+		return nil, nil
+	}
+	db := s.pg.Get()
+	if db == nil {
+		return nil, errors.New("db is nil")
+	}
+
+	if !force {
+		mi, err := om.GetInfoByID(ctx, db, videoID)
+		if err != nil {
+			return nil, err
+		}
+		if mi != nil {
+			return NewOmdbMetadata(mi).MakeVideoMetadata(), nil
+		}
+	}
+
+	omData, err := s.api.GetByIMDBID(ctx, videoID)
+	if err != nil {
+		return nil, err
+	}
+	if omData == nil {
+		return nil, nil
+	}
+
+	// Reject cross-type matches before persisting. OMDB does have records
+	// (e.g. tt1147717 = a 2007 short film called "The Big Bang Theory")
+	// that share an imdb_id with a totally different sitcom in upstream
+	// indexes — without this filter the orchestrator's KPU→OMDB upgrade
+	// path would happily overwrite a series enrichment with a movie's
+	// metadata. Type comes back as a string ("movie"/"series"/"episode").
+	wantOmdbType := omdb.OmdbTypeMovie
+	if ct == models.ContentTypeSeries {
+		wantOmdbType = omdb.OmdbTypeSeries
+	}
+	if omData.Type != wantOmdbType {
+		return nil, nil
+	}
+
+	otype := om.OmdbTypeMovie
+	if ct == models.ContentTypeSeries {
+		otype = om.OmdbTypeSeries
+	}
+
+	omdbInfo, err := om.UpsertInfo(ctx, db, omData.ImdbID, otype, omData.Raw)
+	if err != nil {
+		return nil, err
+	}
+	if omdbInfo == nil {
+		return nil, nil
+	}
+
+	return NewOmdbMetadata(omdbInfo).MakeVideoMetadata(), nil
+}
+
+var _ MetadataMapper = (*OMDB)(nil)
+var _ DirectMapper = (*OMDB)(nil)

@@ -1,0 +1,33 @@
+[Unit]
+Description=Octor Rclone Google Drive Union Mount
+After=network.target octor-seeder-cache.service
+Requires=octor-seeder-cache.service
+Before=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+EnvironmentFile=/srv/octor/custom.env
+ExecStartPre=/usr/bin/mkdir -p /srv/octor/infra-data/drive-mount-vfs
+ExecStartPre=/usr/bin/mkdir -p ${RCLONE_CACHE_DIR}
+ExecStart=/usr/bin/rclone --config ${VAULT_RCLONE_CONFIG} mount ${VAULT_RCLONE_REMOTE} /srv/octor/infra-data/drive-mount-vfs \
+    --vfs-cache-mode ${RCLONE_VFS_CACHE_MODE} \
+    --vfs-cache-max-size ${RCLONE_VFS_CACHE_MAX_SIZE} \
+    --vfs-cache-max-age ${RCLONE_VFS_CACHE_MAX_AGE} \
+    --vfs-cache-poll-interval ${RCLONE_VFS_CACHE_POLL_INTERVAL} \
+    --cache-dir ${RCLONE_CACHE_DIR} \
+    --buffer-size ${RCLONE_BUFFER_SIZE} \
+    --drive-chunk-size ${RCLONE_DRIVE_CHUNK_SIZE} \
+    --transfers ${RCLONE_TRANSFERS} \
+    --drive-use-trash=false \
+    --links \
+    --direct-io \
+    --allow-other \
+    --umask 000 --allow-non-empty
+ExecStop=/usr/bin/fusermount -uz /srv/octor/infra-data/drive-mount-vfs
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

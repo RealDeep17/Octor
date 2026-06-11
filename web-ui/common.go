@@ -1,0 +1,90 @@
+package main
+
+import (
+	"net/http"
+
+	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/urfave/cli"
+	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/services/admin"
+	"github.com/webtor-io/web-ui/services/api"
+	enr "github.com/webtor-io/web-ui/services/enrich"
+	ku "github.com/webtor-io/web-ui/services/kinopoisk_unofficial"
+	"github.com/webtor-io/web-ui/services/omdb"
+	rec "github.com/webtor-io/web-ui/services/recommendations"
+	"github.com/webtor-io/web-ui/services/tmdb"
+	"github.com/webtor-io/web-ui/services/tpdb"
+)
+
+func configureEnricher(f []cli.Flag) []cli.Flag {
+	f = tmdb.RegisterFlags(f)
+	f = omdb.RegisterFlags(f)
+	f = ku.RegisterFlags(f)
+	f = enr.RegisterFlags(f)
+	return f
+}
+
+func configureRecommendations(f []cli.Flag) []cli.Flag {
+	return rec.RegisterFlags(f)
+}
+
+func makeEnricher(c *cli.Context, cl *http.Client, pg *cs.PG, sapi *api.Api, anthropicCl *anthropic.Client) *enr.Enricher {
+	var mdMappers []enr.MetadataMapper
+	var epMappers []enr.EpisodeMapper
+
+	// Setting TMDB API (first priority)
+	tmdbApi := tmdb.New(c, cl)
+
+	// Setting TMDB Mapper
+	tmdbMapper := enr.NewTMDB(pg, tmdbApi)
+	if tmdbMapper != nil {
+		mdMappers = append(mdMappers, tmdbMapper)
+
+		// Setting TMDB Episode Mapper
+		tmdbEp := enr.NewTMDBEpisodes(tmdbMapper)
+		if tmdbEp != nil {
+			epMappers = append(epMappers, tmdbEp)
+		}
+	}
+
+	// Setting OMDB API
+	omdbApi := omdb.New(c, cl)
+
+	// Setting OMDB Mapper
+	om := enr.NewOMDB(pg, omdbApi)
+	if om != nil {
+		mdMappers = append(mdMappers, om)
+	}
+
+	// Setting Kinopoisk Unofficial API
+	kpuApi := ku.New(c, cl)
+
+	// Setting Kinopoisk Unofficial Mapper
+	kpu := enr.NewKinopoiskUnofficial(pg, kpuApi)
+	if kpu != nil {
+		mdMappers = append(mdMappers, kpu)
+	}
+
+	// Setting NSFW Mapper
+	tpdbSvc := tpdb.New(c, cl, pg)
+	if tpdbSvc != nil {
+		nsfwMapper := enr.NewNSFWMapper(pg, tpdbSvc)
+		if nsfwMapper != nil {
+			mdMappers = append(mdMappers, nsfwMapper)
+		}
+	}
+
+	// Setting AI Resolver — last-resort identifier when every title-search
+	// provider misses. Returns nil when the feature flag is off or the
+	// shared anthropic client is missing; the Enricher then skips the AI
+	// fallback path entirely.
+	aiResolver := enr.New(c, anthropicCl, pg)
+
+	// Setting Enricher
+	adminSvc := admin.New(c)
+	concurrency := c.Int("enrich-concurrency")
+	if concurrency <= 0 {
+		concurrency = 25
+	}
+	return enr.NewEnricher(pg, sapi, mdMappers, epMappers, aiResolver, adminSvc, concurrency)
+}

@@ -1,0 +1,15 @@
+<svg width="170" height="170" viewBox="0 0 170 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer Ring: 8 Segments representing 'Octo' -->
+  <path d="M85 0L125 15V45L85 30V0Z" fill="white"/>
+  <path d="M170 85L155 125H125L140 85H170Z" fill="white" opacity="0.9"/>
+  <path d="M85 170L45 155V125L85 140V170Z" fill="white" opacity="0.8"/>
+  <path d="M0 85L15 45H45L30 85H0Z" fill="white" opacity="0.7"/>
+  
+  <path d="M125 15L170 85H140L125 45V15Z" fill="white" opacity="0.95"/>
+  <path d="M155 125L85 170V140L125 125H155Z" fill="white" opacity="0.85"/>
+  <path d="M45 155L0 85H30L45 125V155Z" fill="white" opacity="0.75"/>
+  <path d="M15 45L85 0V30L45 45H15Z" fill="white" opacity="0.65"/>
+
+  <!-- Play Symbol: Centered & Sharp -->
+  <path d="M72 60V110L112 85L72 60Z" fill="white"/>
+</svg>

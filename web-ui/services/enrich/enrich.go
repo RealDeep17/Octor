@@ -1,0 +1,1331 @@
+package enrich
+
+import (
+	"context"
+	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-pg/pg/v10"
+	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
+	services "github.com/webtor-io/common-services"
+	ra "github.com/webtor-io/rest-api/services"
+	"github.com/webtor-io/web-ui/models"
+	"github.com/webtor-io/web-ui/services/admin"
+	"github.com/webtor-io/web-ui/services/api"
+	ptn "github.com/webtor-io/web-ui/services/parse_torrent_name"
+)
+
+type Enricher struct {
+	pg             *services.PG
+	api            *api.Api
+	mappers        []MetadataMapper
+	episodeMappers []EpisodeMapper
+	aiResolver     *AIResolver
+	admin          *admin.Admin
+	Concurrency    int
+}
+
+type MetadataMapper interface {
+	Map(ctx context.Context, query *models.VideoContent, getType models.ContentType, force bool) (*models.VideoMetadata, error)
+	GetName() string
+}
+
+type DirectMapper interface {
+	MapByID(ctx context.Context, videoID string, ct models.ContentType, force bool) (*models.VideoMetadata, error)
+}
+
+type EpisodeMapper interface {
+	MapEpisodes(ctx context.Context, videoID string, season int, force bool) ([]*models.EpisodeMetadata, error)
+	GetName() string
+}
+
+// PopularProvider is an optional capability of a MetadataMapper. Mappers
+// that can fetch lists of currently popular / trending films implement
+// this interface. Enricher.RefreshPopular iterates all mappers, calls
+// RefreshPopular on those that support it, and each implementation
+// upserts the results into its own cache tables.
+type PopularProvider interface {
+	RefreshPopular(ctx context.Context, releaseDateGte string, limit int, force bool) (int, error)
+}
+
+// LocalizableMapper is an optional capability of a MetadataMapper. Mappers
+// that can return localized title/plot for a given language implement this
+// interface. Today only TMDB supports it; OMDB is English-only, Kinopoisk
+// could implement it for Russian in the future.
+type LocalizableMapper interface {
+	Localize(ctx context.Context, videoID string, lang string) (title string, plot string, err error)
+}
+
+func (s *Enricher) HasMappers() bool {
+	return len(s.mappers) > 0
+}
+
+// RefreshPopular asks each metadata mapper that supports the
+// PopularProvider interface to fetch and cache popular recent releases.
+// Today only TMDB implements it; adding support in OMDB or Kinopoisk
+// later requires zero changes here.
+func (s *Enricher) RefreshPopular(ctx context.Context, releaseDateGte string, limit int, force bool) error {
+	for _, m := range s.mappers {
+		pp, ok := m.(PopularProvider)
+		if !ok {
+			continue
+		}
+		count, err := pp.RefreshPopular(ctx, releaseDateGte, limit, force)
+		if err != nil {
+			log.WithError(err).WithField("mapper", m.GetName()).Error("refresh popular failed")
+			continue
+		}
+		log.WithFields(log.Fields{
+			"mapper": m.GetName(),
+			"count":  count,
+			"force":  force,
+		}).Info("refreshed popular films")
+	}
+	return nil
+}
+
+// Localize overlays localized title and plot onto md in-place.
+// Skips if lang is "en" or md is nil. Iterates mappers that implement
+// LocalizableMapper and uses the first successful result.
+// Errors are logged but swallowed — English fallback is always safe.
+func (s *Enricher) Localize(ctx context.Context, md *models.VideoMetadata, lang string) {
+	if md == nil || lang == "en" || md.VideoID == "" {
+		return
+	}
+	for _, m := range s.mappers {
+		lm, ok := m.(LocalizableMapper)
+		if !ok {
+			continue
+		}
+		title, plot, err := lm.Localize(ctx, md.VideoID, lang)
+		if err != nil {
+			log.WithError(err).
+				WithField("mapper", m.GetName()).
+				WithField("video_id", md.VideoID).
+				WithField("lang", lang).
+				Debug("localize: mapper failed, trying next")
+			continue
+		}
+		if title != "" {
+			md.Title = title
+		}
+		if plot != "" {
+			md.Plot = plot
+		}
+		return
+	}
+}
+
+func NewEnricher(pg *services.PG, api *api.Api, mappers []MetadataMapper, episodeMappers []EpisodeMapper, aiResolver *AIResolver, admin *admin.Admin, concurrency int) *Enricher {
+	return &Enricher{
+		pg:             pg,
+		api:            api,
+		mappers:        mappers,
+		episodeMappers: episodeMappers,
+		aiResolver:     aiResolver,
+		admin:          admin,
+		Concurrency:    concurrency,
+	}
+}
+
+func StructToMap(s interface{}) (map[string]interface{}, error) {
+	var result map[string]interface{}
+
+	data, err := json.Marshal(s)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+type TorrentInfo struct {
+	*ptn.TorrentInfo
+	*ra.ListItem
+}
+
+func MakeTorrentInfo(item *ra.ListItem) (*TorrentInfo, error) {
+	ti, err := parseItem(item)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TorrentInfo{
+		TorrentInfo: ti,
+		ListItem:    item,
+	}, nil
+}
+
+func parseItem(item *ra.ListItem) (ti *ptn.TorrentInfo, err error) {
+	ti = &ptn.TorrentInfo{}
+	pathParts := strings.Split(item.PathStr, "/")
+	for _, part := range pathParts {
+		if part == "" {
+			continue
+		}
+		ti, err = ptn.Parse(ti, part)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ti, nil
+}
+
+func isKnownOrSpecial(ti *TorrentInfo) bool {
+	if ti.Season > 0 || ti.Episode > 0 {
+		return true
+	}
+	path := ti.ListItem.PathStr
+	if path == "" {
+		return false
+	}
+	lower := strings.ToLower(path)
+	parts := strings.Split(lower, "/")
+
+	// Skip the root torrent directory prefix
+	startIndex := 0
+	if len(parts) > 0 && parts[0] == "" {
+		startIndex = 2
+	} else {
+		startIndex = 1
+	}
+
+	for i := startIndex; i < len(parts)-1; i++ {
+		part := parts[i]
+		if strings.Contains(part, "ova") ||
+			strings.Contains(part, "movie") ||
+			strings.Contains(part, "extra") ||
+			strings.Contains(part, "opening") ||
+			strings.Contains(part, "ending") ||
+			strings.Contains(part, "ncop") ||
+			strings.Contains(part, "nced") {
+			return true
+		}
+	}
+	if len(parts) > 0 {
+		filename := parts[len(parts)-1]
+		if strings.Contains(filename, "ova") ||
+			strings.Contains(filename, "movie") ||
+			strings.Contains(filename, "extra") ||
+			strings.Contains(filename, "opening") ||
+			strings.Contains(filename, "ending") ||
+			strings.Contains(filename, "ncop") ||
+			strings.Contains(filename, "nced") {
+			return true
+		}
+	}
+	return false
+}
+
+// torrentRoot returns the first non-empty segment of a torrent file
+// path — typically the torrent's root folder name. Used when feeding
+// a series path to the AI enrichment fallback: a per-episode filename
+// like "01 - first joke.mkv" carries no series title, whereas the
+// parent folder ("Stand.Up.S13.Complete") usually does. Returns the
+// path unchanged when there is no separator.
+func torrentRoot(path string) string {
+	for _, part := range strings.Split(path, "/") {
+		if part != "" {
+			return part
+		}
+	}
+	return path
+}
+
+// resourceAIBudget caps the AI fallback to a single miss per
+// enrichMediaInfo run. Multi-file packs (MovieMultiple with N distinct
+// titles, or a mis-classified episode pack) used to fire one Claude
+// call per file — burning N tokens on a torrent that is, in practice,
+// uniformly unenrichable (same release group, same transliteration
+// scheme, same garbage parser output across files). Once any single
+// AI fallback in a resource returns no resolvable metadata, subsequent
+// files in the same resource skip AI entirely. Successful hits do NOT
+// exhaust the budget (we return early on success and never reach the
+// exhaustion branch).
+//
+// Passed as a pointer through mapMetadata → tryAIFallback. nil is the
+// "no budget tracking" signal used by non-torrent flows like
+// LookupByTitleYear (which has no pathHint and thus never runs AI).
+type resourceAIBudget struct {
+	exhausted bool
+}
+
+func (b *resourceAIBudget) available() bool {
+	if b == nil {
+		return true
+	}
+	return !b.exhausted
+}
+
+func (b *resourceAIBudget) markExhausted() {
+	if b == nil {
+		return
+	}
+	b.exhausted = true
+}
+
+// IsAdultPath runs the torrent-name parser over each path segment and
+// returns true as soon as any segment flags adult content. Each level
+// is parsed independently so a clean episode filename under a studio
+// folder (e.g. "Blacked/lana.mp4" or "JAV_uncensored/abp-123.mp4")
+// still trips on the folder. Returns false on an empty path.
+func IsAdultPath(pathStr string) (bool, string) {
+	if pathStr == "" {
+		return false, ""
+	}
+	studio := ""
+	for _, part := range strings.Split(pathStr, "/") {
+		if part == "" {
+			continue
+		}
+		ti, err := ptn.Parse(&ptn.TorrentInfo{}, part)
+		if err != nil {
+			continue
+		}
+		if ti.Porn {
+			if ti.Website != "" {
+				studio = ti.Website
+			}
+			return true, studio
+		}
+	}
+	// Fallback regex for common adult studios if parser misses
+	pathLower := strings.ToLower(pathStr)
+	studios := []string{"blacked", "vixen", "tushy", "brazzers", "bangbros", "naughtyamerica", "realitykings", "babes", "digitalplayground", "mofos", "fakeagent", "joyii", "private", "publicagent", "milfed", "stushy", "passionhd", "spyfam"}
+	for _, s := range studios {
+		if strings.Contains(pathLower, s) {
+			return true, strings.Title(s)
+		}
+	}
+	return false, ""
+}
+
+func (s *Enricher) enrichMediaInfo(ctx context.Context, db *pg.DB, hash string, claims *api.Claims, force bool, hintVideoID string) (*models.MediaInfoMediaType, error) {
+
+	items, err := s.retrieveTorrentItems(ctx, hash, claims)
+
+	if err != nil {
+		return nil, err
+	}
+
+	//series := map[string]*models.Series{}
+	//var movies []*models.Movie
+	var torrentInfos []*TorrentInfo
+	var samples []*TorrentInfo
+
+	for _, item := range items {
+		if item.MediaFormat != ra.Video {
+			continue
+		}
+		ti, err := MakeTorrentInfo(&item)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to make torrent info for hash %v", hash)
+		}
+		if ti.Sample {
+			samples = append(samples, ti)
+			continue
+		}
+		torrentInfos = append(torrentInfos, ti)
+	}
+	if len(torrentInfos) > 0 {
+		var maxSize int64
+		for _, ti := range torrentInfos {
+			if ti.ListItem.Size > maxSize {
+				maxSize = ti.ListItem.Size
+			}
+		}
+		if maxSize > 150*1024*1024 { // 150 MB
+			var filtered []*TorrentInfo
+			for _, ti := range torrentInfos {
+				if ti.ListItem.Size >= 100*1024*1024 || ti.ListItem.Size >= maxSize/5 || isKnownOrSpecial(ti) {
+					filtered = append(filtered, ti)
+				} else {
+					log.WithFields(log.Fields{
+						"hash": hash,
+						"path": ti.PathStr,
+						"size": ti.ListItem.Size,
+					}).Info("dropped spam/promotional video file from enrichment")
+				}
+			}
+			torrentInfos = filtered
+		}
+	}
+	// Drop sample/preview clips when the same torrent already carries the
+	// real release. Without this, "Sicario/sicario.sample.mkv" + the main
+	// "Sicario.2015...mkv" produce two distinct movie rows and two AI
+	// fallback calls. Fall back to processing samples only when nothing
+	// else is present (rare — a torrent that is purely a sample).
+	if len(torrentInfos) == 0 && len(samples) > 0 {
+		log.WithField("hash", hash).Info("only sample files in torrent — processing them as fallback")
+		torrentInfos = samples
+	} else if len(samples) > 0 {
+		log.WithFields(log.Fields{"hash": hash, "dropped": len(samples)}).Info("dropped sample/preview files from enrichment")
+	}
+
+	if len(torrentInfos) == 0 {
+		log.Infof("no media info acquired for hash %s", hash)
+		return nil, nil
+	}
+
+	log.Infof("got %v media items", len(torrentInfos))
+
+	mt := s.getMediaType(torrentInfos)
+
+	log.Infof("got media type %v for hash %v", mt, hash)
+
+	// Fetch existing movies and series for this resource to preserve their metadata IDs in case new enrichment misses
+	existingMovies, _ := models.GetMoviesByResourceID(ctx, db, hash)
+	existingSeriesSlice, _ := models.GetSeriesByResourceID(ctx, db, hash)
+
+	var existingMovieMetadataID *uuid.UUID
+	if len(existingMovies) == 1 && existingMovies[0].MovieMetadataID != nil {
+		existingMovieMetadataID = existingMovies[0].MovieMetadataID
+	}
+	existingMovieMetaIDs := map[string]uuid.UUID{}
+	for _, em := range existingMovies {
+		if em.Path != nil && em.MovieMetadataID != nil {
+			existingMovieMetaIDs[*em.Path] = *em.MovieMetadataID
+		}
+	}
+	var existingSeriesMetadataID *uuid.UUID
+	if len(existingSeriesSlice) == 1 && existingSeriesSlice[0].SeriesMetadataID != nil {
+		existingSeriesMetadataID = existingSeriesSlice[0].SeriesMetadataID
+	}
+
+	var series *models.Series
+	var movies []*models.Movie
+
+	switch mt {
+	case models.MediaInfoMediaTypeMovieSingle:
+		movie, err := s.makeMovie(torrentInfos, hash)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to make movie for hash %s", hash)
+		}
+		if movie != nil {
+			if existingMovieMetadataID != nil {
+				movie.MovieMetadataID = existingMovieMetadataID
+			}
+			movies = append(movies, movie)
+		}
+	case models.MediaInfoMediaTypeMovieMultiple:
+		movies, err = s.makeMovies(torrentInfos, hash)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to make movies for hash %s", hash)
+		}
+		for _, m := range movies {
+			if m.Path != nil {
+				if id, ok := existingMovieMetaIDs[*m.Path]; ok {
+					m.MovieMetadataID = &id
+				}
+			}
+		}
+	default:
+		series, err = s.makeSeriesWithEpisodes(torrentInfos, hash, mt)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to make series for hash %s", hash)
+		}
+		if series != nil && existingSeriesMetadataID != nil {
+			series.SeriesMetadataID = existingSeriesMetadataID
+		}
+	}
+
+	// Save ItemIDs from original movies
+	movieItemIDs := make(map[string]string)
+	for _, m := range movies {
+		if m.Path != nil && m.VideoContent != nil {
+			movieItemIDs[*m.Path] = m.VideoContent.ItemID
+		}
+	}
+
+	// Save ItemID from original series
+	var seriesItemID string
+	if series != nil && series.VideoContent != nil {
+		seriesItemID = series.VideoContent.ItemID
+	}
+
+	if len(movies) > 0 {
+		_ = models.DeleteSeriesForResource(ctx, db, hash)
+	}
+	err = models.ReplaceMoviesForResource(ctx, db, hash, movies)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to replace movie for hash %s", hash)
+	}
+
+	var seriesSlice []*models.Series
+	if series != nil {
+		_ = models.DeleteMoviesForResource(ctx, db, hash)
+		seriesSlice = append(seriesSlice, series)
+	}
+	err = models.ReplaceSeriesForResource(ctx, db, hash, seriesSlice)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to replace series for hash %s", hash)
+	}
+
+	movies, err = models.GetMoviesByResourceID(ctx, db, hash)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get movies for hash %s", hash)
+	}
+	for _, m := range movies {
+		if m.Path != nil && m.VideoContent != nil {
+			if id, ok := movieItemIDs[*m.Path]; ok {
+				m.VideoContent.ItemID = id
+			}
+		}
+	}
+
+	// One AI-fallback budget shared by every movie + the series block
+	// below. Stops a MovieMultiple pack of N unenrichable titles from
+	// firing N Claude calls — see resourceAIBudget.
+	budget := &resourceAIBudget{}
+
+	type movieResult struct {
+		movie      *models.Movie
+		metadataID *uuid.UUID
+		err        error
+	}
+	movieResCh := make(chan movieResult, len(movies))
+
+	for _, m := range movies {
+		go func(m *models.Movie) {
+			moviePath := ""
+			if m.Path != nil {
+				moviePath = *m.Path
+			}
+			if m.VideoContent.ItemID != "" {
+				dur, err := s.getDuration(ctx, hash, claims, m.VideoContent.ItemID)
+				if err != nil {
+					log.WithError(err).Warn("failed to get movie duration")
+				}
+				m.VideoContent.Duration = dur
+			}
+			md, err := s.mapMetadata(ctx, m.VideoContent, m.GetContentType(), force, hintVideoID, moviePath, budget)
+			if err != nil {
+				movieResCh <- movieResult{err: errors.Wrapf(err, "failed to map metadata for movie %+v", m)}
+				return
+			}
+			if md == nil {
+				movieResCh <- movieResult{movie: m}
+				return
+			}
+			metadataID, err := models.UpsertMovieMetadata(ctx, db, md)
+			if err != nil {
+				movieResCh <- movieResult{err: errors.Wrapf(err, "failed to upsert metadata for movie %+v", md)}
+				return
+			}
+			movieResCh <- movieResult{movie: m, metadataID: &metadataID}
+		}(m)
+	}
+
+	for i := 0; i < len(movies); i++ {
+		res := <-movieResCh
+		if res.err != nil {
+			return nil, res.err
+		}
+		if res.metadataID != nil {
+			err = models.LinkMovieToMetadata(ctx, db, res.movie.MovieID, *res.metadataID)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to link movie %+v with metadata", res.movie)
+			}
+		}
+	}
+
+	seriesSlice, err = models.GetSeriesByResourceID(ctx, db, hash)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get series for hash %s", hash)
+	}
+	for _, ser := range seriesSlice {
+		if ser.VideoContent != nil && seriesItemID != "" {
+			ser.VideoContent.ItemID = seriesItemID
+		}
+	}
+
+	type seriesResult struct {
+		series     *models.Series
+		metadataID *uuid.UUID
+		videoID    string
+		err        error
+	}
+	seriesResCh := make(chan seriesResult, len(seriesSlice))
+
+	for _, ser := range seriesSlice {
+		go func(ser *models.Series) {
+			if ser.VideoContent.ItemID != "" {
+				dur, err := s.getDuration(ctx, hash, claims, ser.VideoContent.ItemID)
+				if err != nil {
+					log.WithError(err).Warn("failed to get series duration")
+				}
+				ser.VideoContent.Duration = dur
+			}
+			var md *models.VideoMetadata
+			if mt != models.MediaInfoMediaTypeSeriesCompilation && mt != models.MediaInfoMediaTypeSeriesSplitScenes {
+				seriesPath, perr := models.GetFirstEpisodePathForSeries(ctx, db, ser.SeriesID)
+				if perr != nil {
+					log.WithError(perr).Warnf("failed to load representative episode path for series %v", ser.SeriesID)
+				}
+				seriesPath = torrentRoot(seriesPath)
+				md, err = s.mapMetadata(ctx, ser.VideoContent, ser.GetContentType(), force, hintVideoID, seriesPath, budget)
+			}
+			if err != nil {
+				seriesResCh <- seriesResult{err: errors.Wrapf(err, "failed to map metadata for series %v", ser)}
+				return
+			}
+			if md == nil {
+				seriesResCh <- seriesResult{series: ser}
+				return
+			}
+			metadataID, err := models.UpsertSeriesMetadata(ctx, db, md)
+			if err != nil {
+				seriesResCh <- seriesResult{err: errors.Wrapf(err, "failed to upsert series metadata for %v", md)}
+				return
+			}
+			seriesResCh <- seriesResult{series: ser, metadataID: &metadataID, videoID: md.VideoID}
+		}(ser)
+	}
+
+	for i := 0; i < len(seriesSlice); i++ {
+		res := <-seriesResCh
+		if res.err != nil {
+			return nil, res.err
+		}
+		if res.metadataID != nil {
+			err = models.LinkSeriesToMetadata(ctx, db, res.series.SeriesID, *res.metadataID)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to link series %+v with metadata", res.series)
+			}
+			// Enrich episodes with metadata
+			if len(s.episodeMappers) > 0 {
+				err = s.enrichEpisodes(ctx, db, res.series, res.videoID, force)
+				if err != nil {
+					log.WithError(err).Warnf("failed to enrich episodes for series %v hash %s", res.videoID, hash)
+				}
+			}
+		}
+	}
+	return &mt, nil
+}
+
+// LookupByVideoID iterates through mappers that implement DirectMapper and
+// returns the first match for the given video ID (typically an IMDB tt* id
+// or our internal kp{id}). Used by the poster proxy when a film exists
+// in tmdb.info / kpu.info (via AI/discover enrichment) but not yet in
+// movie_metadata (which is populated through the torrent enrichment flow).
+//
+// A mapper-result without a poster URL is treated as a miss and the loop
+// continues — otherwise a thin response (e.g. OMDB returning "Poster":"N/A"
+// for a marginal id) would short-circuit the chain and prevent another
+// mapper from supplying a usable poster.
+func (s *Enricher) LookupByVideoID(ctx context.Context, videoID string, ct models.ContentType) (*models.VideoMetadata, error) {
+	for _, m := range s.mappers {
+		dm, ok := m.(DirectMapper)
+		if !ok {
+			continue
+		}
+		md, err := dm.MapByID(ctx, videoID, ct, false)
+		if err != nil {
+			log.WithError(err).WithField("mapper", m.GetName()).WithField("video_id", videoID).Warn("direct lookup failed")
+			continue
+		}
+		if md != nil && (md.PosterURL != "" || md.PosterHorizontalURL != "") {
+			return md, nil
+		}
+	}
+	return nil, nil
+}
+
+// LookupByTitleYear iterates through configured metadata mappers (TMDB, OMDB,
+// Kinopoisk, ...) and returns the first matching video metadata for the given
+// title and optional year.
+//
+// Unlike Enrich, this lookup does not persist anything against a torrent
+// resource — it is intended for flows that only have text identifiers (e.g.
+// AI recommendations, manual search). Individual mappers may still cache
+// results in their own tables, which later benefits regular torrent
+// enrichment.
+//
+// AI fallback is NOT triggered here: this path is for non-torrent
+// identifiers and has no filename to feed Claude.
+func (s *Enricher) LookupByTitleYear(ctx context.Context, title string, year *int16, ct models.ContentType) (*models.VideoMetadata, error) {
+	vc := &models.VideoContent{
+		Title: title,
+		Year:  year,
+	}
+	// nil budget — LookupByTitleYear has no pathHint, so AI fallback
+	// is never triggered anyway. Pass nil to keep the call site clean.
+	return s.mapMetadata(ctx, vc, ct, false, "", "", nil)
+}
+
+func (s *Enricher) Enrich(ctx context.Context, hash string, claims *api.Claims, force bool, hintVideoID string) error {
+	log.Infof("enriching media info for hash %s", hash)
+	if hintVideoID != "" {
+		log.Infof("enrichment hint video id: %s", hintVideoID)
+	}
+	db := s.pg.Get()
+	if db == nil {
+		return errors.New("db is nil")
+	}
+	mi, err := models.TryInsertOrLockMediaInfo(ctx, db, hash, 24*time.Hour, force)
+	if err != nil {
+		return err
+	}
+	if mi == nil {
+		log.Infof("no media info acquired for hash %s", hash)
+		return nil
+	}
+	log.Infof("start processing media info %+v", mi)
+	// Resolve sidecar enrichment permission:
+	//   - background job             → check if any admin owns the resource (defaults to true for admin-owned content)
+	//   - admin user                 → respects their toggle (fail-closed: false on error)
+	//   - regular user               → never enabled
+	sidecarEnrichment := false
+	if claims == nil || claims.Subject == "" {
+		// Background job — no user context. Check if any admin owns this resource.
+		var users []models.User
+		err = db.Model(&users).
+			Join("JOIN library l ON l.user_id = \"user\".user_id").
+			Where("l.resource_id = ?", hash).
+			Select()
+		if err == nil {
+			for _, u := range users {
+				if s.admin.IsAdminEmail(u.Email) {
+					// Default to true for admin-owned resources in background jobs
+					// so adult/NSFW content pushed by automated clients (like Whisparr)
+					// is automatically enriched.
+					sidecarEnrichment = true
+					break
+				}
+			}
+		} else {
+			log.WithError(err).Warnf("sidecar: failed to lookup users for resource %s", hash)
+		}
+	} else {
+		userID, err := uuid.FromString(claims.Subject)
+		if err == nil {
+			u := &models.User{}
+			err = db.Model(u).Context(ctx).Where("user_id = ?", userID).Limit(1).Select()
+			if err == nil && s.admin.IsAdminEmail(u.Email) {
+				settings, err := models.GetUserStremioSettingsData(ctx, db, userID)
+				if err != nil || settings == nil {
+					log.WithError(err).Warnf("sidecar: failed to load admin settings for user %s, defaulting to false", userID)
+					sidecarEnrichment = false
+				} else {
+					sidecarEnrichment = settings.SidecarEnrichment
+				}
+			}
+			// non-admin user: sidecarEnrichment stays false
+		}
+	}
+
+	ctx = context.WithValue(ctx, "sidecar_enrichment", sidecarEnrichment)
+
+	mt, err := s.enrichMediaInfo(ctx, db, hash, claims, force, hintVideoID)
+	if err != nil {
+		if strings.Contains(err.Error(), "PermissionDenied") {
+			mi.Status = int16(models.MediaInfoStatusForbidden)
+		} else {
+			errStr := err.Error()
+			mi.Error = &errStr
+			mi.Status = int16(models.MediaInfoStatusError)
+		}
+		log.WithError(err).Error("failed to enrich media info")
+	} else if mt == nil {
+		// No video files in the torrent — not a metadata failure.
+		mi.Status = int16(models.MediaInfoStatusNoMedia)
+		mi.RetryCount = 0
+	} else {
+		// Video files found — now check whether any mapper actually produced metadata.
+		// Done is only written when a real poster_url or video_id is linked.
+		mtInt16 := int16(*mt)
+		mi.MediaType = &mtInt16
+
+		hasMetadata, checkErr := models.ResourceHasLinkedMetadata(ctx, db, hash)
+		if checkErr != nil {
+			log.WithError(checkErr).Warnf("could not verify linked metadata for hash %s, defaulting to NoMetadata", hash)
+			hasMetadata = false
+		}
+
+		if hasMetadata {
+			// Real enrichment success.
+			mi.Status = int16(models.MediaInfoStatusDone)
+			mi.RetryCount = 0
+			log.Infof("enrichment Done for hash %s (has linked metadata)", hash)
+		} else {
+			// Mappers all missed. Increment retry counter.
+			mi.RetryCount = mi.RetryCount + 1
+			if mi.RetryCount >= int16(models.MaxEnrichRetries) {
+				// Exhausted retries — stop automatic re-enrichment.
+				// Only force=true (per-item ↻ or Force All) can unblock this.
+				mi.Status = int16(models.MediaInfoStatusAbandoned)
+				log.Warnf("enrichment Abandoned for hash %s after %d retries (no mapper matched)", hash, mi.RetryCount)
+			} else {
+				mi.Status = int16(models.MediaInfoStatusNoMetadata)
+				log.Infof("enrichment NoMetadata for hash %s (attempt %d/%d)", hash, mi.RetryCount, models.MaxEnrichRetries)
+			}
+		}
+	}
+	err = models.UpdateMediaInfo(ctx, db, mi)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+func (s *Enricher) enrichEpisodes(ctx context.Context, db *pg.DB, ser *models.Series, videoID string, force bool) error {
+	// Reload series with episodes
+	serWithEps, err := models.GetSeriesWithEpisodes(ctx, db, ser.SeriesID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get series with episodes")
+	}
+
+	// Collect unique seasons
+	seasons := map[int]bool{}
+	for _, ep := range serWithEps.Episodes {
+		if ep.Season != nil {
+			seasons[int(*ep.Season)] = true
+		}
+	}
+
+	// Fetch episode metadata for each season
+	seasonEpisodes := map[int][]*models.EpisodeMetadata{}
+	for season := range seasons {
+		eps, err := s.mapEpisodeMetadata(ctx, videoID, season, force)
+		if err != nil {
+			log.WithError(err).Warnf("failed to map episode metadata for season %d", season)
+			continue
+		}
+		if eps != nil {
+			seasonEpisodes[season] = eps
+		}
+	}
+
+	// Link episode metadata to episodes
+	for _, ep := range serWithEps.Episodes {
+		if ep.Season == nil || ep.Episode == nil {
+			continue
+		}
+		season := int(*ep.Season)
+		episodeNum := int(*ep.Episode)
+
+		eps, ok := seasonEpisodes[season]
+		if !ok {
+			continue
+		}
+
+		for _, emd := range eps {
+			if int(emd.Season) == season && int(emd.Episode) == episodeNum {
+				metadataID, err := models.UpsertEpisodeMetadata(ctx, db, emd)
+				if err != nil {
+					log.WithError(err).Warnf("failed to upsert episode metadata S%dE%d", season, episodeNum)
+					continue
+				}
+				err = models.LinkEpisodeToMetadata(ctx, db, ep.EpisodeID, metadataID)
+				if err != nil {
+					log.WithError(err).Warnf("failed to link episode S%dE%d to metadata", season, episodeNum)
+				}
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *Enricher) mapEpisodeMetadata(ctx context.Context, videoID string, season int, force bool) ([]*models.EpisodeMetadata, error) {
+	for _, m := range s.episodeMappers {
+		eps, err := m.MapEpisodes(ctx, videoID, season, force)
+		if err != nil {
+			return nil, errors.Wrapf(err, "got \"%v\" episode mapper error", m.GetName())
+		}
+		if eps != nil {
+			return eps, nil
+		}
+	}
+	return nil, nil
+}
+
+// mapMetadata resolves metadata for a (title, year) pair through the
+// configured providers in priority order, with two fallback paths.
+//
+// pathHint is the original torrent filename / folder path. When non-empty
+// AND every provider misses, we hand it to the AI resolver — Claude
+// normalizes transliterated / mangled release names into candidate
+// (title, year) tuples that the same mappers can then resolve. The
+// visible metadata still comes from a real provider; Claude only
+// supplies search keys.
+//
+// budget is a per-resource cap on AI fallback misses; nil disables it.
+// See resourceAIBudget for the rationale.
+func (s *Enricher) mapMetadata(ctx context.Context, vc *models.VideoContent, t models.ContentType, f bool, hintVideoID string, pathHint string, budget *resourceAIBudget) (*models.VideoMetadata, error) {
+	if pathHint != "" {
+		ctx = context.WithValue(ctx, "path_hint", pathHint)
+	}
+	isAdult := isAdultContent(vc)
+	if !isAdult && pathHint != "" {
+		isAdult, _ = IsAdultPath(pathHint)
+	}
+	if !isAdult && (strings.HasPrefix(hintVideoID, "stash:") || strings.HasPrefix(hintVideoID, "tpdb:") || strings.HasPrefix(hintVideoID, "tpdb_jav:")) {
+		isAdult = true
+	}
+	if isAdult {
+		ctx = context.WithValue(ctx, "is_adult", true)
+	}
+	if hintVideoID != "" {
+		if md := s.lookupByHint(ctx, hintVideoID, t, f); md != nil {
+			return md, nil
+		}
+	}
+	md, firstErr := s.searchAllMappers(ctx, vc, t, f)
+	if md != nil {
+		return md, nil
+	}
+	if s.aiResolver != nil && pathHint != "" {
+		if aiMD := s.tryAIFallback(ctx, vc, t, f, pathHint, budget); aiMD != nil {
+			return aiMD, nil
+		}
+	}
+	// Nothing resolved. If at least one mapper cleanly missed (no errors
+	// anywhere), this is a real "no metadata" outcome — return nil and
+	// let the caller mark the resource Done/NoMedia. Otherwise surface
+	// the original error so the resource lands in Status=Error and
+	// `enrich --force-error` can retry it once the upstream API recovers.
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return nil, nil
+}
+
+// lookupByHint walks every DirectMapper for an externally-provided
+// videoID hint (e.g. an imdbId carried over from AI Discover). Returns
+// the first non-nil match or nil when no mapper recognizes the id.
+func (s *Enricher) lookupByHint(ctx context.Context, hintVideoID string, t models.ContentType, f bool) *models.VideoMetadata {
+	for _, m := range s.mappers {
+		dm, ok := m.(DirectMapper)
+		if !ok {
+			continue
+		}
+		md, err := dm.MapByID(ctx, hintVideoID, t, f)
+		if err != nil {
+			log.WithError(err).Warnf("direct mapper %q failed for hint %v", m.GetName(), hintVideoID)
+			continue
+		}
+		if md != nil {
+			log.Infof("direct mapper %q resolved hint %v", m.GetName(), hintVideoID)
+			return md
+		}
+	}
+	log.Infof("no mapper handled hint %v, falling back to title+year", hintVideoID)
+	return nil
+}
+
+// searchAllMappers walks every Map mapper for the given VideoContent.
+// On the first hit it runs tryUpgrade and returns the (possibly
+// upgraded) metadata with a nil error. On all-miss returns (nil, err)
+// where err is the first mapper error encountered, or nil if every
+// mapper cleanly missed.
+//
+// Per-mapper errors are absorbed instead of aborting the chain — a
+// single transient failure on a higher-priority mapper (classic case:
+// free OMDB key hitting its 1000/day rate limit) would otherwise mask
+// every later mapper AND the AI fallback. The first error is surfaced
+// only when every path ultimately fails so retry semantics
+// (`enrich --force-error`) stay intact.
+func isAdultContent(vc *models.VideoContent) bool {
+	if vc == nil {
+		return false
+	}
+	if vc.Metadata != nil {
+		if p, ok := vc.Metadata["porn"].(bool); ok && p {
+			return true
+		}
+	}
+	// Fallback to title keywords for robust NSFW detection
+	title := strings.ToLower(vc.Title)
+	keywords := []string{"fuck", "milf", "xxx", "porn", "anal", "tushy", "brazzers", "vixen", "bellesa", "fuckpass", "privatesociety", "porno"}
+	for _, kw := range keywords {
+		if strings.Contains(title, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// searchAllMappers walks every Map mapper for the given VideoContent.
+// On the first hit it runs tryUpgrade and returns the (possibly
+// upgraded) metadata with a nil error. On all-miss returns (nil, err)
+// where err is the first mapper error encountered, or nil if every
+// mapper cleanly missed.
+//
+// Per-mapper errors are absorbed instead of aborting the chain — a
+// single transient failure on a higher-priority mapper (classic case:
+// free OMDB key hitting its 1000/day rate limit) would otherwise mask
+// every later mapper AND the AI fallback. The first error is surfaced
+// only when every path ultimately fails so retry semantics
+// (`enrich --force-error`) stay intact.
+func (s *Enricher) searchAllMappers(ctx context.Context, vc *models.VideoContent, t models.ContentType, f bool) (*models.VideoMetadata, error) {
+	var firstErr error
+	isAdult := isAdultContent(vc)
+	if isAdult {
+		ctx = context.WithValue(ctx, "is_adult", true)
+	}
+	for i, m := range s.mappers {
+		md, err := m.Map(ctx, vc, t, f)
+		if err != nil {
+			log.WithError(err).WithField("mapper", m.GetName()).Warn("mapper failed, continuing to next")
+			if firstErr == nil {
+				firstErr = errors.Wrapf(err, "got \"%v\" mapper error", m.GetName())
+			}
+			continue
+		}
+		if md == nil {
+			continue
+		}
+		if isAdult {
+			return md, nil
+		}
+		// Try to upgrade through higher-priority mappers using the
+		// videoID just resolved. The most common payoff is the
+		// Kinopoisk-only-resolvable Russian-titled torrents whose
+		// canonical imdbId TMDB knows by external_id even when its
+		// Search-by-title misses. KPU (lowest priority) advertises its
+		// claimed imdbId as the videoID exactly so this loop can run;
+		// if the imdbId is bogus, MapByID type-filtering at TMDB and
+		// OMDB rejects it and we keep the lower-priority result intact.
+		if upgraded := s.tryUpgrade(ctx, md, t, i); upgraded != nil {
+			return upgraded, nil
+		}
+		return md, nil
+	}
+	return nil, firstErr
+}
+
+// tryAIFallback asks Claude for candidate (title, year) tuples and runs
+// each through the same mapper chain as the original parsed title.
+// Returns the resolved metadata on the first hit, or nil when no
+// candidate produces a match. AI errors are best-effort and swallowed
+// inside the resolver.
+//
+// No caching layer — the per-mapper TMDB.query / KPU.query caches
+// already absorb repeat searches across resources, and an AI-side
+// cache would either survive `--force` (breaking the "user wants
+// Claude to retry" semantic) or duplicate the existing
+// media_info-status gate. See docs/ai_enrichment.md for the rationale.
+func (s *Enricher) tryAIFallback(ctx context.Context, vc *models.VideoContent, t models.ContentType, f bool, pathHint string, budget *resourceAIBudget) *models.VideoMetadata {
+	// Skip Claude entirely once any AI fallback in this enrichMediaInfo
+	// run has failed. The release-name patterns inside a single torrent
+	// are typically uniform (same group, same transliteration scheme),
+	// so a miss on one file strongly predicts misses on the rest —
+	// running AI N times for an N-file pack just burns tokens.
+	if !budget.available() {
+		log.WithField("path", pathHint).Info("ai_enrich: budget exhausted for this resource, skipping AI fallback")
+		return nil
+	}
+	candidates := s.aiResolver.SuggestCandidates(ctx, pathHint, vc.Title, vc.Year, t, f)
+	for _, cand := range candidates {
+		candVC := &models.VideoContent{
+			ResourceID: vc.ResourceID,
+			Title:      cand.Title,
+			Year:       cand.Year,
+		}
+		md, _ := s.searchAllMappers(ctx, candVC, t, f)
+		if md != nil {
+			log.WithFields(log.Fields{
+				"candidate":   cand.Title,
+				"resolved_id": md.VideoID,
+			}).Info("ai_enrich: candidate resolved")
+			return md
+		}
+	}
+	// No candidate produced a metadata hit. Mark the resource budget
+	// exhausted so other files in this same torrent don't repeat the
+	// experiment. Successful runs return above and never reach here.
+	budget.markExhausted()
+	return nil
+}
+
+// tryUpgrade walks the mappers ABOVE `current` (more authoritative ones)
+// and returns the first MapByID hit with a usable poster. Each mapper's
+// MapByID is expected to type-filter on its own — we do not enforce the
+// content-type match at this layer.
+func (s *Enricher) tryUpgrade(ctx context.Context, md *models.VideoMetadata, t models.ContentType, current int) *models.VideoMetadata {
+	if md == nil || md.VideoID == "" {
+		return nil
+	}
+	for j := 0; j < current; j++ {
+		dm, ok := s.mappers[j].(DirectMapper)
+		if !ok {
+			continue
+		}
+		up, err := dm.MapByID(ctx, md.VideoID, t, false)
+		if err != nil {
+			log.WithError(err).WithField("mapper", s.mappers[j].GetName()).WithField("video_id", md.VideoID).Warn("upgrade lookup failed")
+			continue
+		}
+		if up != nil && (up.PosterURL != "" || up.PosterHorizontalURL != "") {
+			log.Infof("upgraded metadata for %v via mapper %q", md.VideoID, s.mappers[j].GetName())
+			return up
+		}
+	}
+	return nil
+}
+
+func (s *Enricher) retrieveTorrentItems(ctx context.Context, hash string, claims *api.Claims) ([]ra.ListItem, error) {
+	limit := uint(100)
+	offset := uint(0)
+	var items []ra.ListItem
+	for {
+		resp, err := s.api.ListResourceContentCached(ctx, claims, hash, &api.ListResourceContentArgs{
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range resp.Items {
+			items = append(items, item)
+		}
+		if (resp.Count - int(offset)) == len(resp.Items) {
+			break
+		}
+		offset += limit
+	}
+	return items, nil
+}
+
+func (s *Enricher) getMediaType(infos []*TorrentInfo) models.MediaInfoMediaType {
+	var hasSeasones, hasDifferentSeasones, hasEpisodes, sameTitle, hasScenes bool
+	sameTitle = true
+	var title string
+	var season int
+	for _, info := range infos {
+		if info.Season != 0 && season != info.Season && season != 0 {
+			hasDifferentSeasones = true
+		}
+		if info.Season != 0 {
+			season = info.Season
+			hasSeasones = true
+		}
+		if info.Episode != 0 {
+			hasEpisodes = true
+		}
+		if info.Scene != 0 {
+			hasScenes = true
+		}
+		if title != "" && info.Title != title {
+			sameTitle = false
+		}
+		title = info.Title
+	}
+	// MovieSingle on small torrents without ANY structural series markers
+	// (no season, no scene). A parser-extracted "episode" alone is not
+	// trustworthy — single-digit "Movie - 1.mkv" pack titles, multi-CD
+	// movies, and odd codec tags can all leak an episode number out of a
+	// movie filename. With <3 files and a consistent title, treating it as
+	// a movie recovers far more cases than it breaks.
+	if len(infos) < 3 && sameTitle && !hasScenes && !hasSeasones {
+		return models.MediaInfoMediaTypeMovieSingle
+	}
+	if hasSeasones && hasEpisodes && hasDifferentSeasones {
+		return models.MediaInfoMediaTypeSeriesMultipleSeasons
+	}
+	// SeriesSingleSeason fires when EITHER an explicit season tag is
+	// present, OR the pack looks like a season-less anime/fansub release
+	// (consistent title across >=3 files, all parsed as episodes). This
+	// blocks Le-Hobbit-style multi-movie compilations (sameTitle=false
+	// because each movie has a different title) from being mislabelled as
+	// a series and falling through to KPU.
+	hasSequentialEpisodes := sameTitle && len(infos) >= 3 && hasEpisodes && !hasDifferentSeasones
+	if (hasSeasones || hasSequentialEpisodes) && hasEpisodes && !hasDifferentSeasones {
+		return models.MediaInfoMediaTypeSeriesSingleSeason
+	}
+	if hasScenes && !hasDifferentSeasones {
+		return models.MediaInfoMediaTypeSeriesSplitScenes
+	}
+	// MovieMultiple — distinct titles across files with no season/scene
+	// markers. Typical case: a movie-trilogy or franchise pack (e.g.
+	// "Home Alone 1/2/3", "Le Hobbit + LOTR"). Each file is its own
+	// movie; downstream we group by parsed title so a duplicated title
+	// (multi-disc / multi-audio of the same film) collapses to one row.
+	if !sameTitle && !hasSeasones && !hasScenes {
+		return models.MediaInfoMediaTypeMovieMultiple
+	}
+	return models.MediaInfoMediaTypeSeriesCompilation
+}
+
+func (s *Enricher) makeMovie(infos []*TorrentInfo, hash string) (*models.Movie, error) {
+	ti := infos[0]
+	movie := &models.Movie{
+		VideoContent: &models.VideoContent{
+			ResourceID: hash,
+			ItemID:     ti.ListItem.ID,
+		},
+	}
+	movie.Title = ti.Title
+	if ti.Year != 0 {
+		year := int16(ti.Year)
+		movie.Year = &year
+	}
+	movie.Path = &ti.PathStr
+	metadata, err := StructToMap(ti.TorrentInfo)
+	if err != nil {
+		return nil, err
+	}
+	movie.Metadata = metadata
+	return movie, nil
+}
+
+// makeMovies builds one Movie per distinct parsed title from a multi-movie
+// torrent pack. Multi-disc / multi-audio variants of the same film share
+// a parsed title and collapse into a single Movie (the first occurrence
+// wins for path/metadata). The output preserves the input order of first
+// occurrences so subsequent enrichment is deterministic.
+func (s *Enricher) makeMovies(infos []*TorrentInfo, hash string) ([]*models.Movie, error) {
+	seen := make(map[string]bool, len(infos))
+	var movies []*models.Movie
+	for _, ti := range infos {
+		key := ti.Title
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		movie, err := s.makeMovie([]*TorrentInfo{ti}, hash)
+		if err != nil {
+			return nil, err
+		}
+		movies = append(movies, movie)
+	}
+	return movies, nil
+}
+
+func (s *Enricher) makeSeriesWithEpisodes(infos []*TorrentInfo, hash string, mt models.MediaInfoMediaType) (*models.Series, error) {
+	var ti *TorrentInfo
+	var err error
+	if mt == models.MediaInfoMediaTypeSeriesCompilation || mt == models.MediaInfoMediaTypeSeriesSplitScenes {
+		ti, err = s.makeCompilationTorrentInfo(infos)
+	} else {
+		ti, err = s.makeStandardSeriesTorrentInfo(infos)
+	}
+	if err != nil {
+		return nil, err
+	}
+	ser := &models.Series{
+		VideoContent: &models.VideoContent{
+			ResourceID: hash,
+			ItemID:     infos[0].ListItem.ID,
+		},
+		SeriesID: uuid.NewV4(),
+	}
+	title := ti.Title
+	if ti.Title == "" {
+		title = ti.Website
+	}
+	ser.Title = title
+	if ti.Year != 0 {
+		year := int16(ti.Year)
+		ser.Year = &year
+	}
+	for _, ti = range infos {
+		episode := ti.Episode
+		if episode == 0 {
+			episode = ti.Scene
+		}
+		var sea *int16
+		if ti.Season != 0 {
+			seaInt16 := int16(ti.Season)
+			sea = &seaInt16
+		}
+		var ep *int16
+		if episode != 0 {
+			epInt16 := int16(episode)
+			ep = &epInt16
+		}
+		e := &models.Episode{
+			ResourceID: hash,
+			SeriesID:   ser.SeriesID,
+			Path:       &ti.PathStr,
+			Season:     sea,
+			Episode:    ep,
+		}
+		metadata, err := StructToMap(ti.TorrentInfo)
+		if err != nil {
+			return nil, err
+		}
+		if ti.ListItem != nil {
+			metadata["size"] = ti.ListItem.Size
+		}
+		e.Metadata = metadata
+		ser.Episodes = append(ser.Episodes, e)
+	}
+	return ser, nil
+}
+
+func (s *Enricher) makeCompilationTorrentInfo(infos []*TorrentInfo) (*TorrentInfo, error) {
+	ti := &ptn.TorrentInfo{}
+	pathParts := strings.Split(strings.TrimPrefix(infos[0].PathStr, "/"), "/")
+	ti, err := ptn.Parse(ti, pathParts[0])
+	if err != nil {
+		return nil, err
+	}
+	return &TorrentInfo{
+		ListItem:    infos[0].ListItem,
+		TorrentInfo: ti,
+	}, nil
+}
+
+func (s *Enricher) makeStandardSeriesTorrentInfo(infos []*TorrentInfo) (*TorrentInfo, error) {
+	for _, info := range infos {
+		if info.Episode != 0 {
+			return info, nil
+		}
+	}
+	return nil, errors.New("no episode info in torrent list")
+}
+
+func (s *Enricher) getDuration(ctx context.Context, hash string, claims *api.Claims, itemID string) (*float64, error) {
+	exportResponse, err := s.api.ExportResourceContent(ctx, claims, hash, itemID, "")
+	if err != nil {
+		return nil, err
+	}
+	var probeURL string
+	if mpItem, ok := exportResponse.ExportItems["media_probe"]; ok {
+		probeURL = mpItem.URL
+	} else {
+		var sourceURL string
+		if streamItem, ok := exportResponse.ExportItems["stream"]; ok {
+			sourceURL = streamItem.URL
+		} else if downloadItem, ok := exportResponse.ExportItems["download"]; ok {
+			sourceURL = downloadItem.URL
+		}
+		if sourceURL != "" {
+			if idx := strings.IndexByte(sourceURL, '?'); idx >= 0 {
+				probeURL = sourceURL[:idx] + "~cp" + sourceURL[idx:]
+			} else {
+				probeURL = sourceURL + "~cp"
+			}
+		}
+	}
+
+	if probeURL != "" {
+		// Fast check for cache hit (using fast-path for duration only)
+		fastCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+		mp, err := s.api.GetMediaProbe(fastCtx, probeURL, true)
+		if err == nil && mp != nil && mp.Format.Duration != "" {
+			if duration, err := strconv.ParseFloat(mp.Format.Duration, 64); err == nil {
+				return &duration, nil
+			}
+		}
+
+		// If cache miss or slow, trigger background probe to populate cache for future use
+		go func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			_, _ = s.api.GetMediaProbe(bgCtx, probeURL, true)
+		}()
+	}
+	return nil, nil
+}

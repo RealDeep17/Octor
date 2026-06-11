@@ -1,0 +1,65 @@
+{{ define "title" }}{{ t $.Lang "aboutPage.title" }}{{ end }}
+{{ define "description" }}
+    <meta name="description" content="{{ t $.Lang "aboutPage.description" }}">
+{{ end }}
+{{ define "head_extra" }}
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Octor",
+        "url": "{{ domain }}",
+        "logo": "{{ domain }}/assets/night/favicon.svg",
+        "description": "Open-source, browser-based torrent platform for streaming and downloading torrents directly in the browser.",
+        "sameAs": [
+            "https://github.com/RealDeep17/Octor"
+        ]
+    }
+    </script>
+{{ end }}
+{{ define "main" }}
+<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
+  <div class="max-w-[900px] mx-auto">
+
+    <!-- Badge -->
+    <div class="hidden sm:inline-flex badge badge-lg bg-o-purple/10 border-o-purple/30 text-o-purpleL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 16v-4M12 8h.01"/>
+      </svg>
+      {{ t $.Lang "aboutPage.badge" }}
+    </div>
+
+    <!-- Hero -->
+    <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">{{ t $.Lang "aboutPage.heading" }}</h1>
+    <p class="text-[1.15rem] text-o-sub leading-relaxed mb-12">{{ t $.Lang "aboutPage.intro" }}</p>
+
+    <!-- Mission -->
+    <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">{{ t $.Lang "aboutPage.missionTitle" }}</h2>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">{{ t $.Lang "aboutPage.missionP1" }}</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">{{ tHTML $.Lang "aboutPage.missionP2" }}</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-8">{{ t $.Lang "aboutPage.missionP3" }}</p>
+
+    <!-- Open Source -->
+    <h2 class="text-[1.3rem] font-bold tracking-tight mt-10 mb-3">{{ t $.Lang "aboutPage.osTitle" }}</h2>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">{{ tHTML $.Lang "aboutPage.osP1" }}</p>
+    <p class="text-[1.05rem] text-o-sub leading-relaxed mb-4">{{ t $.Lang "aboutPage.osP2" }}</p>
+    <div class="flex flex-wrap gap-3 mt-6 mb-12">
+      <a href="https://github.com/RealDeep17/Octor" target="_blank" class="btn btn-ghost border border-o-line gap-2">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+
+    <!-- CTA -->
+    <div class="border-t border-o-line pt-10 mt-10 text-center">
+      <p class="text-[1.05rem] text-o-sub mb-5">{{ t $.Lang "aboutPage.ctaText" }}</p>
+      <a href="{{ langPath $.Lang "/" }}" data-async-target="main" class="btn btn-ghost border border-o-line gap-2">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        {{ t $.Lang "aboutPage.ctaButton" }}
+      </a>
+    </div>
+
+  </div>
+</section>
+{{ end }}

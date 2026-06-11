@@ -1,0 +1,183 @@
+{{ define "title" }}{{ t $.Lang "docs.title" }}{{ end }}
+{{ define "main" }}
+<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
+  <div class="max-w-[1100px] mx-auto">
+
+    <!-- Header -->
+    <div class="mb-16">
+        <div class="inline-flex badge badge-lg bg-o-primary/10 border-o-primary/30 text-o-primaryL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            {{ t $.Lang "docs.badge" }}
+        </div>
+        <h1 class="text-[clamp(2.5rem,6vw,3.5rem)] font-extrabold tracking-tighter leading-tight mb-4 text-balance">
+            Octor <span class="gradient-text">Documentation</span>
+        </h1>
+        <p class="text-xl text-o-sub leading-relaxed max-w-[700px]">
+            {{ t $.Lang "docs.subtitle" }}
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+      
+      <!-- Section 1: Help & Resources -->
+      <div class="space-y-8">
+        <div>
+            <h2 class="text-xs font-bold tracking-[0.2em] uppercase text-o-muted mb-6 flex items-center gap-3">
+                <span class="w-8 h-px bg-o-line"></span>
+                About us (Help)
+            </h2>
+            <div class="grid gap-4">
+                <a href="{{ langPath $.Lang "/about" }}" data-async-target="main" class="card bg-base-300 border border-o-line hover:border-o-primary/30 transition-all p-5 group">
+                    <h3 class="font-bold text-lg group-hover:text-o-primaryL transition-colors mb-1">About Octor</h3>
+                    <p class="text-sm text-o-sub leading-relaxed">{{ t $.Lang "docs.aboutDesc" }}</p>
+                </a>
+                <a href="{{ langPath $.Lang "/about#faq" }}" data-async-target="main" class="card bg-base-300 border border-o-line hover:border-o-purple/30 transition-all p-5 group">
+                    <h3 class="font-bold text-lg group-hover:text-o-purpleL transition-colors mb-1">FAQ</h3>
+                    <p class="text-sm text-o-sub leading-relaxed">{{ t $.Lang "docs.faqDesc" }}</p>
+                </a>
+                <a href="{{ langPath $.Lang "/about#features" }}" data-async-target="main" class="card bg-base-300 border border-o-line hover:border-o-cyan/30 transition-all p-5 group">
+                    <h3 class="font-bold text-lg group-hover:text-o-cyan transition-colors mb-1">Features</h3>
+                    <p class="text-sm text-o-sub leading-relaxed">{{ t $.Lang "docs.featuresDesc" }}</p>
+                </a>
+            </div>
+        </div>
+
+        <div>
+            <h2 class="text-xs font-bold tracking-[0.2em] uppercase text-o-muted mb-6 flex items-center gap-3">
+                <span class="w-8 h-px bg-o-line"></span>
+                Resources
+            </h2>
+            <ul class="space-y-4">
+                <li>
+                    <a href="{{ langPath $.Lang "/instructions/vault" }}" data-async-target="main" class="flex items-center gap-3 group">
+                        <div class="w-8 h-8 rounded-lg bg-o-primary/10 text-o-primary flex items-center justify-center shrink-0 group-hover:bg-o-primary group-hover:text-white transition-all">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                        </div>
+                        <span class="font-semibold text-o-sub group-hover:text-o-primaryL transition-colors">Vault Guide</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ langPath $.Lang "/instructions/stremio" }}" data-async-target="main" class="flex items-center gap-3 group">
+                        <div class="w-8 h-8 rounded-lg bg-o-purple/10 text-o-purpleL flex items-center justify-center shrink-0 group-hover:bg-o-purpleL group-hover:text-white transition-all">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        </div>
+                        <span class="font-semibold text-o-sub group-hover:text-o-purpleL transition-colors">Stremio Guide</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ langPath $.Lang "/instructions/stremio_addon" }}" data-async-target="main" class="flex items-center gap-3 group">
+                        <div class="w-8 h-8 rounded-lg bg-o-cyan/10 text-o-cyan flex items-center justify-center shrink-0 group-hover:bg-o-cyan group-hover:text-white transition-all">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/></svg>
+                        </div>
+                        <span class="font-semibold text-o-sub group-hover:text-o-cyan transition-colors">Stremio Addon Guide</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ langPath $.Lang "/instructions/webdav" }}" data-async-target="main" class="flex items-center gap-3 group">
+                        <div class="w-8 h-8 rounded-lg bg-o-primary/10 text-o-primary flex items-center justify-center shrink-0 group-hover:bg-o-primary group-hover:text-white transition-all">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                        </div>
+                        <span class="font-semibold text-o-sub group-hover:text-o-primaryL transition-colors">WebDAV Guide</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+      </div>
+
+      <!-- Section 2: Tools -->
+      <div>
+        <h2 class="text-xs font-bold tracking-[0.2em] uppercase text-o-muted mb-6 flex items-center gap-3">
+          <span class="w-8 h-px bg-o-line"></span>
+          {{ t $.Lang "footer.tools" }}
+        </h2>
+        <div class="space-y-4">
+            <a href="{{ langPath $.Lang "/torrent-to-ddl" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-primary/20 hover:bg-o-primary/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-primaryL transition-colors">Torrent → DDL</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-primary transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.torrentToDdl.benefit" }}</p>
+            </a>
+            <a href="{{ langPath $.Lang "/torrent-to-zip" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-primary/20 hover:bg-o-primary/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-primaryL transition-colors">Torrent → ZIP</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-primary transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.torrentToZip.benefit" }}</p>
+            </a>
+            <a href="{{ langPath $.Lang "/magnet-to-ddl" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-primary/20 hover:bg-o-primary/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-primaryL transition-colors">Magnet → DDL</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-primary transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.magnetToDdl.benefit" }}</p>
+            </a>
+            <a href="{{ langPath $.Lang "/magnet-to-torrent" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-primary/20 hover:bg-o-primary/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-primaryL transition-colors">Magnet → Torrent</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-primary transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.magnetToTorrent.benefit" }}</p>
+            </a>
+            <a href="{{ langPath $.Lang "/torrent-to-stream" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-primary/20 hover:bg-o-primary/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-primaryL transition-colors">Torrent → Stream</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-primary transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.torrentToStream.benefit" }}</p>
+            </a>
+        </div>
+      </div>
+
+      <!-- Section 3: Stream -->
+      <div>
+        <h2 class="text-xs font-bold tracking-[0.2em] uppercase text-o-muted mb-6 flex items-center gap-3">
+          <span class="w-8 h-px bg-o-line"></span>
+          STREAM
+        </h2>
+        <div class="space-y-4">
+            <a href="{{ langPath $.Lang "/watch-torrents-online" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-purple/20 hover:bg-o-purple/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-purpleL transition-colors">Watch Torrents Online</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-purpleL transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.watchTorrentsOnline.benefit" }}</p>
+            </a>
+            <a href="{{ langPath $.Lang "/watch-torrents-ios" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-purple/20 hover:bg-o-purple/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-purpleL transition-colors">Watch Torrents on iOS</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-purpleL transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.watchTorrentsIos.benefit" }}</p>
+            </a>
+            <a href="{{ langPath $.Lang "/online-torrent-downloader" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-purple/20 hover:bg-o-purple/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-purpleL transition-colors">Online Torrent Downloader</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-purpleL transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.onlineTorrentDownloader.benefit" }}</p>
+            </a>
+            <a href="{{ langPath $.Lang "/stream-torrent-online" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-purple/20 hover:bg-o-purple/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-purpleL transition-colors">Stream Torrent Online</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-purpleL transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.streamTorrentOnline.benefit" }}</p>
+            </a>
+            <a href="{{ langPath $.Lang "/torrent-player" }}" data-async-target="main" class="block p-4 rounded-xl border border-o-line hover:border-o-purple/20 hover:bg-o-purple/5 transition-all group">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-base group-hover:text-o-purpleL transition-colors">Online Torrent Player</span>
+                    <svg class="w-4 h-4 text-o-muted group-hover:text-o-purpleL transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <p class="text-xs text-o-muted leading-relaxed">{{ t $.Lang "tool.torrentPlayer.benefit" }}</p>
+            </a>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+{{ end }}

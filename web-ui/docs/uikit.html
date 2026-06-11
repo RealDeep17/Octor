@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="night">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Octor UIKit Reference</title>
+  <link rel="stylesheet" href="../assets/dist/style.css">
+  <link rel="stylesheet" href="../assets/dist/inter.css">
+  <link rel="stylesheet" href="../assets/dist/comfortaa.css">
+  <style>
+    /* Layout-only styles for the reference page itself */
+    .uikit-section { margin-bottom: 4rem; }
+    .uikit-section h2 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
+    .uikit-section p.desc { color: #94a3b8; font-size: 0.875rem; margin-bottom: 1.5rem; }
+    .uikit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+    .uikit-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1rem; }
+    .uikit-card { padding: 1.5rem; border-radius: 1rem; border: 1px solid rgba(255,255,255,0.07); }
+    .uikit-label { font-size: 0.7rem; color: #64748b; font-family: monospace; margin-top: 0.5rem; }
+    .swatch { width: 100%; height: 60px; border-radius: 0.75rem; margin-bottom: 0.5rem; border: 1px solid rgba(255,255,255,0.07); }
+    .uikit-note { background: rgba(0,206,201,0.06); border: 1px solid rgba(0,206,201,0.2); border-radius: 0.75rem; padding: 1rem 1.25rem; margin-top: 1rem; font-size: 0.85rem; color: #94a3b8; }
+    .uikit-note strong { color: #00cec9; }
+    .uikit-rule { background: rgba(232,67,147,0.06); border: 1px solid rgba(232,67,147,0.2); border-radius: 0.75rem; padding: 1rem 1.25rem; margin-top: 1rem; font-size: 0.85rem; color: #94a3b8; }
+    .uikit-rule strong { color: #fd79a8; }
+    hr.uikit-divider { border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 3rem 0; }
+  </style>
+</head>
+<body class="bg-w-bg text-w-text font-sans p-8 max-w-[1200px] mx-auto">
+
+  <!-- Header -->
+  <div class="mb-12">
+    <span class="font-logo text-2xl gradient-text">octor</span>
+    <h1 class="text-4xl font-extrabold tracking-tight mt-4 mb-2">UIKit Reference</h1>
+    <p class="text-w-sub text-lg">Design tokens, components, and patterns for the Octor web-ui project.</p>
+    <p class="text-w-muted text-sm mt-2">Open this file in a browser after running <code class="text-w-cyan">npm run build</code>. Loads <code class="text-w-cyan">assets/dist/style.css</code>.</p>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       1. COLOR PALETTE
+       ========================================================= -->
+  <div class="uikit-section" id="colors">
+    <h2>1. Color Palette</h2>
+    <p class="desc">Custom <code>w-*</code> color tokens defined in <code>tailwind.config.js</code>. Use as <code>bg-w-{name}</code>, <code>text-w-{name}</code>, <code>border-w-{name}</code>.</p>
+
+    <div class="uikit-grid">
+      <div>
+        <div class="swatch" style="background:#0a0e1a"></div>
+        <div class="text-sm font-semibold">bg</div>
+        <div class="uikit-label">#0a0e1a &middot; bg-w-bg</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#111827"></div>
+        <div class="text-sm font-semibold">surface</div>
+        <div class="uikit-label">#111827 &middot; bg-w-surface</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#1a2235"></div>
+        <div class="text-sm font-semibold">card</div>
+        <div class="uikit-label">#1a2235 &middot; bg-w-card</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#e84393"></div>
+        <div class="text-sm font-semibold">pink</div>
+        <div class="uikit-label">#e84393 &middot; bg-w-pink</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#fd79a8"></div>
+        <div class="text-sm font-semibold">pinkL</div>
+        <div class="uikit-label">#fd79a8 &middot; text-w-pinkL</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#6c5ce7"></div>
+        <div class="text-sm font-semibold">purple</div>
+        <div class="uikit-label">#6c5ce7 &middot; bg-w-purple</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#a29bfe"></div>
+        <div class="text-sm font-semibold">purpleL</div>
+        <div class="uikit-label">#a29bfe &middot; text-w-purpleL</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#00cec9"></div>
+        <div class="text-sm font-semibold">cyan</div>
+        <div class="uikit-label">#00cec9 &middot; text-w-cyan</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#f1f5f9"></div>
+        <div class="text-sm font-semibold">text</div>
+        <div class="uikit-label">#f1f5f9 &middot; text-w-text</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#94a3b8"></div>
+        <div class="text-sm font-semibold">sub</div>
+        <div class="uikit-label">#94a3b8 &middot; text-w-sub</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#64748b"></div>
+        <div class="text-sm font-semibold">muted</div>
+        <div class="uikit-label">#64748b &middot; text-w-muted</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:rgba(255,255,255,0.07)"></div>
+        <div class="text-sm font-semibold">line</div>
+        <div class="uikit-label">rgba(255,255,255,0.07) &middot; border-w-line</div>
+      </div>
+    </div>
+
+    <div class="uikit-note">
+      <strong>DaisyUI base colors</strong> are overridden in <code>style.css</code>: base-100&rarr;#0a0e1a, base-200&rarr;#111827, base-300&rarr;#1a2235, accent&rarr;#e84393.
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       2. TYPOGRAPHY
+       ========================================================= -->
+  <div class="uikit-section" id="typography">
+    <h2>2. Typography</h2>
+    <p class="desc">Font families: <code>font-sans</code> (Inter), <code>font-logo</code> (Comfortaa). Sizes use <code>clamp()</code> for fluid scaling.</p>
+
+    <div class="uikit-card bg-w-surface mb-6">
+      <h1 class="text-[clamp(2.5rem,5vw,4rem)] font-extrabold tracking-tight leading-tight mb-4">Hero Heading (h1)</h1>
+      <div class="uikit-label">text-[clamp(2.5rem,5vw,4rem)] font-extrabold tracking-tight</div>
+    </div>
+
+    <div class="uikit-card bg-w-surface mb-6">
+      <h2 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">Section Heading (h2)</h2>
+      <div class="uikit-label">text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight</div>
+    </div>
+
+    <div class="uikit-card bg-w-surface mb-6">
+      <h3 class="text-lg font-bold mb-2">Card Title (h3)</h3>
+      <div class="uikit-label">text-lg font-bold</div>
+    </div>
+
+    <div class="uikit-card bg-w-surface mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-w-muted">Profile Section Label</h2>
+        <div class="flex-1 h-px bg-w-line/50"></div>
+      </div>
+      <div class="uikit-label">text-xs font-semibold tracking-widest uppercase text-w-muted + h-px divider</div>
+    </div>
+
+    <div class="uikit-card bg-w-surface mb-6">
+      <p class="text-[1.15rem] text-w-sub leading-relaxed mb-3">Intro paragraph &mdash; used below hero headings for page descriptions.</p>
+      <p class="text-w-sub leading-relaxed mb-3">Body text &mdash; regular content paragraphs.</p>
+      <p class="text-sm text-w-muted mb-3">Small text &mdash; secondary descriptions and helper text.</p>
+      <p class="text-xs text-w-muted">Extra-small &mdash; labels, captions, footnotes.</p>
+      <div class="uikit-label mt-4">text-[1.15rem] text-w-sub | text-w-sub | text-sm text-w-muted | text-xs text-w-muted</div>
+    </div>
+
+    <div class="uikit-card bg-w-surface mb-6">
+      <span class="text-3xl font-extrabold gradient-text">Gradient Text</span>
+      <div class="uikit-label">gradient-text (pink&rarr;purple via CSS class)</div>
+    </div>
+
+    <div class="uikit-card bg-w-surface">
+      <span class="text-3xl font-extrabold gradient-stat">42.5K</span>
+      <div class="uikit-label">gradient-stat (same gradient, for stat values)</div>
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       3. BADGES
+       ========================================================= -->
+  <div class="uikit-section" id="badges">
+    <h2>3. Badges</h2>
+    <p class="desc">Section header badges, small feature tags, and stat badges. Color indicates section theme.</p>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Section Header Badges (large)</h3>
+    <div class="uikit-row mb-6">
+      <span class="badge badge-lg bg-w-pink/10 border-w-pink/30 text-w-pinkL gap-2 px-4 py-3 text-xs font-semibold tracking-widest uppercase">
+        Pink Section
+      </span>
+      <span class="badge badge-lg bg-w-purple/10 border-w-purple/30 text-w-purpleL gap-2 px-4 py-3 text-xs font-semibold tracking-widest uppercase">
+        Purple Section
+      </span>
+      <span class="badge badge-lg bg-w-cyan/10 border-w-cyan/30 text-w-cyan gap-2 py-3 px-5 text-sm font-medium">
+        Cyan Section
+      </span>
+    </div>
+    <div class="uikit-label mb-6">badge badge-lg bg-w-{color}/10 border-w-{color}/30 text-w-{colorL}</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Small Feature Tags</h3>
+    <div class="uikit-row mb-6">
+      <span class="badge badge-sm bg-w-cyan/10 border-w-cyan/30 text-w-cyan text-[0.7rem] tracking-wide uppercase">Feature</span>
+      <span class="badge badge-sm bg-w-pink/10 border-w-pink/30 text-w-pinkL text-[0.7rem] tracking-wide uppercase">New</span>
+      <span class="badge badge-sm bg-w-purple/10 border-w-purple/30 text-w-purpleL text-[0.7rem] tracking-wide uppercase">Beta</span>
+    </div>
+    <div class="uikit-label mb-6">badge badge-sm bg-w-{color}/10 border-w-{color}/30 text-w-{color}</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Profile Stat Badges</h3>
+    <div class="uikit-row">
+      <span class="badge badge-sm bg-base-300/80 border-w-line/50 text-w-sub gap-1">Unlimited bandwidth</span>
+      <span class="badge badge-sm bg-base-300/80 border-w-line/50 text-w-sub gap-1">Ad-free</span>
+      <span class="badge badge-sm bg-base-300/80 border-w-line/50 text-w-sub gap-1">100Mbps</span>
+    </div>
+    <div class="uikit-label">badge badge-sm bg-base-300/80 border-w-line/50 text-w-sub</div>
+
+    <div class="uikit-rule">
+      <strong>Rule:</strong> Badge color = section theme. Pink for features/profile, purple for comparison, cyan for info/tools.
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       4. BUTTONS
+       ========================================================= -->
+  <div class="uikit-section" id="buttons">
+    <h2>4. Buttons</h2>
+    <p class="desc">Button variants for different contexts. Each has a designated use case.</p>
+
+    <div class="uikit-row mb-4">
+      <button class="btn btn-pink">btn-pink (CTA)</button>
+      <button class="btn btn-soft">btn-soft (Profile/Form)</button>
+      <button class="btn btn-soft-cyan">btn-soft-cyan (Cyan)</button>
+      <button class="btn btn-soft-purple">btn-soft-purple (Purple)</button>
+      <button class="btn btn-ghost text-w-sub">btn-ghost</button>
+    </div>
+    <div class="uikit-label mb-6">btn btn-{variant}</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Ghost Variants</h3>
+    <div class="uikit-row mb-4">
+      <button class="btn btn-ghost btn-sm text-w-muted gap-1.5">Try demo</button>
+      <button class="btn btn-ghost btn-sm text-w-pinkL hover:bg-w-pink/10">Delete</button>
+      <button class="btn btn-ghost text-w-muted hover:text-error text-sm">Log out</button>
+    </div>
+    <div class="uikit-label mb-6">btn btn-ghost btn-sm text-w-{color}</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Outlined Ghost Buttons</h3>
+    <p class="desc">Subtle bordered buttons for navigation, actions, and secondary controls. On hover: border turns pink, text turns white. Used across navbar, resource pages, profile, and file browser.</p>
+    <div class="uikit-row mb-4">
+      <a class="btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content whitespace-nowrap" href="#">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" /></svg>
+        My Library
+      </a>
+      <a class="btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content" href="#">Install in Stremio</a>
+      <a class="btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content whitespace-nowrap" href="#">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+        .torrent
+      </a>
+      <a class="btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content whitespace-nowrap" href="#">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+        ZIP [1.2 GB]
+      </a>
+    </div>
+    <div class="uikit-label mb-4">btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Joined Outlined Ghost Buttons (navbar)</h3>
+    <div class="uikit-row mb-4">
+      <div class="join">
+        <a class="btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content join-item" href="#">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 21C20 19.6044 20 18.9067 19.8278 18.3389C19.44 17.0605 18.4395 16.06 17.1611 15.6722C16.5933 15.5 15.8956 15.5 14.5 15.5H9.5C8.10444 15.5 7.40665 15.5 6.83886 15.6722C5.56045 16.06 4.56004 17.0605 4.17224 18.3389C4 18.9067 4 19.6044 4 21M16.5 7.5C16.5 9.98528 14.4853 12 12 12C9.51472 12 7.5 9.98528 7.5 7.5C7.5 5.01472 9.51472 3 12 3C14.4853 3 16.5 5.01472 16.5 7.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Profile
+        </a>
+        <a class="btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content join-item" href="#">Login</a>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">Same classes + <code>join-item</code> inside a <code>join</code> container</div>
+
+    <div class="uikit-note mb-6">
+      <strong>Usage:</strong> Navbar (My Library, Profile, Login), resource page (.torrent, ZIP download), profile (Install in Stremio), file browser (ZIP download). <strong>Hover</strong> = pink border + white text. Icons use <code>currentColor</code> so they follow the text color transition.
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Disabled State</h3>
+    <div class="uikit-row">
+      <button class="btn btn-pink" disabled>btn-pink disabled</button>
+      <button class="btn btn-soft" disabled>btn-soft disabled</button>
+      <button class="btn btn-soft-cyan" disabled>btn-soft-cyan disabled</button>
+      <button class="btn btn-soft-purple" disabled>btn-soft-purple disabled</button>
+    </div>
+
+    <div class="uikit-rule mt-6">
+      <strong>Rules:</strong><br>
+      &bull; <code>btn-pink</code> = homepage &amp; tools page CTAs only<br>
+      &bull; <code>btn-soft</code> = profile &amp; support form actions (pink tint)<br>
+      &bull; <code>btn-soft-cyan</code> = secondary actions in cyan (info, tools, content)<br>
+      &bull; <code>btn-soft-purple</code> = user-generated content in purple (My Subtitles) &mdash; sibling to <code>btn-soft-cyan</code> where two coordinated toggles need different colors<br>
+      &bull; <code>btn-ghost border border-w-line</code> = outlined ghost &mdash; nav, downloads, secondary actions (hover: pink border + white text)<br>
+      &bull; <code>btn-ghost</code> (no border) = tertiary actions (demo, delete, logout)
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       5. FORM INPUTS
+       ========================================================= -->
+  <div class="uikit-section" id="forms">
+    <h2>5. Form Inputs</h2>
+    <p class="desc">Input fields adapt focus color to section context: pink for profile, cyan for support/tools.</p>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Text Input (profile context)</h3>
+    <div class="uikit-card bg-w-surface mb-6" style="max-width:500px">
+      <input type="text" class="input w-full bg-base-300 border-w-line focus:border-w-pink focus:outline-none" placeholder="https://example.com" value="">
+      <div class="uikit-label">input bg-base-300 border-w-line focus:border-w-pink focus:outline-none</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Text Input (support/tools context)</h3>
+    <div class="uikit-card bg-w-surface mb-6" style="max-width:500px">
+      <input type="text" class="input w-full bg-base-300 border-w-line focus:border-w-cyan focus:outline-none" placeholder="Your email address" value="">
+      <div class="uikit-label">input bg-base-300 border-w-line focus:border-w-cyan focus:outline-none</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Select Dropdown</h3>
+    <div class="uikit-card bg-w-surface mb-6" style="max-width:500px">
+      <select class="select w-full bg-base-300 border-w-line focus:border-w-pink focus:outline-none">
+        <option>Option 1</option>
+        <option>Option 2</option>
+        <option>Option 3</option>
+      </select>
+      <div class="uikit-label">select bg-base-300 border-w-line focus:border-w-pink focus:outline-none</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Textarea</h3>
+    <div class="uikit-card bg-w-surface mb-6" style="max-width:500px">
+      <textarea class="textarea w-full bg-base-300 border-w-line focus:border-w-cyan focus:outline-none" rows="3" placeholder="Describe your issue..."></textarea>
+      <div class="uikit-label">textarea bg-base-300 border-w-line focus:border-w-cyan focus:outline-none</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Readonly Input</h3>
+    <div class="uikit-card bg-w-surface mb-6" style="max-width:500px">
+      <input type="text" class="input w-full bg-base-300 border-w-line" value="https://octor/stremio/manifest.json" readonly>
+      <div class="uikit-label">input bg-base-300 border-w-line (readonly)</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Join Group (input + button)</h3>
+    <div class="uikit-card bg-w-surface" style="max-width:500px">
+      <div class="join w-full">
+        <select class="select bg-base-300 border-w-line focus:border-w-pink focus:outline-none join-item">
+          <option>Torrent</option>
+          <option>WebDAV</option>
+        </select>
+        <input type="text" class="input bg-base-300 border-w-line focus:border-w-pink focus:outline-none w-full join-item" placeholder="Enter URL...">
+        <button class="btn btn-soft join-item">Add</button>
+      </div>
+      <div class="uikit-label">join w-full &rarr; select join-item + input join-item + btn btn-soft join-item</div>
+    </div>
+
+    <div class="uikit-rule mt-4">
+      <strong>Focus color rules:</strong><br>
+      &bull; <code>focus:border-w-pink</code> = profile section<br>
+      &bull; <code>focus:border-w-cyan</code> = support form &amp; tools pages
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       6. TOGGLES
+       ========================================================= -->
+  <div class="uikit-section" id="toggles">
+    <h2>6. Toggles</h2>
+    <p class="desc">DaisyUI toggle with custom <code>toggle-soft</code> variant for pink-tinted checked state.</p>
+
+    <div class="uikit-card bg-w-surface" style="max-width:500px">
+      <div class="flex flex-col gap-4">
+        <label class="label cursor-pointer gap-3 justify-start">
+          <input type="checkbox" class="toggle toggle-soft" checked>
+          <span class="label-text text-sm">toggle-soft (checked)</span>
+        </label>
+        <label class="label cursor-pointer gap-3 justify-start">
+          <input type="checkbox" class="toggle toggle-soft">
+          <span class="label-text text-sm">toggle-soft (unchecked)</span>
+        </label>
+        <label class="label cursor-pointer gap-3 justify-start">
+          <input type="checkbox" class="toggle text-accent" checked>
+          <span class="label-text text-sm">Default toggle (checked)</span>
+        </label>
+        <label class="label cursor-pointer gap-3 justify-start">
+          <input type="checkbox" class="toggle" disabled>
+          <span class="label-text text-sm">Disabled toggle</span>
+        </label>
+      </div>
+      <div class="uikit-label mt-4">toggle toggle-soft | toggle text-accent | toggle (disabled)</div>
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       7. CARDS
+       ========================================================= -->
+  <div class="uikit-section" id="cards">
+    <h2>7. Cards</h2>
+    <p class="desc">Card patterns for features, profile sections, and premium tiers.</p>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Feature Card (with hover)</h3>
+    <div class="uikit-grid mb-6" style="max-width:700px">
+      <div class="bg-w-card border border-w-line rounded-2xl p-6 hover:border-w-pink/30 transition-all duration-300">
+        <div class="w-12 h-12 rounded-xl bg-w-pink/10 flex items-center justify-center mb-4">
+          <svg class="w-6 h-6 text-w-pinkL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h3 class="text-lg font-bold mb-2">Feature Title</h3>
+        <p class="text-sm text-w-sub leading-relaxed">Feature description goes here with supporting text.</p>
+      </div>
+      <div class="bg-w-card border border-w-line rounded-2xl p-6 hover:border-w-purple/30 transition-all duration-300">
+        <div class="w-12 h-12 rounded-xl bg-w-purple/10 flex items-center justify-center mb-4">
+          <svg class="w-6 h-6 text-w-purpleL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <h3 class="text-lg font-bold mb-2">Another Feature</h3>
+        <p class="text-sm text-w-sub leading-relaxed">Supporting description for this feature card.</p>
+      </div>
+    </div>
+    <div class="uikit-label mb-8">bg-w-card border border-w-line rounded-2xl p-6 hover:border-w-{color}/30 transition-all</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Profile Section Container</h3>
+    <div class="bg-base-200/40 rounded-2xl p-6 border border-w-line/50 mb-6" style="max-width:500px">
+      <h3 class="text-sm font-semibold mb-2">Section Title</h3>
+      <p class="text-xs text-w-muted mb-3">Helper description text</p>
+      <div class="bg-base-200/50 rounded-xl p-4">
+        <p class="text-sm text-w-sub">Inner content area</p>
+      </div>
+    </div>
+    <div class="uikit-label mb-8">bg-base-200/40 rounded-2xl p-6 border border-w-line/50</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Tier / Premium Card</h3>
+    <div class="relative overflow-hidden rounded-2xl p-6 bg-gradient-to-br from-w-pink/10 via-base-300/50 to-base-300/50 border border-w-pink/20" style="max-width:500px">
+      <div class="absolute top-0 right-0 w-40 h-40 bg-w-pink/5 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+      <div class="relative">
+        <h2 class="text-[1.6rem] font-extrabold tracking-tight capitalize text-w-pinkL flex items-center gap-2 mb-5">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          Premium Tier
+        </h2>
+        <div class="flex flex-wrap gap-2">
+          <span class="badge badge-sm bg-base-300/80 border-w-line/50 text-w-sub gap-1">Unlimited bandwidth</span>
+          <span class="badge badge-sm bg-base-300/80 border-w-line/50 text-w-sub gap-1">Ad-free</span>
+        </div>
+      </div>
+    </div>
+    <div class="uikit-label">bg-gradient-to-br from-w-pink/10 via-base-300/50 to-base-300/50 border border-w-pink/20</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4 mt-8">Video Card (library + discover)</h3>
+    <p class="desc">Shared poster cards used in <code>templates/partials/library/video_list.html</code> and <code>assets/src/js/lib/discover/components/ItemGrid.jsx</code>. The visual primitives are defined as CSS classes in <code>assets/src/styles/style.css</code> so both the Go-template and Preact implementations stay in sync.</p>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-6" style="max-width:780px">
+      <!-- Example 1: unwatched, unrated -->
+      <a href="#" class="group flex" onclick="event.preventDefault()">
+        <div class="w-card-frame">
+          <figure class="aspect-[2/3] overflow-hidden relative">
+            <div class="w-full h-full bg-gradient-to-br from-w-purple/20 via-w-pink/10 to-w-cyan/15 text-w-purpleL/60 flex items-center justify-center">
+              <div class="text-center font-bold text-lg p-3 line-clamp-3 drop-shadow-sm">Inception</div>
+            </div>
+            <button class="w-card-badge-ghost top-2 right-2 hover:text-green-400" title="Mark as watched" onclick="event.preventDefault();event.stopPropagation()">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/><path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
+            </button>
+            <button class="w-card-badge-ghost top-2 left-2 hover:text-yellow-400" title="Rate" onclick="event.preventDefault();event.stopPropagation()">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z"/></svg>
+            </button>
+          </figure>
+          <div class="p-3">
+            <h3 class="w-card-title">Inception</h3>
+            <div class="flex justify-between items-center mt-1.5">
+              <span class="text-xs text-w-muted">2010</span>
+            </div>
+          </div>
+        </div>
+      </a>
+
+      <!-- Example 2: watched + rated -->
+      <a href="#" class="group flex" onclick="event.preventDefault()">
+        <div class="w-card-frame is-watched">
+          <figure class="aspect-[2/3] overflow-hidden relative">
+            <div class="w-full h-full bg-gradient-to-br from-w-cyan/15 via-w-purple/10 to-w-pink/15 text-w-purpleL/60 flex items-center justify-center">
+              <div class="text-center font-bold text-lg p-3 line-clamp-3 drop-shadow-sm">Interstellar</div>
+            </div>
+            <button class="w-card-badge top-2 right-2 text-green-400 uppercase tracking-wider" title="Unmark watched" onclick="event.preventDefault();event.stopPropagation()">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="w-card-badge-label">Watched</span>
+            </button>
+            <button class="w-card-badge top-2 left-2 text-yellow-400" title="Change rating" onclick="event.preventDefault();event.stopPropagation()">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clip-rule="evenodd"/></svg>
+              9
+            </button>
+          </figure>
+          <div class="p-3">
+            <h3 class="w-card-title">Interstellar</h3>
+            <div class="flex justify-between items-center mt-1.5">
+              <span class="text-xs text-w-muted">2014</span>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="uikit-rule">
+      <strong>API surface:</strong>
+      <ul class="list-disc list-inside mt-2 space-y-1">
+        <li><code>.w-card-frame</code> — card container. Auto-applies purple-themed border + hover. Has <code>container-type: inline-size</code> for container queries. Wrap inside <code>.group</code> parent (the link/clickable wrapper).</li>
+        <li><code>.w-card-frame.is-watched</code> — modifier, sets <code>opacity: 0.7</code> for watched items.</li>
+        <li><code>.w-card-title</code> — card title. Auto-applies <code>w-purpleL</code> hover color when parent <code>.group:hover</code>.</li>
+        <li><code>.w-card-badge</code> — overlay badge with text label. Add positioning (<code>top-2 right-2</code>) and color (<code>text-green-400</code>, <code>text-yellow-400</code>) inline.</li>
+        <li><code>.w-card-badge-label</code> — wrap badge text in this class. Auto-hidden when card &lt; 210px via container query to prevent badge overlap.</li>
+        <li><code>.w-card-badge-ghost</code> — icon-only overlay, hover-revealed on desktop, <code>opacity: 0.5</code> + enlarged to <code>2.5rem</code> on touch devices. Add positioning + hover color (<code>hover:text-green-400</code>) inline.</li>
+        <li><code>.w-card-stars-compact</code> — compact rating display (single star icon + number). Auto-hidden when card &ge; 210px.</li>
+        <li><code>.w-card-stars-full</code> — full 5-star rating row. Auto-hidden when card &lt; 210px.</li>
+      </ul>
+    </div>
+
+    <div class="uikit-note">
+      <strong>Convention:</strong> watched = green (<code>text-green-400</code>) at top-right, rating = yellow (<code>text-yellow-400</code>) at top-left. Don't swap colors or sides — both Go template and Preact rely on this.
+    </div>
+
+    <div class="uikit-note">
+      <strong>Container queries (210px threshold):</strong> <code>.w-card-frame</code> has <code>container-type: inline-size</code>. When the card is narrower than 210px, badge text labels (<code>.w-card-badge-label</code>) are hidden and <code>.w-card-badge</code> shrinks to icon-only padding. Stars switch from full (<code>.w-card-stars-full</code>) to compact (<code>.w-card-stars-compact</code>). This is card-width-based, not screen-width-based, so it adapts correctly regardless of the number of grid columns.
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       8. LISTS
+       ========================================================= -->
+  <div class="uikit-section" id="lists">
+    <h2>8. Lists</h2>
+    <p class="desc">Draggable list items (profile backends/addons) and empty state.</p>
+
+    <div class="bg-base-200/40 rounded-2xl p-6 border border-w-line/50" style="max-width:500px">
+      <h3 class="text-sm font-semibold mb-2">Streaming Backends</h3>
+      <p class="text-xs text-w-muted mb-3">Drag to reorder by preference</p>
+
+      <ul class="w-full bg-base-200/50 rounded-xl divide-y divide-w-line">
+        <!-- Regular item -->
+        <li class="p-4 cursor-move select-none flex items-center gap-4 hover:bg-base-300/30 transition-colors">
+          <span class="opacity-60">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5"><path d="M8 6h8v2H8V6zm0 5h8v2H8v-2zm0 5h8v2H8v-2z"/></svg>
+          </span>
+          <div class="flex-1">
+            <div class="font-medium text-sm">https://example.com/addon</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="label cursor-pointer gap-2">
+              <input type="checkbox" class="toggle toggle-soft" checked>
+              <span class="label-text text-xs">Enabled</span>
+            </label>
+            <button type="button" class="btn btn-ghost btn-sm text-w-pinkL hover:bg-w-pink/10">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"/></svg>
+            </button>
+          </div>
+        </li>
+        <!-- Disabled item -->
+        <li class="p-4 select-none flex items-center gap-4 opacity-60">
+          <span class="opacity-30">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5"><path d="M8 6h8v2H8V6zm0 5h8v2H8v-2zm0 5h8v2H8v-2z"/></svg>
+          </span>
+          <div class="flex-1">
+            <div class="font-medium text-sm">Octor (default, cannot reorder)</div>
+          </div>
+        </li>
+        <!-- Empty state -->
+        <li class="p-8 text-center hidden">
+          <p class="text-w-muted">No items added yet</p>
+          <p class="text-xs text-w-muted mt-2">Add items to extend functionality</p>
+        </li>
+      </ul>
+    </div>
+
+    <div class="uikit-label mt-4 mb-6">List: bg-base-200/50 rounded-xl divide-y divide-w-line<br>Item: p-4 cursor-move flex items-center gap-4 hover:bg-base-300/30</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Empty State (visible)</h3>
+    <div class="bg-base-200/50 rounded-xl" style="max-width:500px">
+      <div class="p-8 text-center">
+        <p class="text-w-muted">No addon URLs added yet</p>
+        <p class="text-xs text-w-muted mt-2">Add Stremio addon URLs to extend your content library</p>
+      </div>
+    </div>
+    <div class="uikit-label">p-8 text-center text-w-muted</div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       9. ALERTS
+       ========================================================= -->
+  <div class="uikit-section" id="alerts">
+    <h2>9. Alerts &amp; Progress Log</h2>
+    <p class="desc">
+      Progress alerts are JS-driven components (<code>initProgressLog</code> from <code>assets/src/js/lib/progressLog.js</code>)
+      that render real-time log output. Container uses card-based styling (<code>bg-w-surface</code>, <code>border-w-line</code>)
+      with colored dot prefixes (pulsing on in-progress) and tinted summary rows (no dots).
+      See live demos at <code>/tests/progress_log</code>.
+    </p>
+
+    <!-- 9.1 Log Line States -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Log Line States</h3>
+    <div class="progress-alert mb-6" style="max-width:600px">
+      <pre><span class="line">regular info line (gray dot, gray text)</span></pre>
+      <pre class="inprogress"><span class="line">in progress &mdash; pulsing cyan dot<span class="task-status"></span></span></pre>
+      <pre class="statusupdate"><span class="line">status update &mdash; pulsing cyan dot + counter<span class="task-status">42</span></span></pre>
+      <pre class="done"><span class="line">done &mdash; cyan checkmark &#x2713;<span class="task-status">done</span></span></pre>
+      <pre class="warn"><span class="line">warning &mdash; pink warning &#x26A0;<span class="task-status">warn</span></span></pre>
+      <pre class="error"><span class="line">error &mdash; pink cross &#x2715;<span class="task-status">error</span></span></pre>
+      <pre class="continue"><span class="line">...continued line (no dot, indented)</span></pre>
+    </div>
+    <div class="uikit-label mb-8">
+      <code>pre</code> states: (none)=info, <code>inprogress</code>, <code>statusupdate</code>, <code>done</code>, <code>warn</code>, <code>error</code>, <code>continue</code><br>
+      Icons: gray dot (info) &middot; cyan pulsing dot (<code>inprogress</code>/<code>statusupdate</code>) &middot; cyan &#x2713; (<code>done</code>) &middot; pink &#x2715; (<code>error</code>) &middot; pink &#x26A0; (<code>warn</code>)<br>
+      Status text via <code>span.task-status</code> &mdash; hidden on <code>done</code>/<code>error</code>/<code>warn</code> (icons are sufficient), shows <code>(42)</code> for statusupdate
+    </div>
+
+    <!-- 9.2 Summary Rows -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Summary Rows</h3>
+    <p class="desc">Tinted rows shown below a log line when done/warn/error includes a message. No dot prefix.</p>
+    <div class="progress-alert mb-6" style="max-width:600px">
+      <pre class="done"><span class="line">transfer complete</span></pre>
+      <pre class="done-summary"><span class="line">file saved successfully</span></pre>
+      <pre class="warn"><span class="line">slow connection</span></pre>
+      <pre class="warn-summary"><span class="line">speed limited to 5Mbps &mdash; donate to increase!</span></pre>
+      <pre class="error"><span class="line">peer disconnected</span></pre>
+      <pre class="error-summary"><span class="line">no active seeders found for this torrent</span></pre>
+      <pre class="done"><span class="line">download ready</span></pre>
+      <pre class="redirect-summary"><span class="line">redirecting to resource page...</span></pre>
+    </div>
+    <div class="uikit-label mb-8">
+      Cyan tint: <code>done-summary</code> / <code>download-summary</code> / <code>redirect-summary</code> &mdash; bg rgba(0,206,201,0.1), text #00cec9<br>
+      Pink tint: <code>warn-summary</code> / <code>error-summary</code> &mdash; bg rgba(232,67,147,0.1), text #fd79a8<br>
+      Summary rows use <code>mx-5 rounded-lg</code> to inset within the container
+    </div>
+
+    <!-- 9.3 Block variant with close buttons -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Block Variant with Close Buttons</h3>
+    <p class="desc">
+      <code>progress-alert-block</code> is the standard block layout used in templates.
+      Close buttons appear via <code>.alert-close-wrapper</code> container, revealed by JS on <code>close()</code>.
+      The <code>.close</code> class inside progress-alert inherits <code>btn-soft-cyan</code> styling.
+    </p>
+    <div class="progress-alert mb-6" style="max-width:600px">
+      <pre class="error"><span class="line">something went wrong</span></pre>
+      <pre class="error-summary"><span class="line">connection timed out, please try again</span></pre>
+      <div class="pt-3 flex justify-end gap-2 px-5">
+        <a class="close">got it!</a>
+      </div>
+    </div>
+    <div class="uikit-label mb-4">
+      Close button: <code>.close</code> auto-styled as <code>btn btn-sm btn-soft-cyan</code> via CSS<br>
+      Wrapper: <code>.alert-close-wrapper</code> with <code>pt-3 flex justify-end gap-2 px-5</code>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">With Conditional Error Button</h3>
+    <p class="desc">Extra buttons (e.g. error-specific actions) wrapped in <code>.error</code> div, shown/hidden by JS based on state.</p>
+    <div class="progress-alert mb-6" style="max-width:600px">
+      <pre class="error"><span class="line">something went wrong</span></pre>
+      <pre class="error-summary"><span class="line">connection timed out</span></pre>
+      <div class="pt-3 flex justify-end gap-2 px-5">
+        <div>
+          <a class="close">error button?!</a>
+        </div>
+        <a class="close">got it!</a>
+      </div>
+    </div>
+    <div class="uikit-label mb-8">
+      Error-only button: wrapped in <code>&lt;div class="error hidden"&gt;</code>, revealed via <code>enableError()</code> on error state<br>
+      Template: <code>&lt;a class="close closeable-close"&gt;got it!&lt;/a&gt;</code> &mdash; <code>.closeable-close</code> hides the entire alert on click
+    </div>
+
+    <!-- 9.4 One-line variant -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">One-line Variant</h3>
+    <p class="desc">Compact inline layout &mdash; log line and close button side by side.</p>
+    <div class="progress-alert progress-alert-oneline mb-6" style="max-width:600px">
+      <pre><span class="line">one line alert</span></pre>
+      <a class="close" style="margin-right:1rem">ok</a>
+    </div>
+    <div class="uikit-label mb-8">
+      <code>progress-alert progress-alert-oneline</code> &mdash; uses <code>flex items-center</code>, pre takes <code>flex-grow</code>, close button has <code>mr-4</code>
+    </div>
+
+    <!-- 9.5 Done with close -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Done State with Close Button</h3>
+    <div class="progress-alert mb-6" style="max-width:600px">
+      <pre class="done"><span class="line">operation completed successfully</span></pre>
+      <div class="pt-3 flex justify-end gap-2 px-5">
+        <a class="close">got it!</a>
+      </div>
+    </div>
+    <div class="uikit-label mb-8">
+      Same pattern as error, but with <code>done</code> state &mdash; cyan checkmark, cyan text
+    </div>
+
+    <!-- 9.6 Design rules -->
+    <div class="uikit-rule mb-8">
+      <strong>Container:</strong> <code>bg-w-surface (#111827) border border-w-line shadow-lg rounded-box popin</code><br>
+      <strong>Log lines:</strong> <code>font-mono text-sm text-w-sub</code> with colored prefix icon via <code>::before</code> pseudo-element<br>
+      <strong>Icons:</strong> gray dot (info) &middot; pulsing cyan dot (<code>inprogress</code>/<code>statusupdate</code>) &middot; &#x2713; checkmark (<code>done</code>) &middot; &#x2715; cross (<code>error</code>) &middot; &#x26A0; warning (<code>warn</code>)<br>
+      <strong>Close buttons:</strong> <code>.close</code> inside progress-alert = <code>btn btn-sm</code> with cyan soft styling (rgba(0,206,201,0.10) bg, rgba(0,206,201,0.30) border)<br>
+      <strong>Entry animation:</strong> <code>popin</code> keyframes (scaleX 0.95&rarr;1, opacity 0&rarr;1)
+    </div>
+
+    <!-- 9.7 JS API -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">JavaScript API</h3>
+    <div class="uikit-card bg-w-surface mb-6">
+      <pre style="color:#94a3b8;font-size:0.8rem;font-family:monospace;white-space:pre-wrap;line-height:1.6">import { initProgressLog } from "../../lib/progressLog";
+
+// Initialize on a container element (must have .log-target inside)
+const log = initProgressLog(document.querySelector('.my-alert'));
+
+// Chain log entries
+log
+  .info('regular info message')               // gray dot, gray text
+  .inProgress('task1', 'connecting...')      // cyan pulsing dot
+  .updateStatus(42)                          // updates to "(42)" format
+  .done('download complete')                 // cyan checkmark + summary row
+  .warn('speed limited')                     // pink warning icon + summary row
+  .error('connection failed')                // pink cross icon + summary row
+  .close();                                  // reveals .alert-close-wrapper</pre>
+      <div class="uikit-label mt-4">
+        Import from <code>assets/src/js/lib/progressLog.js</code><br>
+        Each method returns an <code>Entry</code> for chaining &middot; <code>inProgress(tag, message)</code> creates new line &middot; <code>done/warn/error(message?)</code> updates the tagged line and optionally adds summary row
+      </div>
+    </div>
+
+    <!-- 9.8 Template pattern -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Template Pattern</h3>
+    <div class="uikit-card bg-w-surface mb-6">
+      <pre style="color:#94a3b8;font-size:0.8rem;font-family:monospace;white-space:pre-wrap;line-height:1.6">&lt;!-- Block variant (standard) --&gt;
+&lt;form class="hidden progress-alert progress-alert-block closeable"&gt;
+    &lt;div class="log-target"&gt;&lt;/div&gt;
+    &lt;div class="pt-3 flex justify-end hidden alert-close-wrapper"&gt;
+        &lt;div class="error hidden"&gt;
+            &lt;a class="close closeable-close"&gt;error action&lt;/a&gt;
+        &lt;/div&gt;
+        &lt;a class="close closeable-close"&gt;got it!&lt;/a&gt;
+    &lt;/div&gt;
+&lt;/form&gt;
+
+&lt;!-- One-line variant --&gt;
+&lt;div class="progress-alert progress-alert-oneline closeable"&gt;
+    &lt;pre&gt;one line alert&lt;/pre&gt;
+    &lt;a class="closeable-close close"&gt;ok&lt;/a&gt;
+&lt;/div&gt;
+
+&lt;!-- With SSE auto-connect --&gt;
+&lt;form class="hidden progress-alert progress-alert-block closeable"
+      data-async-progress-log="/job/log/url"
+      data-async-target="main"&gt;
+    &lt;div class="log-target"&gt;&lt;/div&gt;
+&lt;/form&gt;</pre>
+      <div class="uikit-label mt-4">
+        <code>.log-target</code> = where JS appends <code>&lt;pre&gt;</code> lines<br>
+        <code>.closeable-close</code> = click handler hides the entire alert<br>
+        <code>.alert-close-wrapper</code> = hidden by default, revealed on <code>close()</code><br>
+        <code>.error</code> wrapper = hidden by default, revealed on error state via <code>enableError()</code><br>
+        <code>data-async-progress-log</code> = SSE endpoint URL for auto-connecting to server events
+      </div>
+    </div>
+
+    <div class="uikit-note mb-8">
+      <strong>Reference:</strong> Live test page at <code>/tests/progress_log</code> &middot;
+      JS source: <code>assets/src/js/lib/progressLog.js</code> &middot;
+      CSS: <code>@utility progress-alert</code> in <code>assets/src/styles/style.css</code> &middot;
+      Test template: <code>templates/views/tests/progress_log.html</code>
+    </div>
+
+    <hr style="border:none;border-top:1px dashed rgba(255,255,255,0.07);margin:2rem 0">
+
+    <!-- 9.9 Info / Note boxes -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Info / Note Box</h3>
+    <div class="bg-w-cyan/5 border border-w-cyan/20 rounded-xl p-4 mb-4" style="max-width:500px">
+      <p class="text-sm text-w-sub"><strong class="text-w-cyan">Note:</strong> This is an informational message using cyan theme.</p>
+    </div>
+    <div class="uikit-label mb-6">bg-w-cyan/5 border border-w-cyan/20 rounded-xl p-4</div>
+
+    <div class="bg-w-pink/5 border border-w-pink/20 rounded-xl p-4" style="max-width:500px">
+      <p class="text-sm text-w-sub"><strong class="text-w-pinkL">Important:</strong> This is a warning/important note using pink theme.</p>
+    </div>
+    <div class="uikit-label">bg-w-pink/5 border border-w-pink/20 rounded-xl p-4</div>
+
+    <hr style="border:none;border-top:1px dashed rgba(255,255,255,0.07);margin:2rem 0">
+
+    <!-- 9.10 Upgrade Nudge (Slow Stream) -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Upgrade Nudge (Slow Stream)</h3>
+    <p class="desc">
+      Inline component shown inside a <code>progress-alert</code> when streaming bandwidth is insufficient.
+      Three states based on <code>IsRateLimited</code> + <code>TierName</code>:
+      free rate-limited (trial pitch) &middot; paid rate-limited (generic upgrade) &middot; genuinely slow (no upsell).
+      Source: <code>templates/views/action/errors/slow_download.html</code>.
+    </p>
+
+    <!-- State A: Free + rate-limited -->
+    <div class="uikit-label mb-2"><strong>A.</strong> Free user, plan caps speed &mdash; trial pitch with concrete number ("Get 50 Mbps")</div>
+    <div class="progress-alert mb-2" style="max-width:600px">
+      <pre class="done"><span class="line">resource data fetched</span></pre>
+      <pre class="done"><span class="line">stream link ready</span></pre>
+      <pre class="done"><span class="line">media probe analyzed</span></pre>
+      <pre class="error"><span class="line">speed check</span></pre>
+
+      <div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-w-line/40">
+        <div class="flex items-start gap-3 flex-wrap">
+          <div class="flex items-start gap-3 flex-1 min-w-[200px]">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 shrink-0 mt-0.5 text-w-pinkL">
+              <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+            </svg>
+            <h3 class="font-semibold text-base text-base-content leading-snug">Not enough speed for smooth playback</h3>
+          </div>
+          <a class="btn btn-sm btn-soft shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4">
+              <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+            </svg>
+            Get 50 Mbps
+          </a>
+        </div>
+        <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mt-4 mb-3">
+          <div class="text-center p-3 rounded-lg bg-base-300/40 border border-w-line">
+            <div class="text-2xl font-bold text-w-sub leading-none">5.0</div>
+            <div class="text-[11px] text-w-muted mt-1.5 uppercase tracking-wide">Mbps</div>
+            <div class="text-xs text-w-muted mt-1">you have &middot; free</div>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5 text-w-muted">
+            <path d="M5 12h14M13 6l6 6-6 6"/>
+          </svg>
+          <div class="text-center p-3 rounded-lg bg-w-pink/10 border border-w-pink/30">
+            <div class="text-2xl font-bold gradient-text leading-none">6.9</div>
+            <div class="text-[11px] text-w-pinkL mt-1.5 uppercase tracking-wide">Mbps</div>
+            <div class="text-xs text-w-pinkL/80 mt-1">file needs</div>
+          </div>
+        </div>
+        <div class="mt-4">
+          <p class="text-xs text-w-muted mb-2">Without upgrading:</p>
+          <ul class="text-sm text-w-sub space-y-1.5">
+            <li class="flex gap-2"><span class="text-w-muted">&bull;</span><span>pick a smaller file</span></li>
+            <li class="flex gap-2"><span class="text-w-muted">&bull;</span><span>pre-download instead of streaming</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="pt-3 px-5 flex flex-wrap gap-2 justify-end items-center">
+        <a class="close">Got it</a>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">
+      Free + IsRateLimited &mdash; Vault bullet hidden (Vault is paid-only) &middot; "more seeders" hint also hidden (the bottleneck is the user's pipe, not BT) &middot; CTA inside card top-right names the upsell ("Get 50 Mbps", trial pitch)
+    </div>
+
+    <!-- State B: Paid + rate-limited -->
+    <div class="uikit-label mb-2"><strong>B.</strong> Paid user still capped &mdash; generic upgrade, Vault offered as alternative</div>
+    <div class="progress-alert mb-2" style="max-width:600px">
+      <pre class="done"><span class="line">resource data fetched</span></pre>
+      <pre class="done"><span class="line">stream link ready</span></pre>
+      <pre class="done"><span class="line">media probe analyzed</span></pre>
+      <pre class="error"><span class="line">speed check</span></pre>
+
+      <div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-w-line/40">
+        <div class="flex items-start gap-3 flex-wrap">
+          <div class="flex items-start gap-3 flex-1 min-w-[200px]">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 shrink-0 mt-0.5 text-w-pinkL">
+              <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+            </svg>
+            <h3 class="font-semibold text-base text-base-content leading-snug">Not enough speed for smooth playback</h3>
+          </div>
+          <a class="btn btn-sm btn-soft shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4">
+              <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+            </svg>
+            Upgrade plan
+          </a>
+        </div>
+        <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mt-4 mb-3">
+          <div class="text-center p-3 rounded-lg bg-base-300/40 border border-w-line">
+            <div class="text-2xl font-bold text-w-sub leading-none">10.0</div>
+            <div class="text-[11px] text-w-muted mt-1.5 uppercase tracking-wide">Mbps</div>
+            <div class="text-xs text-w-muted mt-1">you have &middot; basic</div>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5 text-w-muted">
+            <path d="M5 12h14M13 6l6 6-6 6"/>
+          </svg>
+          <div class="text-center p-3 rounded-lg bg-w-pink/10 border border-w-pink/30">
+            <div class="text-2xl font-bold gradient-text leading-none">22.0</div>
+            <div class="text-[11px] text-w-pinkL mt-1.5 uppercase tracking-wide">Mbps</div>
+            <div class="text-xs text-w-pinkL/80 mt-1">file needs</div>
+          </div>
+        </div>
+        <div class="mt-4">
+          <p class="text-xs text-w-muted mb-2">Without upgrading:</p>
+          <ul class="text-sm text-w-sub space-y-1.5">
+            <li class="flex gap-2"><span class="text-w-muted">&bull;</span><span>pick a smaller file</span></li>
+            <li class="flex gap-2"><span class="text-w-muted">&bull;</span><span>pre-download instead of streaming</span></li>
+            <li class="flex gap-2"><span class="text-w-muted">&bull;</span><span>save to Vault and let it pre-fetch</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="pt-3 px-5 flex flex-wrap gap-2 justify-end items-center">
+        <a class="close">Got it</a>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">
+      Paid (non-free) + IsRateLimited &mdash; Vault bullet visible (already accessible) &middot; "more seeders" hint omitted (BT is not the bottleneck under a plan cap) &middot; CTA inside card top-right is generic ("Upgrade plan")
+    </div>
+
+    <!-- State C: Genuinely slow (BitTorrent bottleneck, not rate cap) -->
+    <div class="uikit-label mb-2"><strong>C.</strong> BitTorrent bottleneck &mdash; upgrade won't help, no upsell</div>
+    <div class="progress-alert mb-2" style="max-width:600px">
+      <pre class="done"><span class="line">resource data fetched</span></pre>
+      <pre class="done"><span class="line">stream link ready</span></pre>
+      <pre class="done"><span class="line">media probe analyzed</span></pre>
+      <pre class="error"><span class="line">speed check</span></pre>
+
+      <div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-w-line/40">
+        <div class="flex items-start gap-3 flex-wrap">
+          <div class="flex items-start gap-3 flex-1 min-w-[200px]">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 shrink-0 mt-0.5 text-w-pinkL">
+              <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+            </svg>
+            <h3 class="font-semibold text-base text-base-content leading-snug">Download speed is too low for streaming</h3>
+          </div>
+        </div>
+        <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mt-4 mb-3">
+          <div class="text-center p-3 rounded-lg bg-base-300/40 border border-w-line">
+            <div class="text-2xl font-bold text-w-sub leading-none">3.2</div>
+            <div class="text-[11px] text-w-muted mt-1.5 uppercase tracking-wide">Mbps</div>
+            <div class="text-xs text-w-muted mt-1">you have</div>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5 text-w-muted">
+            <path d="M5 12h14M13 6l6 6-6 6"/>
+          </svg>
+          <div class="text-center p-3 rounded-lg bg-w-pink/10 border border-w-pink/30">
+            <div class="text-2xl font-bold gradient-text leading-none">6.9</div>
+            <div class="text-[11px] text-w-pinkL mt-1.5 uppercase tracking-wide">Mbps</div>
+            <div class="text-xs text-w-pinkL/80 mt-1">file needs</div>
+          </div>
+        </div>
+        <div class="mt-4">
+          <p class="text-xs text-w-muted mb-2">What you can do:</p>
+          <ul class="text-sm text-w-sub space-y-1.5">
+            <li class="flex gap-2"><span class="text-w-muted">&bull;</span><span>pick a smaller file or one with more seeders</span></li>
+            <li class="flex gap-2"><span class="text-w-muted">&bull;</span><span>pre-download instead of streaming</span></li>
+            <li class="flex gap-2"><span class="text-w-muted">&bull;</span><span>save to Vault and let it pre-fetch</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="pt-3 px-5 flex flex-wrap gap-2 justify-end items-center">
+        <a class="close">Got it</a>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">
+      !IsRateLimited &mdash; alternative header changes to "What you can do", upgrade button hidden (network bottleneck, not paywall) &middot; Vault shown for non-free, omitted for free
+    </div>
+
+    <div class="uikit-rule mb-8">
+      <strong>Decision matrix:</strong><br>
+      <code>IsRateLimited && TierName=="free"</code> &rarr; trial pitch CTA <code>action.upgrade.free</code> ("Get 50 Mbps")<br>
+      <code>IsRateLimited && TierName!="free"</code> &rarr; generic CTA <code>action.upgrade.paid</code> ("Upgrade plan")<br>
+      <code>!IsRateLimited</code> &rarr; no upgrade CTA at all (network won't be helped by a higher cap)<br>
+      <strong>Vault bullet</strong> hidden when <code>TierName=="free"</code> (Vault is a paid feature)<br>
+      <strong>"More seeders" bullet</strong> only shown when <code>!IsRateLimited</code> &mdash; under a plan cap, extra seeders don't help because the user's pipe is the bottleneck, not BT<br>
+      <strong>Bolt icon</strong> in header &amp; CTA from heroicons (BoltIcon, 24x24)<br>
+      <strong>Right card</strong> uses <code>gradient-text</code> + <code>bg-w-pink/10 border-w-pink/30</code> to anchor the gap visually<br>
+      <strong>Umami</strong>: <code>data-umami-event="donate-slow-download"</code> + <code>data-umami-event-tier</code> for funnel split<br>
+      <strong>CTA placement</strong>: <em>inside</em> the card's header row, right of the title (wraps below on narrow viewports via <code>flex-wrap</code> + <code>min-w-[200px]</code> on the title block) &mdash; consistent with 9.11 download_file and 9.12 no_peers
+    </div>
+
+    <hr style="border:none;border-top:1px dashed rgba(255,255,255,0.07);margin:2rem 0">
+
+    <!-- 9.11 Download Ready (with optional upgrade nudge) -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Download Ready (with optional Upgrade Nudge)</h3>
+    <p class="desc">
+      Action panel shown after a download link is ready. For ad-supported tiers (<code>HasAds</code>),
+      a compact horizontal nudge appears above the actions. Action row groups copy chips on the left
+      (tertiary) and primary download CTA on the right with a ghost dismiss between.
+      Source: <code>templates/views/action/download_file.html</code>.
+    </p>
+
+    <!-- State A: Free + ads -->
+    <div class="uikit-label mb-2"><strong>A.</strong> Free user with ads &mdash; horizontal nudge offers trial speed; clean action row below</div>
+    <div class="progress-alert mb-2" style="max-width:680px">
+      <pre class="done"><span class="line">stream link ready</span></pre>
+      <pre class="done"><span class="line">warming up</span></pre>
+      <pre class="done"><span class="line">download ready</span></pre>
+
+      <div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-w-line/40 flex items-center gap-4 flex-wrap">
+        <div class="flex items-start gap-3 flex-1 min-w-[240px]">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 shrink-0 mt-0.5 text-w-pinkL">
+            <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+          </svg>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-base-content leading-snug">Downloading at 5 Mbps</div>
+            <div class="text-xs text-w-muted mt-0.5">A subscription removes the cap and ads</div>
+          </div>
+        </div>
+        <a class="btn btn-sm btn-soft shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4">
+            <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+          </svg>
+          Get 50 Mbps
+        </a>
+      </div>
+
+      <div class="pt-3 px-5 flex flex-wrap gap-2 items-center">
+        <div class="flex flex-wrap gap-1.5 mr-auto">
+          <a class="btn btn-xs btn-ghost border border-w-line text-w-sub gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            wget
+          </a>
+          <a class="btn btn-xs btn-ghost border border-w-line text-w-sub gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            curl
+          </a>
+          <a class="btn btn-xs btn-ghost border border-w-line text-w-sub gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            URL
+          </a>
+        </div>
+        <a class="btn btn-sm btn-ghost text-w-muted">cancel</a>
+        <a class="btn btn-sm btn-soft-cyan gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+          </svg>
+          start download
+        </a>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">
+      Nudge inline-horizontal &mdash; icon + 2-line text on left, CTA on right &middot;
+      Action row: copy chips group (<code>btn-xs btn-ghost</code> with copy-icon) on the left via <code>mr-auto</code>,
+      cancel as ghost text, primary download as <code>btn-sm btn-soft-cyan</code> with download arrow icon
+    </div>
+
+    <!-- State B: No ads (paid) -->
+    <div class="uikit-label mb-2"><strong>B.</strong> Paid user (no ads) &mdash; nudge omitted entirely, just clean action row</div>
+    <div class="progress-alert mb-2" style="max-width:680px">
+      <pre class="done"><span class="line">stream link ready</span></pre>
+      <pre class="done"><span class="line">warming up</span></pre>
+      <pre class="done"><span class="line">download ready</span></pre>
+
+      <div class="pt-3 px-5 flex flex-wrap gap-2 items-center">
+        <div class="flex flex-wrap gap-1.5 mr-auto">
+          <a class="btn btn-xs btn-ghost border border-w-line text-w-sub gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            wget
+          </a>
+          <a class="btn btn-xs btn-ghost border border-w-line text-w-sub gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            curl
+          </a>
+          <a class="btn btn-xs btn-ghost border border-w-line text-w-sub gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            URL
+          </a>
+        </div>
+        <a class="btn btn-sm btn-ghost text-w-muted">cancel</a>
+        <a class="btn btn-sm btn-soft-cyan gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+          </svg>
+          start download
+        </a>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">
+      <code>!HasAds</code> &rarr; nudge skipped &middot; same action row pattern, no upsell
+    </div>
+
+    <div class="uikit-rule mb-8">
+      <strong>Hierarchy:</strong> primary download (<code>btn-soft-cyan</code> with download icon) on far right &middot;
+      cancel as ghost text just before it &middot;
+      copy chips (<code>btn-xs btn-ghost border</code>) grouped on the left via <code>mr-auto</code><br>
+      <strong>Copy chips</strong>: hover transitions to cyan border &amp; text (<code>hover:border-w-cyan/50 hover:text-w-cyan</code>) &middot;
+      title attr carries full label for a11y, visible label is just the protocol name<br>
+      <strong>Nudge sub-text</strong> ("subscription removes cap and ads") names the second value (no ads) &mdash; cap alone isn't always the strongest hook<br>
+      <strong>Same Bolt/CTA</strong> pattern as 9.10 keeps the upgrade visual consistent across slow_download &amp; download_file
+    </div>
+
+    <hr style="border:none;border-top:1px dashed rgba(255,255,255,0.07);margin:2rem 0">
+
+    <!-- 9.12 No Peers (tier-aware Vault pitch) -->
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">No Peers (tier-aware Vault pitch)</h3>
+    <p class="desc">
+      Shown when stream/download warm-up times out (no active seeders). Two-card structure:
+      free user gets a Vault-as-value pitch + upgrade CTA; paid user gets the action prompt to use Vault directly (no upsell).
+      Uses the clock icon to convey "wait for peers" rather than a paywall framing.
+      Source: <code>templates/views/action/errors/no_peers.html</code>.
+    </p>
+
+    <!-- State A: Free + no peers -->
+    <div class="uikit-label mb-2"><strong>A.</strong> Free user &mdash; Vault is the value prop, "Get 50 Mbps" CTA bundles it</div>
+    <div class="progress-alert mb-2" style="max-width:680px">
+      <pre class="done"><span class="line">resource data fetched</span></pre>
+      <pre class="done"><span class="line">stream link ready</span></pre>
+      <pre class="error"><span class="line">warming up</span></pre>
+
+      <div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-w-line/40">
+        <div class="flex items-start gap-3 flex-wrap">
+          <div class="flex items-start gap-3 flex-1 min-w-[200px]">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-5 shrink-0 mt-0.5 text-w-pinkL">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <h3 class="font-semibold text-base text-base-content leading-snug">This torrent has no active seeders right now</h3>
+          </div>
+          <a class="btn btn-sm btn-soft shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4">
+              <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+            </svg>
+            Get 50 Mbps
+          </a>
+        </div>
+        <p class="text-sm text-w-sub mt-3 leading-relaxed">Vault saves the torrent and grabs it as soon as a seeder appears &mdash; included with any paid plan.</p>
+        <p class="text-xs text-w-muted mt-3">or try another torrent with more seeders</p>
+      </div>
+      <div class="pt-3 px-5 flex flex-wrap gap-2 justify-end items-center">
+        <a class="close">Got it</a>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">
+      Free + no peers &mdash; Vault narrative leads ("saves the torrent, grabs it when a seeder appears") &middot; CTA inside card top-right bundles trial speed + Vault access
+    </div>
+
+    <!-- State B: Paid + no peers -->
+    <div class="uikit-label mb-2"><strong>B.</strong> Paid user &mdash; instructional message, no upsell, just "Got it"</div>
+    <div class="progress-alert mb-2" style="max-width:680px">
+      <pre class="done"><span class="line">resource data fetched</span></pre>
+      <pre class="done"><span class="line">stream link ready</span></pre>
+      <pre class="error"><span class="line">warming up</span></pre>
+
+      <div class="mx-5 mt-1 p-4 rounded-xl bg-base-300/20 border border-w-line/40">
+        <div class="flex items-start gap-3 flex-wrap">
+          <div class="flex items-start gap-3 flex-1 min-w-[200px]">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="size-5 shrink-0 mt-0.5 text-w-pinkL">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <h3 class="font-semibold text-base text-base-content leading-snug">This torrent has no active seeders right now</h3>
+          </div>
+        </div>
+        <p class="text-sm text-w-sub mt-3 leading-relaxed">Save it to Vault &mdash; it'll fetch the file as soon as a seeder shows up.</p>
+        <p class="text-xs text-w-muted mt-3">or try another torrent with more seeders</p>
+      </div>
+      <div class="pt-3 px-5 flex flex-wrap gap-2 justify-end items-center">
+        <a class="close">Got it</a>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">
+      Paid + no peers &mdash; same shell, different copy: imperative ("Save it to Vault") instead of value-prop &middot; no upgrade button (already paid; Vault is already accessible from the resource page)
+    </div>
+
+    <div class="uikit-rule mb-8">
+      <strong>Decision matrix:</strong><br>
+      <code>TierName=="free"</code> &rarr; <code>vaultPitch</code> copy + upgrade CTA <code>action.upgrade.free</code><br>
+      <code>TierName!="free"</code> &rarr; <code>vaultUse</code> copy + dismiss-only<br>
+      <strong>Icon</strong>: clock from feather icons (24x24, 1.8 stroke, in <code>text-w-pinkL</code>) &mdash; "wait for peers" framing rather than warning/paywall<br>
+      <strong>Alt suggestion</strong> ("or try another torrent with more seeders") shown to both tiers as a soft secondary in <code>text-xs text-w-muted</code><br>
+      <strong>Umami</strong>: <code>data-umami-event="donate-no-peers"</code> + <code>data-umami-event-tier</code>
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       10. NAVIGATION
+       ========================================================= -->
+  <div class="uikit-section" id="navigation">
+    <h2>10. Navigation</h2>
+    <p class="desc">Navbar pattern with glass effect, logo, and action buttons.</p>
+
+    <div class="uikit-card bg-w-surface">
+      <div class="navbar-redesign rounded-xl p-4 flex items-center gap-4" style="background-color: rgba(10, 14, 26, 0.9); backdrop-filter: blur(12px);">
+        <span class="font-logo text-xl gradient-text">octor</span>
+        <div class="flex-1"></div>
+        <a class="btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content whitespace-nowrap" href="#">Library</a>
+        <div class="join">
+          <a class="btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content join-item" href="#">Profile</a>
+          <a class="btn btn-ghost btn-sm border border-w-line text-w-sub hover:border-w-pink hover:text-base-content join-item" href="#">Login</a>
+        </div>
+      </div>
+      <div class="uikit-label mt-4">navbar-redesign &middot; bg rgba(10,14,26,0.9) &middot; backdrop-blur-xl &middot; fixed top-0</div>
+    </div>
+
+    <div class="uikit-note">
+      <strong>Implementation:</strong> See <code>templates/partials/nav.html</code>. Uses <code>navbar-redesign</code> CSS class for hover overrides. Glass effect via inline rgba + backdrop-filter.
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       11. FOOTER
+       ========================================================= -->
+  <div class="uikit-section" id="footer">
+    <h2>11. Footer</h2>
+    <p class="desc">Site footer with links organized in columns.</p>
+
+    <div class="uikit-card bg-w-surface">
+      <footer class="footer text-w-muted py-10">
+        <nav>
+          <h6 class="footer-title text-w-sub">Product</h6>
+          <a class="link link-hover text-sm">Home</a>
+          <a class="link link-hover text-sm">Tools</a>
+          <a class="link link-hover text-sm">Support</a>
+        </nav>
+        <nav>
+          <h6 class="footer-title text-w-sub">Legal</h6>
+          <a class="link link-hover text-sm">Terms of Service</a>
+          <a class="link link-hover text-sm">Privacy Policy</a>
+          <a class="link link-hover text-sm">DMCA</a>
+        </nav>
+      </footer>
+      <div class="uikit-label">footer text-w-muted &middot; footer-title text-w-sub &middot; link link-hover text-sm</div>
+    </div>
+
+    <div class="uikit-note">
+      <strong>Implementation:</strong> See <code>templates/partials/footer.html</code>. Uses DaisyUI footer component with custom text colors.
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       12. MISC
+       ========================================================= -->
+  <div class="uikit-section" id="misc">
+    <h2>12. Miscellaneous</h2>
+    <p class="desc">Dividers, upload zone, collapse/FAQ, and stats.</p>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Label Divider</h3>
+    <div class="mb-6">
+      <div class="divider text-w-muted text-xs font-semibold tracking-widest uppercase my-5 before:bg-w-line after:bg-w-line">Or paste a magnet link</div>
+      <div class="uikit-label">divider text-w-muted text-xs font-semibold tracking-widest uppercase before:bg-w-line after:bg-w-line</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Section Label Divider (profile)</h3>
+    <div class="mb-6">
+      <div class="flex items-center gap-3">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-w-muted">Section Name</h2>
+        <div class="flex-1 h-px bg-w-line/50"></div>
+      </div>
+      <div class="uikit-label">text-xs tracking-widest uppercase text-w-muted + flex-1 h-px bg-w-line/50</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Upload Zone</h3>
+    <div class="mb-6" style="max-width:500px">
+      <div class="upload-dashed rounded-2xl py-10 px-6 text-center cursor-pointer">
+        <p class="text-lg font-semibold mb-2">Drop a .torrent file here</p>
+        <p class="text-sm text-w-muted">or click to browse</p>
+      </div>
+      <div class="uikit-label">upload-dashed rounded-2xl py-10 px-6 text-center cursor-pointer</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Collapse / FAQ</h3>
+    <div class="mb-6" style="max-width:600px">
+      <div class="collapse collapse-plus collapse-octor border border-w-line rounded-2xl mb-3">
+        <input type="radio" name="faq-demo" checked />
+        <div class="collapse-title text-base font-semibold">What is Octor?</div>
+        <div class="collapse-content">
+          <p class="text-sm text-w-sub leading-relaxed">Octor lets you stream and download torrent content directly in your browser without installing any software.</p>
+        </div>
+      </div>
+      <div class="collapse collapse-plus collapse-octor border border-w-line rounded-2xl">
+        <input type="radio" name="faq-demo" />
+        <div class="collapse-title text-base font-semibold">How does Vault work?</div>
+        <div class="collapse-content">
+          <p class="text-sm text-w-sub leading-relaxed">Vault lets you store torrents persistently so they remain available for streaming anytime.</p>
+        </div>
+      </div>
+      <div class="uikit-label mt-3">collapse collapse-plus collapse-octor border border-w-line rounded-2xl</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Stats</h3>
+    <div class="mb-6">
+      <div class="stats stats-horizontal bg-transparent w-full flex justify-center py-2">
+        <div class="stat text-center bg-transparent">
+          <div class="stat-value text-3xl font-extrabold tracking-tight gradient-stat">100K+</div>
+          <div class="stat-desc text-w-muted mt-1 text-sm">Active users</div>
+        </div>
+        <div class="stat text-center bg-transparent">
+          <div class="stat-value text-3xl font-extrabold tracking-tight gradient-stat">50M+</div>
+          <div class="stat-desc text-w-muted mt-1 text-sm">Files served</div>
+        </div>
+        <div class="stat text-center bg-transparent">
+          <div class="stat-value text-3xl font-extrabold tracking-tight gradient-stat">99.9%</div>
+          <div class="stat-desc text-w-muted mt-1 text-sm">Uptime</div>
+        </div>
+      </div>
+      <div class="uikit-label">stats stats-horizontal bg-transparent &middot; stat-value gradient-stat &middot; stat-desc text-w-muted</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Glow Effects</h3>
+    <div class="uikit-grid mb-6">
+      <div class="hero-glow rounded-2xl p-8 text-center border border-w-line/30">
+        <p class="text-sm text-w-sub">hero-glow</p>
+        <div class="uikit-label">Radial gradient: pink center, purple mid</div>
+      </div>
+      <div class="cta-glow rounded-2xl p-8 text-center border border-w-line/30">
+        <p class="text-sm text-w-sub">cta-glow</p>
+        <div class="uikit-label">Radial gradient: subtle pink</div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       DESIGN RULES SUMMARY
+       ========================================================= -->
+  <div class="uikit-section" id="rules">
+    <h2>Design Rules Summary</h2>
+
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th class="text-w-sub">Token / Component</th>
+            <th class="text-w-sub">Where to use</th>
+            <th class="text-w-sub">Where NOT to use</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          <tr>
+            <td><code class="text-w-pinkL">btn-pink</code></td>
+            <td>Homepage CTAs, tools page CTAs, navigation CTA (Donate)</td>
+            <td>Everywhere else</td>
+          </tr>
+          <tr>
+            <td><code class="text-w-purpleL">w-card-frame</code> / <code class="text-w-purpleL">w-card-title</code></td>
+            <td>Library video grid, Discover catalog grid (poster cards)</td>
+            <td>Feature cards, profile sections, tier cards (use generic <code>bg-w-card</code>)</td>
+          </tr>
+          <tr>
+            <td><code class="text-w-purpleL">w-card-badge</code> / <code class="text-w-purpleL">w-card-badge-ghost</code></td>
+            <td>Overlay badges on poster cards (watched/rate/watchlist)</td>
+            <td>Anywhere outside <code>.w-card-frame</code> figures</td>
+          </tr>
+          <tr>
+            <td><code class="text-w-pinkL">watchlistChipClass()</code> / <code class="text-w-pinkL">catalogChipClass()</code></td>
+            <td>Discover mode switcher and Watchlist surfaces (heart badge, modal pill, empty state). Catalog side uses cyan, Watchlist side uses pink (<code>w-pink</code>/<code>w-pinkL</code>) — same family as <code>btn-soft</code>.</td>
+            <td>Open-coded chip classes in JSX &mdash; always go through the helpers so the Watchlist palette stays consistent.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       13. AUTH PAGES
+       ========================================================= -->
+  <div class="uikit-section" id="auth">
+    <h2>13. Auth Pages</h2>
+    <p class="desc">Login, logout, verify, and callback pages share a consistent centered layout with icon header.</p>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Page Layout</h3>
+    <div class="uikit-card bg-w-surface mb-6">
+      <pre style="color:#94a3b8;font-size:0.8rem;font-family:monospace;white-space:pre-wrap;line-height:1.6">&lt;section class="min-h-screen pt-[120px] pb-20 px-6"&gt;
+  &lt;div class="max-w-md mx-auto"&gt;
+    &lt;!-- centered content --&gt;
+  &lt;/div&gt;
+&lt;/section&gt;</pre>
+      <div class="uikit-label mt-4">Same pattern as support form but narrower (<code>max-w-md</code> vs <code>max-w-[600px]</code>)</div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Icon Header</h3>
+    <div class="text-center mb-6">
+      <div class="w-14 h-14 rounded-2xl bg-w-pink/10 flex items-center justify-center mx-auto mb-5">
+        <svg class="w-7 h-7 text-w-pinkL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21C20 19.6044 20 18.9067 19.8278 18.3389C19.44 17.0605 18.4395 16.06 17.1611 15.6722C16.5933 15.5 15.8956 15.5 14.5 15.5H9.5C8.10444 15.5 7.40665 15.5 6.83886 15.6722C5.56045 16.06 4.56004 17.0605 4.17224 18.3389C4 18.9067 4 19.6044 4 21M16.5 7.5C16.5 9.98528 14.4853 12 12 12C9.51472 12 7.5 9.98528 7.5 7.5C7.5 5.01472 9.51472 3 12 3C14.4853 3 16.5 5.01472 16.5 7.5Z"/>
+        </svg>
+      </div>
+      <h1 class="text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-tight leading-tight mb-2">Sign In</h1>
+      <p class="text-w-sub text-sm">Choose a method to access your account</p>
+    </div>
+    <div class="uikit-label mb-6">Icon: <code>w-14 h-14 rounded-2xl bg-w-pink/10</code> with <code>w-7 h-7 text-w-pinkL</code> SVG<br>Heading: <code>text-[clamp(1.8rem,4vw,2.4rem)] font-extrabold tracking-tight</code></div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Auth Card Sections</h3>
+    <p class="desc">OAuth buttons and email form are wrapped in separate <code>bg-w-card</code> cards, separated by a styled divider.</p>
+    <div style="max-width:400px" class="mx-auto mb-6">
+      <div class="bg-w-card border border-w-line rounded-2xl p-6 mb-6">
+        <button class="btn btn-soft w-full" disabled>Continue with Provider</button>
+        <button class="btn btn-soft w-full mt-3" disabled>Continue with Provider</button>
+      </div>
+      <div class="divider text-w-muted text-xs font-semibold tracking-widest uppercase my-5 before:bg-w-line after:bg-w-line">Or use email</div>
+      <div class="bg-w-card border border-w-line rounded-2xl p-6">
+        <p class="text-sm text-w-sub text-center mb-1">Description text</p>
+        <p class="text-xs text-w-muted text-center mb-5">Helper text</p>
+        <div class="join w-full">
+          <input type="email" class="input w-full bg-base-300 border-w-line focus:border-w-pink focus:outline-none join-item" placeholder="Your Email" disabled>
+          <button class="btn btn-soft join-item" disabled>Send</button>
+        </div>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">Card: <code>bg-w-card border border-w-line rounded-2xl p-6</code><br>Divider: <code>divider text-w-muted text-xs font-semibold tracking-widest uppercase before:bg-w-line after:bg-w-line</code><br>Input: <code>input bg-base-300 border-w-line focus:border-w-pink focus:outline-none</code><br>Buttons: <code>btn btn-soft</code> (auth form context)</div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Instruction Notice</h3>
+    <p class="desc">Shown when user is redirected to login from a protected page (library, Stremio).</p>
+    <div class="bg-w-cyan/5 border border-w-cyan/20 rounded-xl p-4 mb-4 text-center" style="max-width:400px;margin:0 auto">
+      <p class="text-sm text-w-sub"><strong class="text-w-cyan">Note:</strong> Authorization is required to access your library.</p>
+    </div>
+    <div class="uikit-label mb-6">Same info/note box: <code>bg-w-cyan/5 border border-w-cyan/20 rounded-xl p-4 text-center</code></div>
+
+    <div class="uikit-rule">
+      <strong>Rules:</strong><br>
+      &bull; Auth buttons use <code>btn-soft</code> (form actions, not bright CTA)<br>
+      &bull; Input focus uses <code>focus:border-w-pink</code> (user-account context)<br>
+      &bull; All auth pages use <code>max-w-md mx-auto</code> centered layout<br>
+      &bull; Each page has an icon header (pink-tinted icon box + heading + sub-text)<br>
+      &bull; Logout and verify/callback pages show progress-alert within the centered container
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- 14. Toast Notifications -->
+  <div class="uikit-section">
+    <h2 class="uikit-section-title">14. Toast Notifications</h2>
+    <p class="uikit-desc">
+      Global toast notifications for user action feedback. Toasts appear in the bottom-right corner,
+      auto-dismiss after 3 seconds, and stack when multiple are shown.
+    </p>
+
+    <h3 class="text-lg font-semibold mt-6 mb-3">Types</h3>
+    <div class="flex flex-wrap gap-4 mb-6">
+      <div class="toast-alert toast-alert-success toast-show" style="position:static;opacity:1;transform:none;">Success toast</div>
+      <div class="toast-alert toast-alert-info toast-show" style="position:static;opacity:1;transform:none;">Info toast</div>
+      <div class="toast-alert toast-alert-error toast-show" style="position:static;opacity:1;transform:none;">Error toast</div>
+    </div>
+
+    <h3 class="text-lg font-semibold mt-6 mb-3">Usage (JavaScript)</h3>
+    <div class="uikit-label mb-2">Client-side triggers:</div>
+    <pre class="bg-base-300 rounded-lg p-4 text-sm mb-4"><code>// Available globally via window.toast
+toast.success('Copied!')
+toast.error('Something went wrong')
+toast.info('Download starting...')</code></pre>
+
+    <div class="uikit-label mb-2">Server-side triggers (automatic):</div>
+    <pre class="bg-base-300 rounded-lg p-4 text-sm mb-4"><code>// In Go handlers, use web.RedirectWithSuccessAndMessage(c, "message")
+// instead of c.Redirect(http.StatusFound, ...)
+// This appends ?status=success&amp;message=... to the redirect URL.
+// The async fetch wrapper detects these params and shows a toast.
+web.RedirectWithSuccessAndMessage(c, "Domain added")
+web.RedirectWithSuccessAndMessage(c, "Settings saved")</code></pre>
+
+    <h3 class="text-lg font-semibold mt-6 mb-3">CSS Classes</h3>
+    <div class="uikit-label mb-6">
+      <code>.toast-alert</code> &mdash; base class<br>
+      <code>.toast-alert-success</code> / <code>.toast-alert-info</code> &mdash; cyan variant (matches <code>btn-soft-cyan</code>)<br>
+      <code>.toast-alert-error</code> &mdash; pink variant (matches <code>btn-soft</code>)
+    </div>
+
+    <div class="uikit-rule">
+      <strong>Rules:</strong><br>
+      &bull; Success/Info toasts use cyan colors &mdash; consistent with progress-alert done states<br>
+      &bull; Error toasts use pink colors &mdash; consistent with progress-alert error states<br>
+      &bull; Toast container is <code>#toast-container</code> with DaisyUI classes <code>toast toast-end toast-bottom z-tooltip</code><br>
+      &bull; Use <code>toast.success()</code> for completed actions (copy, save, add, delete)<br>
+      &bull; Use <code>toast.info()</code> for started actions (download starting)<br>
+      &bull; Use <code>toast.error()</code> for client-side failures
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <div class="uikit-section" id="mobile">
+    <h2>15. Mobile Patterns</h2>
+    <p class="desc">Rules and patterns for mobile-optimized layouts. These ensure pages stay compact on small screens (320px–480px) while preserving full content on desktop.</p>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Compact Page Headers</h3>
+    <p class="desc">On mobile, decorative elements waste valuable vertical space. Hide non-functional elements to get content above the fold faster.</p>
+    <div class="uikit-rule">
+      <ul class="list-disc list-inside space-y-1">
+        <li>Decorative badges (e.g. "LIBRARY", "DISCOVER"): <code>hidden sm:inline-flex</code></li>
+        <li>Subtitle / description text: <code>hidden sm:block</code></li>
+        <li>Top padding: <code>pt-24 sm:pt-[120px]</code> (96px on mobile vs 120px on desktop — still clears the 72px navbar)</li>
+        <li>Heading margin: <code>mb-2 sm:mb-4</code></li>
+      </ul>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Sticky Tab Bar</h3>
+    <p class="desc">Tab navigation sticks below the navbar on scroll so users can switch sections without scrolling up.</p>
+    <div class="uikit-rule">
+      <strong>Pattern:</strong><br>
+      <code>sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 bg-w-bg/90 backdrop-blur-lg border-b border-w-line/30</code><br><br>
+      <ul class="list-disc list-inside space-y-1">
+        <li>Negative horizontal margin (<code>-mx-3</code>) stretches the bar edge-to-edge, then <code>px-3</code> restores inner padding</li>
+        <li>Use <code>flex-col sm:flex-row</code> inside the bar: tabs on first row, filters/sort on second row on mobile; all in one row on desktop</li>
+        <li>Filters/sort get <code>sm:ml-auto</code> to push right only on desktop</li>
+      </ul>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Navbar at Narrow Widths (320px)</h3>
+    <p class="desc">At 320px the navbar is very tight with logo + 5 buttons. Use tighter padding and gaps at small widths.</p>
+    <div class="uikit-rule">
+      <ul class="list-disc list-inside space-y-1">
+        <li>Navbar padding: <code>px-2 min-[400px]:px-3 sm:px-6</code></li>
+        <li>Navbar-end gap: <code>gap-0.5 min-[400px]:gap-1 sm:gap-2</code></li>
+        <li>Don't hide nav buttons — all are important. Shrink gaps instead.</li>
+      </ul>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Touch Targets</h3>
+    <p class="desc">Interactive elements on touch devices need larger hit areas.</p>
+    <div class="uikit-rule">
+      <ul class="list-disc list-inside space-y-1">
+        <li><code>.w-card-badge-ghost</code> enlarges from <code>2rem</code> to <code>2.5rem</code> via <code>@media (hover: none)</code></li>
+        <li>Minimum recommended touch target: 40px (2.5rem). Apple guidelines: 44pt.</li>
+      </ul>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Container Queries for Cards</h3>
+    <p class="desc">Card content adapts based on the card's own width (not the viewport), via <code>container-type: inline-size</code> on <code>.w-card-frame</code>. This handles all grid configurations automatically.</p>
+    <div class="uikit-rule">
+      <strong>Threshold: 210px</strong><br><br>
+      <strong>Below 210px (compact mode):</strong>
+      <ul class="list-disc list-inside space-y-1 mb-3">
+        <li><code>.w-card-badge-label</code> — hidden (badge becomes icon-only)</li>
+        <li><code>.w-card-badge</code> — padding shrinks to <code>0.375rem</code> (square pill)</li>
+        <li><code>.w-card-stars-full</code> — hidden</li>
+        <li><code>.w-card-stars-compact</code> — visible (single star icon + number, e.g. "&#9733; 7.6")</li>
+      </ul>
+      <strong>At or above 210px (full mode):</strong>
+      <ul class="list-disc list-inside space-y-1">
+        <li><code>.w-card-badge-label</code> — visible (badge shows text)</li>
+        <li><code>.w-card-stars-full</code> — visible (5-star row)</li>
+        <li><code>.w-card-stars-compact</code> — hidden</li>
+      </ul>
+    </div>
+    <div class="uikit-note">
+      <strong>Why container queries, not media queries?</strong> The same card can appear in a 2-col grid (wide cards) on mobile and a 4-col grid (narrow cards) on desktop. Media queries would show full stars on desktop even when cards are narrow. Container queries adapt to actual card width.
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Torrent List Names</h3>
+    <div class="uikit-rule">
+      <ul class="list-disc list-inside space-y-1">
+        <li>Use <code>line-clamp-2</code> instead of <code>truncate</code> for torrent file names — shows more of the name on narrow screens with minimal height increase</li>
+      </ul>
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       16. VAULT PROGRESS ROW
+       ========================================================= -->
+  <div class="uikit-section" id="vault-progress">
+    <h2>16. Vault Progress Row</h2>
+    <p class="desc">
+      Live progress visualisation in the My Vault dashboard table. For resources that are
+      <code>Funded &amp;&amp; !Vaulted &amp;&amp; !Expired</code> (server-side <code>ShowProgress</code>,
+      same predicate as the <code>LoadingCount</code> stat), the row exposes two signals: a
+      <strong>pulsing lightning icon</strong> in the leftmost cell (gentle opacity heartbeat,
+      signals "process is running"), and a <strong>row-wide background fill</strong>
+      that grows left-to-right with the actual <code>progress</code> from the SSE stream
+      (<code>/resources/:id/status</code>, see <code>handlers/resource/status.go</code>).
+    </p>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">States</h3>
+    <p class="desc">All five rows are static demos &mdash; the lightning icons animate live via the <code>vault-pulse</code> keyframes; the background fills are inlined for illustration.</p>
+
+    <div class="bg-base-300/50 border border-w-line rounded-2xl p-6 mb-6">
+      <div class="bg-base-200/50 rounded-xl overflow-hidden">
+        <table class="table w-full table-fixed text-sm">
+          <colgroup>
+            <col class="w-8">
+            <col>
+            <col class="w-24">
+            <col class="w-28">
+          </colgroup>
+          <thead>
+            <tr class="border-b border-w-line">
+              <th></th>
+              <th class="text-left text-w-muted text-xs font-semibold tracking-wider uppercase">Name</th>
+              <th class="text-center text-w-muted text-xs font-semibold tracking-wider uppercase">VP</th>
+              <th class="text-center text-w-muted text-xs font-semibold tracking-wider uppercase">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- idle: no progress yet -->
+            <tr class="border-b border-w-line/50 transition-colors" style="background-image: linear-gradient(to right, rgba(0,206,201,0.06) 0%, transparent 0%)">
+              <td class="text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4 text-w-pinkL vault-pulse inline-block">
+                  <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+                </svg>
+              </td>
+              <td class="text-left">
+                <span class="text-w-pinkL truncate block">idle &mdash; awaiting first stats event</span>
+              </td>
+              <td class="text-center text-w-sub">3.50</td>
+              <td class="text-center">
+                <span class="badge badge-sm bg-base-200/50 border-w-line/30 text-w-muted gap-1.5">
+                  <span class="loading loading-dots loading-xs"></span>
+                </span>
+              </td>
+            </tr>
+
+            <!-- caching: 42% cyan -->
+            <tr class="border-b border-w-line/50 transition-colors" style="background-image: linear-gradient(to right, rgba(0,206,201,0.10) 42%, transparent 42%)">
+              <td class="text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4 text-w-pinkL vault-pulse inline-block">
+                  <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+                </svg>
+              </td>
+              <td class="text-left">
+                <span class="text-w-pinkL truncate block">Inception.2010.UHD.BluRay.HDR.HEVC.x265-DEMO</span>
+              </td>
+              <td class="text-center text-w-sub">5.00</td>
+              <td class="text-center">
+                <span class="badge badge-sm bg-w-cyan/10 border-w-cyan/30 text-w-cyan gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                  Caching 42%
+                </span>
+              </td>
+            </tr>
+
+            <!-- cached: 100% cyan, awaiting vault step -->
+            <tr class="border-b border-w-line/50 transition-colors" style="background-image: linear-gradient(to right, rgba(0,206,201,0.06) 100%, transparent 100%)">
+              <td class="text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4 text-w-pinkL vault-pulse inline-block">
+                  <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+                </svg>
+              </td>
+              <td class="text-left">
+                <span class="text-w-pinkL truncate block">Interstellar.2014.PROPER.1080p.BluRay.x264-AMIABLE</span>
+              </td>
+              <td class="text-center text-w-sub">4.20</td>
+              <td class="text-center">
+                <span class="badge badge-sm bg-w-cyan/10 border-w-cyan/30 text-w-cyan gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                  Cached
+                </span>
+              </td>
+            </tr>
+
+            <!-- vaulting: 78% purple -->
+            <tr class="border-b border-w-line/50 transition-colors" style="background-image: linear-gradient(to right, rgba(108,92,231,0.12) 78%, transparent 78%)">
+              <td class="text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4 text-w-pinkL vault-pulse inline-block">
+                  <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+                </svg>
+              </td>
+              <td class="text-left">
+                <span class="text-w-pinkL truncate block">The.Matrix.1999.4K.UHD.BluRay.HDR.HEVC.Atmos</span>
+              </td>
+              <td class="text-center text-w-sub">7.00</td>
+              <td class="text-center">
+                <span class="badge badge-sm bg-w-purple/10 border-w-purple/30 text-w-purpleL gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" /></svg>
+                  Vaulting 78%
+                </span>
+              </td>
+            </tr>
+
+            <!-- vaulted: terminal pink, no fill -->
+            <tr class="last:border-b-0 transition-colors">
+              <td class="text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-4 text-w-pinkL inline-block">
+                  <path fill-rule="evenodd" d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z" clip-rule="evenodd" />
+                </svg>
+              </td>
+              <td class="text-left">
+                <span class="text-w-pinkL truncate block">Blade.Runner.2049.2017.1080p.BluRay.x264-SPARKS</span>
+              </td>
+              <td class="text-center text-w-sub">6.50</td>
+              <td class="text-center">
+                <span class="badge badge-sm bg-w-purple/10 border-w-purple/30 text-w-purpleL">Claimable</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Lightning Icon Animation</h3>
+    <p class="desc">Single <code>text-w-pinkL</code> SVG with the <code>vault-pulse</code> class &mdash; gentle opacity pulse (<code>1 &rarr; 0.45 &rarr; 1</code>) on a 1.8s ease-in-out infinite loop. No fill animations / glow &mdash; just a soft heartbeat that signals "process is running". JS removes the class on <code>state == "vaulted"</code> so the icon settles to fully opaque.</p>
+    <div class="uikit-card bg-w-surface mb-6">
+      <pre style="color:#94a3b8;font-size:0.78rem;font-family:monospace;white-space:pre-wrap;line-height:1.55">&lt;svg class="size-4 text-w-pinkL vault-pulse inline-block" data-vault-progress-icon&gt;
+  &lt;path .../&gt;
+&lt;/svg&gt;</pre>
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Row Background Fill</h3>
+    <p class="desc">Inline <code>linear-gradient(to right, &lt;tint&gt; &lt;pct&gt;%, transparent &lt;pct&gt;%)</code> on the <code>&lt;tr&gt;</code>. JS swaps the gradient string per SSE message; no CSS transition (gradient interpolation isn't reliable across browsers). Initial SSR value is <strong>0%</strong> so the bar grows from empty &rarr; actual progress instead of collapsing from 100% &rarr; actual.</p>
+    <div class="uikit-rule">
+      <strong>Tints (intentionally low alpha so the row text stays primary):</strong>
+      <ul class="list-disc list-inside space-y-1 mt-2">
+        <li><code>caching</code> &mdash; <code>rgba(0,206,201,0.10)</code> (w-cyan)</li>
+        <li><code>cached</code> / <code>idle</code> &mdash; <code>rgba(0,206,201,0.06)</code></li>
+        <li><code>vaulting</code> &mdash; <code>rgba(108,92,231,0.12)</code> (w-purple)</li>
+        <li><code>vaulted</code> &mdash; <code>rgba(34,197,94,0.08)</code> (terminal flash, then SSE closes)</li>
+      </ul>
+    </div>
+
+    <div class="uikit-note mt-4">
+      <strong>Wiring.</strong> JS module: <code>assets/src/js/app/vault/progress.js</code>. One <code>EventSource</code> per active row pointing at the existing <code>/resources/:id/status</code> endpoint &mdash; no new backend. Inactive rows (Frozen / Expiring / unfunded / vaulted) render statically and don't open SSE.
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <!-- =========================================================
+       17. DISCOVER WATCHLIST
+       ========================================================= -->
+  <div class="uikit-section" id="discover-watchlist">
+    <h2>17. Discover Watchlist</h2>
+    <p class="desc">
+      The Discover page exposes a per-user "save for later" surface. Two visual elements drive it:
+      a <strong>card-level heart toggle</strong> and a <strong>page-level mode switcher</strong>
+      (Catalog | Watchlist). Catalog uses the discover cyan accent; Watchlist uses a pink
+      (<code>w-pink</code> / <code>w-pinkL</code>) reserved exclusively for this family. Brand pink
+      stays CTA-only.
+    </p>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Heart Badge (card corner)</h3>
+    <p class="desc">
+      Lives in the <strong>bottom-right</strong> of every IMDB card across catalog, search, AI
+      recommendations and the stream modal poster. Top corners are taken by the green
+      <code>WatchedBadge</code> (top-right) and yellow <code>RatingBadge</code> (top-left); pink
+      heart at the bottom keeps the four-quadrant layout legible. Filled heart = saved, outlined
+      heart with hover-to-red = not saved.
+    </p>
+    <div class="uikit-row mb-4">
+      <div class="relative w-[140px] aspect-[2/3] rounded-xl overflow-hidden bg-gradient-to-br from-w-purple/20 via-w-pink/10 to-w-cyan/15 border border-w-line/30">
+        <button class="w-card-badge bottom-2 right-2 text-w-pinkL" type="button" title="Remove from Watchlist">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z"/></svg>
+        </button>
+      </div>
+      <div class="relative w-[140px] aspect-[2/3] rounded-xl overflow-hidden bg-gradient-to-br from-w-purple/20 via-w-pink/10 to-w-cyan/15 border border-w-line/30">
+        <button class="w-card-badge-ghost bottom-2 right-2 hover:text-w-pinkL" type="button" title="Add to Watchlist">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">Active: <code>w-card-badge bottom-2 right-2 text-w-pinkL</code> &middot; Empty: <code>w-card-badge-ghost bottom-2 right-2 hover:text-w-pinkL</code></div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Mode Switcher (sticky bar, right side)</h3>
+    <p class="desc">
+      Two-button join group anchored to the right of the type tabs. Catalog uses the cyan
+      <code>chipClass</code> family (matches type/search tabs and the rest of discover).
+      Watchlist uses the pink Watchlist family. Each button always hover-lights into its own
+      colour so the user reads "I will activate this side".
+    </p>
+    <div class="uikit-row mb-4">
+      <!-- Catalog active -->
+      <div class="join">
+        <button type="button" class="btn btn-sm join-item bg-w-cyan/15 border border-w-cyan/30 text-w-cyan hover:bg-w-cyan/20 hover:border-w-cyan/40">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>
+          <span>Catalog</span>
+        </button>
+        <button type="button" class="btn btn-sm join-item btn-ghost border border-w-line text-w-sub hover:border-w-pink/40 hover:text-w-pinkL">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" /></svg>
+          <span>Watchlist</span>
+        </button>
+      </div>
+      <!-- Watchlist active -->
+      <div class="join">
+        <button type="button" class="btn btn-sm join-item btn-ghost border border-w-line text-w-sub hover:border-w-cyan/30 hover:text-w-cyan">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" /></svg>
+          <span>Catalog</span>
+        </button>
+        <button type="button" class="btn btn-sm join-item bg-w-pink/15 border border-w-pink/40 text-w-pinkL hover:bg-w-pink/20 hover:border-w-pink/50">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" /></svg>
+          <span>Watchlist</span>
+          <span class="text-xs opacity-70 ml-1 tabular-nums">12</span>
+        </button>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">
+      Catalog active: <code>btn btn-sm join-item bg-w-cyan/15 border border-w-cyan/30 text-w-cyan hover:bg-w-cyan/20</code><br>
+      Watchlist active: <code>btn btn-sm join-item bg-w-pink/15 border border-w-pink/40 text-w-pinkL hover:bg-w-pink/20</code><br>
+      Inactive (each side hover-lights into its own colour): <code>hover:border-w-cyan/30 hover:text-w-cyan</code> for Catalog, <code>hover:border-w-pink/40 hover:text-w-pinkL</code> for Watchlist.<br>
+      <strong>Counter:</strong> shows raw count only (e.g. <code>12</code>), never <code>X/N</code> — the soft cap (200 for free) stays internal and surfaces only as a 402 toast when the user hits it. Avoids vanity-metric "you have 23/200" pressure.<br>
+      <strong>Mobile:</strong> labels collapse to icon-only via <code>&lt;span class="hidden sm:inline"&gt;</code>. Counter stays visible alongside the heart. Icon stays at <code>w-4 h-4</code>. Buttons keep <code>title</code> + <code>aria-label</code> for accessibility.
+    </div>
+
+    <h3 class="text-sm font-semibold text-w-muted uppercase tracking-widest mb-4">Status Pill (modal join group)</h3>
+    <p class="desc">
+      Inside the stream modal the Watchlist toggle joins a three-button group with
+      <strong>Watched</strong> (green) and <strong>Rated</strong> (yellow). Each follows the same
+      shape: ghost with line border + coloured hover when off, ghost with thin coloured border +
+      hover-fill when on. Sibling colours stay distinct (green / yellow / pink) so the same
+      join group can hold all three states without ambiguity.
+    </p>
+    <div class="uikit-row mb-4">
+      <div class="join">
+        <button type="button" class="btn btn-ghost btn-xs join-item border border-w-line text-w-sub hover:border-green-500/40 hover:text-green-400 whitespace-nowrap">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+          Watched
+        </button>
+        <button type="button" class="btn btn-ghost btn-xs join-item border border-w-line text-w-sub hover:border-yellow-500/40 hover:text-yellow-400 whitespace-nowrap">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>
+          Rate
+        </button>
+        <button type="button" class="btn btn-ghost btn-xs join-item border border-w-line text-w-sub hover:border-w-pink/40 hover:text-w-pinkL whitespace-nowrap">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" /></svg>
+          Watchlist
+        </button>
+      </div>
+      <div class="join">
+        <button type="button" class="btn btn-ghost btn-xs join-item border border-green-500/20 text-green-400 hover:bg-green-500/10 whitespace-nowrap">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Watched
+        </button>
+        <button type="button" class="btn btn-ghost btn-xs join-item border border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10 whitespace-nowrap">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clip-rule="evenodd" /></svg>
+          8
+        </button>
+        <button type="button" class="btn btn-ghost btn-xs join-item border border-w-pink/30 text-w-pinkL hover:bg-w-pink/10 hover:border-w-pink/40 whitespace-nowrap">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z"/></svg>
+          Watchlist
+        </button>
+      </div>
+    </div>
+    <div class="uikit-label mb-6">
+      Off (any): <code>btn btn-ghost btn-xs join-item border border-w-line text-w-sub hover:border-{color}/40 hover:text-{color}</code><br>
+      On (any): <code>btn btn-ghost btn-xs join-item border border-{color}/20-30 text-{color} hover:bg-{color}/10 hover:border-{color}/40</code><br>
+      Colours: green-500/green-400 (Watched), yellow-500/yellow-400 (Rate), w-pink/w-pinkL (Watchlist).
+    </div>
+
+    <div class="uikit-rule mb-4">
+      <strong>Rules:</strong><br>
+      &bull; Pink (<code>w-pink</code>/<code>w-pinkL</code>) is shared between brand CTAs (<code>btn-pink</code>) and the Watchlist family. The two contexts don't visually collide because Watchlist always sits inside a chip / heart / join group with its own border-and-fill pattern, never a solid CTA.<br>
+      &bull; Mode switcher: Catalog hover-lights cyan, Watchlist hover-lights pink. Each side stays in its own colour family even when inactive so the left/right pair always reads correctly.<br>
+      &bull; Badge corner mapping is fixed: green top-right (Watched), yellow top-left (Rated), pink bottom-right (Watchlist). Changing positions breaks card scan order.<br>
+      &bull; Active modal pills: <code>btn-ghost border border-{color}/20-30 text-{color} hover:bg-{color}/10</code>. Inactive: <code>btn-ghost border border-w-line text-w-sub hover:border-{color}/40 hover:text-{color}</code>. Adding a new state colour means picking a hue distinct from green / yellow / pink.<br>
+      &bull; Helpers: <code>chipClass()</code> (cyan, type/search tabs), <code>catalogChipClass()</code> (cyan, mode switcher Catalog), <code>watchlistChipClass()</code> (pink, mode switcher Watchlist). All live in <code>assets/src/js/lib/discover/components/discoverUtils.js</code> &mdash; don't open-code the chip classes.
+    </div>
+  </div>
+
+  <hr class="uikit-divider">
+
+  <p class="text-center text-w-muted text-sm py-8">
+    Octor UIKit Reference &middot; Generated from <code>tailwind.config.js</code> and <code>assets/src/styles/style.css</code>
+  </p>
+
+</body>
+</html>

@@ -1,0 +1,153 @@
+package resource
+
+import (
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"regexp"
+	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/webtor-io/web-ui/handlers/common"
+	"github.com/webtor-io/web-ui/jobs/scripts"
+	"github.com/webtor-io/web-ui/models"
+	"github.com/webtor-io/web-ui/services/i18n"
+	"github.com/webtor-io/web-ui/services/web"
+
+	"github.com/gin-gonic/gin"
+	"github.com/webtor-io/web-ui/services/api"
+	"github.com/webtor-io/web-ui/services/job"
+	"net/url"
+)
+
+type PostArgs struct {
+	File        []byte
+	Query       string
+	Instruction string
+	HintVideoID string
+	Claims      *api.Claims
+}
+
+func (s *Handler) bindArgs(c *gin.Context) (*PostArgs, error) {
+	file, _ := c.FormFile("resource")
+	instruction, _ := c.GetPostForm("instruction")
+	query, _ := c.GetPostForm("resource")
+	if query == "" && strings.HasPrefix(c.Request.URL.Path, "/magnet") {
+		query = strings.TrimPrefix(c.Request.URL.Path, "/")
+		if c.Request.URL.RawQuery != "" {
+			query += "?" + c.Request.URL.RawQuery
+		}
+	}
+	if query != "" {
+		// Just parse and return it; let the POST handler decide if it is a search query
+	}
+
+	if file == nil && query == "" {
+		return nil, errors.Errorf("no resource provided")
+	}
+
+	var fd []byte
+
+	if file != nil {
+		f, err := file.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer func(f multipart.File) {
+			_ = f.Close()
+		}(f)
+		fd, err = io.ReadAll(f)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	hintVideoID, _ := c.GetPostForm("hint_video_id")
+
+	return &PostArgs{
+		File:        fd,
+		Query:       query,
+		Claims:      api.GetClaimsFromContext(c),
+		Instruction: instruction,
+		HintVideoID: hintVideoID,
+	}, nil
+}
+
+type PostData struct {
+	Job              *job.Job
+	Args             *PostArgs
+	Instruction      string
+	Tool             *common.Tool
+	ContinueWatching []*models.WatchHistory
+	Addons           interface{}
+	SearchQuery      string
+}
+
+var (
+	sha1HexPattern    = regexp.MustCompile(`(?i)^[0-9a-f]{40}$`)
+	sha1Base32Pattern = regexp.MustCompile(`(?i)^[2-7a-z]{32}$`)
+)
+
+func isMagnetOrTorrentOrHash(query string) bool {
+	q := strings.TrimSpace(query)
+	ql := strings.ToLower(q)
+	if strings.HasPrefix(ql, "magnet:") {
+		return true
+	}
+	if strings.HasPrefix(ql, "http://") || strings.HasPrefix(ql, "https://") {
+		return true
+	}
+	if sha1HexPattern.MatchString(q) || sha1Base32Pattern.MatchString(q) {
+		return true
+	}
+	return false
+}
+
+func (s *Handler) post(c *gin.Context) {
+	// Ensure RedirectWithError has a valid return URL (missing for magnet GET routes)
+	if c.GetHeader("X-Return-Url") == "" {
+		c.Request.Header.Set("X-Return-Url", "/")
+	}
+
+	args, err := s.bindArgs(c)
+	if err != nil {
+		web.RedirectWithError(c, errors.Wrap(err, "wrong args provided"))
+		return
+	}
+
+	if args.Query != "" {
+		if !isMagnetOrTorrentOrHash(args.Query) {
+			// Redirect to homepage with query parameter q
+			c.Redirect(http.StatusFound, i18n.LangPath(i18n.GetLang(c), "/?q="+url.QueryEscape(args.Query)))
+			return
+		}
+	}
+
+	loadJob, err := s.jobs.Load(web.NewContext(c), &scripts.LoadArgs{
+		Query:       args.Query,
+		File:        args.File,
+		HintVideoID: args.HintVideoID,
+	})
+	if err != nil {
+		web.RedirectWithError(c, errors.Wrap(err, "failed to load resource"))
+		return
+	}
+
+	if !s.useDirectLinks {
+		s.addResourceToSession(c, loadJob.ID)
+	}
+
+	if c.GetHeader("Accept") == "application/json" {
+		c.JSON(http.StatusAccepted, gin.H{
+			"job_log_url": web.LangURL(i18n.GetLang(c), fmt.Sprintf("/queue/%v/job/%v/log", loadJob.Queue, loadJob.ID)),
+		})
+		return
+	}
+
+	s.tb.Build("index").HTML(http.StatusAccepted, web.NewContext(c).WithData(PostData{
+		Job:         loadJob,
+		Args:        args,
+		Instruction: args.Instruction,
+	}))
+}

@@ -1,0 +1,209 @@
+{{ define "discover" }}
+{{ if not .Data }}
+<div class="mt-12 relative z-10 w-full dynamic-section" id="discover-ribbon">
+    <!-- Movies Ribbon -->
+    <div class="dynamic-container overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-5 gap-3">
+            <div class="badge badge-lg bg-o-cyan/10 border-o-cyan/30 text-o-cyan gap-2 px-4 py-3 text-xs font-semibold tracking-widest uppercase">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
+                {{ t .Ctx.Lang "discover.type.movie" }}
+            </div>
+            <a href="{{ langPath .Ctx.Lang "/discover?type=movie" }}" class="text-o-cyan text-sm font-medium hover:underline flex items-center gap-1 shrink-0" data-async-target="main" data-umami-event="discover-see-more-movies-click">
+                {{ t .Ctx.Lang "discover.seeMore" }}
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </a>
+        </div>
+
+        <!-- Card Ribbon (populated dynamically) -->
+        <div class="flex gap-4 overflow-x-auto pb-4" id="discover-ribbon-cards-movies">
+            <!-- Skeleton cards shown while loading -->
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TV Series Ribbon -->
+    <div class="dynamic-container overflow-hidden mt-8">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-5 gap-3">
+            <div class="badge badge-lg bg-o-cyan/10 border-o-cyan/30 text-o-cyan gap-2 px-4 py-3 text-xs font-semibold tracking-widest uppercase">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
+                {{ t .Ctx.Lang "discover.type.series" }}
+            </div>
+            <a href="{{ langPath .Ctx.Lang "/discover?type=series" }}" class="text-o-cyan text-sm font-medium hover:underline flex items-center gap-1 shrink-0" data-async-target="main" data-umami-event="discover-see-more-series-click">
+                {{ t .Ctx.Lang "discover.seeMore" }}
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </a>
+        </div>
+
+        <!-- Card Ribbon (populated dynamically) -->
+        <div class="flex gap-4 overflow-x-auto pb-4" id="discover-ribbon-cards-series">
+            <!-- Skeleton cards shown while loading -->
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+            <div class="shrink-0 w-[140px]">
+                <div class="aspect-[2/3] rounded-xl bg-w-surface animate-pulse"></div>
+                <div class="mt-2 h-4 w-3/4 rounded bg-w-surface animate-pulse"></div>
+                <div class="mt-1 h-3 w-1/3 rounded bg-w-surface animate-pulse"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="discover-mount"></div>
+    {{ "discover.js" | asset }}
+    {{ "discover-ribbon.js" | asset }}
+</div>
+{{ end }}
+{{ end }}

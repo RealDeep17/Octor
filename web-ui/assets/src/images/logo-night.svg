@@ -1,0 +1,6 @@
+<svg width="170" height="170" viewBox="0 0 170 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sleek Outlined O with 8 Vertices -->
+  <path d="M85 15L135 35L155 85L135 135L85 155L35 135L15 85L35 35L85 15Z" stroke="white" stroke-width="10" stroke-linejoin="round"/>
+  <!-- Central Play Core -->
+  <path d="M75 65V105L105 85L75 65Z" fill="white"/>
+</svg>

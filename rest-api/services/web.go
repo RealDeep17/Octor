@@ -1,0 +1,465 @@
+package services
+
+import (
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/pkg/errors"
+
+	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
+	"github.com/urfave/cli"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/webtor-io/rest-api/docs"
+)
+
+// @title           Octor API
+// @version         0.1
+// @description     Simple API to communicate with Octor service.
+
+// @contact.name   Octor Support
+// @contact.url    https://octor/support
+// @contact.email  support@octor
+
+const (
+	webHostFlag = "host"
+	webPortFlag = "port"
+)
+
+type Web struct {
+	host         string
+	port         int
+	ln           net.Listener
+	rm           *ResourceMap
+	c            *List
+	e            *Export
+	st           *SpeedTest
+	prowlarr     *ProwlarrClient
+	transmission *TransmissionService
+	apiKey       string
+}
+
+func NewWeb(c *cli.Context, rm *ResourceMap, co *List, ex *Export, st *SpeedTest, prowlarr *ProwlarrClient, transmission *TransmissionService) *Web {
+	return &Web{
+		host:         c.String(webHostFlag),
+		port:         c.Int(webPortFlag),
+		rm:           rm,
+		c:            co,
+		e:            ex,
+		st:           st,
+		prowlarr:     prowlarr,
+		transmission: transmission,
+		apiKey:       c.String("export-api-key"),
+	}
+}
+
+func RegisterWebFlags(f []cli.Flag) []cli.Flag {
+	f = append(f,
+		cli.StringFlag{
+			Name:   webHostFlag,
+			Usage:  "listening host",
+			Value:  "",
+			EnvVar: "WEB_HOST",
+		},
+		cli.IntFlag{
+			Name:   webPortFlag,
+			Usage:  "http listening port",
+			Value:  8080,
+			EnvVar: "WEB_PORT",
+		},
+	)
+	f = RegisterProwlarrFlags(f)
+	f = RegisterTransmissionFlags(f)
+	return f
+}
+
+// @Summary Stores resource
+// @Description Receives torrent or magnet-uri in request body.
+// @Description If magnet-uri provided instead of torrent, then it tries to fetch torrent from BitTorrent network (timeout 3 minutes).
+// @Param resource body string true "resource" example("magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&tr=wss%3A%2F%2Ftracker.fastcast.nz&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F")
+// @Schemes
+// @Tags   resource
+// @Accept */*
+// @Produce json
+// @Success 200 {object} ResourceResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 408 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /resource/ [post]
+func (s *Web) postResource(g *gin.Context) {
+	b := g.Request.Body
+	defer b.Close()
+	bb, err := io.ReadAll(b)
+	if err != nil {
+		g.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	r, err := s.rm.Get(g.Request.Context(), bb)
+	if err != nil {
+		g.Error(err)
+		return
+	}
+	g.PureJSON(http.StatusOK, &ResourceResponse{
+		ID:        r.ID,
+		Name:      r.Name,
+		MagnetURI: r.MagnetURI,
+	})
+}
+
+// @Summary Returns resource
+// @Description Receives resource id and returns resource.
+// @Schemes
+// @Param resource_id path string true "resource_id" example("08ada5a7a6183aae1e09d831df6748d566095a10")
+// @Tags  resource
+// @Accept */*
+// @Produce json
+// @Success 200 {object} ResourceResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /resource/{resource_id} [get]
+func (s *Web) getResource(g *gin.Context) {
+	id := g.Param("resource_id")
+	if strings.HasSuffix(id, ".torrent") {
+		s.getTorrent(g)
+		return
+	}
+	r, err := s.rm.Get(g.Request.Context(), []byte(id))
+	if err != nil {
+		g.Error(err)
+		return
+	}
+	g.PureJSON(http.StatusOK, &ResourceResponse{
+		ID:        r.ID,
+		Name:      r.Name,
+		MagnetURI: r.MagnetURI,
+	})
+}
+
+// @Summary Returns torrent for resource
+// @Description Receives id and returns torrent for resource.
+// @Schemes
+// @Param resource_id path string true "resource_id" example("08ada5a7a6183aae1e09d831df6748d566095a10")
+// @Tags  resource
+// @Accept */*
+// @Produce application/x-bittorrent
+// @Success 200 {object} ResourceResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /resource/{resource_id}.torrent [get]
+func (s *Web) getTorrent(g *gin.Context) {
+	id := g.Param("resource_id")
+	id = strings.TrimSuffix(id, ".torrent")
+	r, err := s.rm.Get(g.Request.Context(), []byte(id))
+	if err != nil {
+		g.Error(err)
+		return
+	}
+	g.Data(http.StatusOK, "application/x-bittorrent", r.Torrent)
+}
+
+// @Summary Lists resource
+// @Description Lists files and directories of specific resource.
+// @Description All ids in response can be used for export.
+// @Param resource_id path  string true  "resource_id" example("08ada5a7a6183aae1e09d831df6748d566095a10")
+// @Param path        query string false "path"
+// @Param limit       query int    false "limit"
+// @Param offset      query int    false "offset"
+// @Param output      query string false "output" Enums(list, tree)
+// @Param sort        query string false "sort" Enums(name, size) default(name)
+// @Schemes
+// @Tags   list
+// @Accept */*
+// @Produce json
+// @Success 200 {object} ListResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /resource/{resource_id}/list [get]
+func (s *Web) getList(g *gin.Context) {
+	args, err := ListGetArgsFromParams(g)
+	if err != nil {
+		g.Error(err)
+		return
+	}
+	id := strings.ToLower(g.Param("resource_id"))
+	r, err := s.rm.Get(g.Request.Context(), []byte(id))
+	if err != nil {
+		g.Error(err)
+		return
+	}
+	cr, err := s.c.Get(r, args)
+	if err != nil {
+		g.Error(err)
+		return
+	}
+	g.PureJSON(http.StatusOK, cr)
+}
+
+// @Summary Exports resource content
+// @Description Provides url for exporting resource content. content_id is
+// @Description either the SHA1 of the file's path (returned by /list) or
+// @Description the file's index in the torrent's natural file order
+// @Description (matches the fileIdx convention used by Stremio addons).
+// @Param output      query string false "output"      Enums(download, stream, torrent_client_stat, subtitles, media_probe)
+// @Param resource_id path  string true  "resource_id" example("08ada5a7a6183aae1e09d831df6748d566095a10")
+// @Param content_id  path  string true  "content_id"  example("ca2453df3e7691c28934eebed5a253ee0aabd29f")
+// @Schemes
+// @Tags export
+// @Accept */*
+// @Produce json
+// @Success 200 {object} ExportResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /resource/{resource_id}/export/{content_id} [get]
+func (s *Web) getExport(g *gin.Context) {
+	args, err := ExportGetArgsFromParams(g)
+	if err != nil {
+		g.Error(err)
+		return
+	}
+	contentID := strings.ToLower(g.Param("content_id"))
+	resourceID := strings.ToLower(g.Param("resource_id"))
+	r, err := s.rm.Get(g.Request.Context(), []byte(resourceID))
+	if err != nil {
+		g.Error(err)
+		return
+	}
+
+	var item *ListItem
+	if idx, ierr := strconv.Atoi(contentID); ierr == nil {
+		// content_id is a file index into the torrent's natural file order.
+		// Lets clients (Stremio addon) skip the /list round-trip when they
+		// already know which file in the torrent they want.
+		if idx < 0 || idx >= len(r.Files) {
+			g.Error(errors.Errorf("file idx %d out of range (resource has %d files)", idx, len(r.Files)))
+			return
+		}
+		it := s.c.buildFile(r.Files[idx])
+		item = &it
+	} else if sha1R.Match([]byte(contentID)) {
+		cr, lerr := s.c.Get(r, NewListGetArgs())
+		if lerr != nil {
+			g.Error(lerr)
+			return
+		}
+		for _, i := range cr.Items {
+			if i.ID == contentID {
+				item = &i
+				break
+			}
+		}
+		if item == nil && cr.ID == contentID {
+			item = &cr.ListItem
+		}
+	} else {
+		g.Error(errors.Errorf("failed to parse content id %v", contentID))
+		return
+	}
+
+	if item == nil {
+		g.Error(errors.Errorf("content with id %v not found", contentID))
+		return
+	}
+	res, err := s.e.Get(r, item, args, g)
+	if err != nil {
+		g.Error(err)
+		return
+	}
+	g.PureJSON(http.StatusOK, res)
+}
+
+func (s *Web) errorHandler(c *gin.Context) {
+	c.Next()
+	if len(c.Errors) == 0 {
+		return
+	}
+	err := c.Errors[0]
+	log.Error(err)
+
+	status := http.StatusInternalServerError
+
+	if strings.Contains(err.Error(), "failed to parse") {
+		status = http.StatusBadRequest
+	} else if strings.Contains(err.Error(), "forbidden") {
+		status = http.StatusForbidden
+	} else if strings.Contains(err.Error(), "not found") {
+		status = http.StatusNotFound
+	} else if strings.Contains(err.Error(), "timeout") {
+		status = http.StatusRequestTimeout
+	}
+	c.PureJSON(status, &ErrorResponse{Error: err.Error()})
+}
+
+func (s *Web) Serve() error {
+	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	ln, err := net.Listen("tcp", addr)
+	s.ln = ln
+	if err != nil {
+		return errors.Wrap(err, "Failed to web listen to tcp connection")
+	}
+	r := gin.Default()
+	r.UseRawPath = true
+	r.Use(s.errorHandler)
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Token, X-Api-Key")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	})
+	rg := r.Group("/resource")
+	{
+		rg.POST("/", s.postResource)
+		rg.GET("/:resource_id", s.getResource)
+		rg.GET("/:resource_id/list", s.getList)
+		rg.GET("/:resource_id/export/:content_id", s.getExport)
+	}
+	if s.st != nil {
+		r.GET("/speedtest", s.getSpeedtest)
+	}
+
+	// Webhook Ingestion & Discovery Engine Search Endpoints
+	r.POST("/webhook/ingest", s.postWebhookIngest)
+	r.GET("/search", s.getSearch)
+
+	// Transmission RPC Emulation Endpoints
+	r.POST("/transmission/rpc", s.postTransmissionRPC)
+	r.POST("/transmission/rpc/", s.postTransmissionRPC)
+	r.GET("/transmission/rpc", s.postTransmissionRPC)
+	r.GET("/transmission/rpc/", s.postTransmissionRPC)
+
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	docs.SwaggerInfo.BasePath = "/"
+	log.Infof("serving Web at %v", addr)
+	return http.Serve(s.ln, r)
+}
+
+func (s *Web) postWebhookIngest(g *gin.Context) {
+	key := g.Request.Header.Get("X-Api-Key")
+	if key == "" {
+		key = g.Query("api_key")
+	}
+
+	authorized := false
+	if s.transmission.apiKey == "" || key == s.transmission.apiKey {
+		authorized = true
+	} else if s.apiKey != "" && key == s.apiKey {
+		authorized = true
+	}
+
+	if !authorized {
+		g.JSON(http.StatusForbidden, gin.H{"error": "invalid automation api key"})
+		return
+	}
+
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := g.BindJSON(&req); err != nil {
+		g.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
+	}
+
+	if req.URL == "" {
+		g.JSON(http.StatusBadRequest, gin.H{"error": "missing url"})
+		return
+	}
+
+	var payload []byte
+	var err error
+	if strings.HasPrefix(req.URL, "http://") || strings.HasPrefix(req.URL, "https://") {
+		payload, err = s.transmission.DownloadTorrentURL(g.Request.Context(), req.URL)
+		if err != nil {
+			g.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("failed to download torrent URL: %v", err)})
+			return
+		}
+	} else {
+		payload = []byte(req.URL)
+	}
+
+	r, err := s.rm.Get(g.Request.Context(), payload)
+	if err != nil {
+		g.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	g.JSON(http.StatusOK, gin.H{
+		"id":        r.ID,
+		"name":      r.Name,
+		"magnet_uri": r.MagnetURI,
+	})
+}
+
+func (s *Web) getSearch(g *gin.Context) {
+	key := g.Request.Header.Get("X-Api-Key")
+	if key == "" {
+		key = g.Query("api_key")
+	}
+
+	authorized := false
+	if s.transmission.apiKey == "" || key == s.transmission.apiKey {
+		authorized = true
+	} else if s.apiKey != "" && key == s.apiKey {
+		authorized = true
+	}
+
+	if !authorized {
+		g.JSON(http.StatusForbidden, gin.H{"error": "invalid automation api key"})
+		return
+	}
+
+	query := g.Query("q")
+	if query == "" {
+		g.JSON(http.StatusBadRequest, gin.H{"error": "missing query parameter q"})
+		return
+	}
+
+	results, err := s.prowlarr.Search(query)
+	if err != nil {
+		g.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	g.JSON(http.StatusOK, results)
+}
+
+func (s *Web) postTransmissionRPC(g *gin.Context) {
+	s.transmission.HandleRPC(g)
+}
+
+func (s *Web) getSpeedtest(g *gin.Context) {
+	urls, err := s.st.GetURLs(g)
+	if err != nil {
+		g.Error(err)
+		return
+	}
+	g.PureJSON(http.StatusOK, &SpeedtestResponse{URLs: urls})
+}
+
+func (s *Web) Close() {
+	log.Info("closing Web")
+	defer func() {
+		log.Info("Web closed")
+	}()
+	if s.ln != nil {
+		_ = s.ln.Close()
+	}
+}

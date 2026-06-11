@@ -1,0 +1,18 @@
+{{ define "title" }}{{ t $.Lang "discover.title" }}{{ end }}
+{{ define "main" }}
+<script>
+    window._addons = {{ .Data.Addons | json }};
+    window._stremioSettings = {{ .Data.StremioSettings | json }};
+    window._isAdmin = {{ .Data.IsAdmin }};
+</script>
+<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 dynamic-section" id="discover-page">
+  <div class="dynamic-container">
+
+    <!-- Preact mounts here -->
+    <div id="discover-mount"></div>
+
+  </div>
+
+  {{ "discover.js" | asset }}
+</section>
+{{ end }}

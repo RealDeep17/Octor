@@ -1,0 +1,38 @@
+{{ define "footer"}}
+<footer class="bg-base-200 border-t border-o-line py-8 px-6 sm:px-10 mt-20">
+    <div class="max-w-[1100px] mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
+        <!-- Brand -->
+        <div class="flex items-center gap-6">
+            <a href="{{ langPath $.Lang "/" }}" data-async-target="main"
+                class="font-logo text-[1.6rem] font-light no-underline">Oc<span class="text-o-primary">tor</span></a>
+            
+            <div class="h-4 w-px bg-o-line hidden md:block"></div>
+
+            <nav class="flex items-center gap-6 text-[11px] font-bold uppercase tracking-widest">
+                <a class="text-o-sub hover:text-o-primaryL transition-colors" href="{{ langPath $.Lang "/docs" }}"
+                    data-async-target="main">Documentation</a>
+                {{ if useAbuseStore }}
+                <a class="text-o-sub hover:text-o-primaryL transition-colors" href="{{ langPath $.Lang "/support" }}"
+                    data-async-target="main">Support</a>
+                {{ end }}
+                <a href="https://github.com/RealDeep17/Octor" target="_blank"
+                    class="text-o-sub hover:text-o-primaryL transition-colors">GitHub</a>
+            </nav>
+        </div>
+
+        <!-- Copyright & Legal -->
+        <div class="flex flex-col items-center md:items-end gap-2">
+            <div class="text-[10px] text-o-muted uppercase tracking-[0.2em] font-bold">
+                {{ tp $.Lang "footer.copyright" "Year" now.UTC.Year }}
+            </div>
+            {{ if useAbuseStore }}
+            <div class="flex items-center gap-4 text-[9px] text-o-muted/60 uppercase tracking-widest font-semibold">
+                <a class="hover:text-o-primary transition-colors" href="{{ langPath $.Lang "/legal/dmca" }}" data-async-target="main">DMCA</a>
+                <a class="hover:text-o-primary transition-colors" href="{{ langPath $.Lang "/legal/privacy" }}" data-async-target="main">Privacy</a>
+                <a class="hover:text-o-primary transition-colors" href="{{ langPath $.Lang "/legal/tos" }}" data-async-target="main">Terms</a>
+            </div>
+            {{ end }}
+        </div>
+    </div>
+</footer>
+{{ end }}

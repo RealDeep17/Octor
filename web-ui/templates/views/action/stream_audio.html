@@ -1,0 +1,26 @@
+{{ define "main" }}
+{{ with .Data }}
+<audio class="player"
+       crossorigin="anonymous"
+       preload="auto"
+       data-resource-id="{{ .VideoStreamUserData.ResourceID }}"
+       data-path="{{ .Item.PathStr }}"
+       {{ if .TranscoderSession }}data-duration="{{ .TranscoderSession.Duration }}"
+       {{ else if .MediaProbe }}data-duration="{{ .MediaProbe | getDurationSec }}" {{ end }}
+       {{ if .TranscoderSession }}data-session-id="{{ .TranscoderSession.ID }}"{{ end }}
+       {{ if .SessionSeekURL }}data-session-seek-url="{{ .SessionSeekURL }}"{{ end }}
+       {{ if .SessionDeleteURL }}data-session-delete-path="{{ .SessionDeleteURL }}"{{ end }}
+       {{ if .DirectFallbackURL }}data-direct-fallback-url="{{ .DirectFallbackURL }}"{{ end }}
+       {{ if .DirectFallbackType }}data-direct-fallback-type="{{ .DirectFallbackType }}"{{ end }}
+       {{ if .GraceDurationSec }}data-grace-duration-sec="{{ .GraceDurationSec }}"{{ end }}
+       controls
+       data-settings="{{ .Settings | json }}">
+
+    {{ range .ExportTag.Sources }}
+    <source src="{{ .Src }}" type="{{ .Type }}">
+    {{ end }}
+</audio>
+{{ end }}
+{{ "player.css" | asset }}
+{{ "action/stream.js" | asset }}
+{{ end }}

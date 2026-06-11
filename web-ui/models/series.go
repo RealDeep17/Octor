@@ -1,0 +1,230 @@
+package models
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/go-pg/pg/v10"
+	pkgerrors "github.com/pkg/errors"
+	"github.com/satori/go.uuid"
+)
+
+type Series struct {
+	*VideoContent
+	tableName struct{} `pg:"series"`
+
+	SeriesID         uuid.UUID  `pg:"series_id,pk,type:uuid,default:uuid_generate_v4()"`
+	SeriesMetadataID *uuid.UUID `pg:"series_metadata_id"`
+	CreatedAt        time.Time  `pg:"created_at,default:now()"`
+	UpdatedAt        time.Time  `pg:"updated_at,default:now()"`
+
+	// Transient: populated by handlers from series_status for UI badges.
+	UserWatched      bool   `pg:"-"`
+	UserRating       *int16 `pg:"-"`
+	UserPosterLayout string `pg:"-"`
+	IsAnime          bool   `pg:"-"`
+
+	Episodes       []*Episode      `pg:"rel:has-many,fk:series_id"`
+	MediaInfo      *MediaInfo      `pg:"rel:has-one,fk:resource_id"`
+	SeriesMetadata *SeriesMetadata `pg:"rel:has-one,fk:series_metadata_id"`
+	LibraryItems   []*Library      `pg:"rel:has-many,fk:library_id,join_fk:resource_id"`
+}
+
+func (s *Series) GetMetadata() *VideoMetadata {
+	if s.SeriesMetadata == nil {
+		return nil
+	}
+	return s.SeriesMetadata.VideoMetadata
+}
+
+func (s *Series) GetContent() *VideoContent {
+	return s.VideoContent
+}
+
+func (s *Series) GetContentType() ContentType {
+	return ContentTypeSeries
+}
+
+func (s *Series) GetUserPosterLayout() string {
+	return s.UserPosterLayout
+}
+
+func (s *Series) GetID() uuid.UUID {
+	return s.SeriesID
+}
+
+func (s *Series) GetPath() *string {
+	return nil
+}
+
+func (s *Series) GetEpisode(season int, episode int) *Episode {
+	for _, e := range s.Episodes {
+		var se int16
+		if e.Season != nil {
+			se = *e.Season
+		}
+		var ep int16
+		if e.Episode != nil {
+			ep = *e.Episode
+		}
+		if int(se) == season && int(ep) == episode {
+			return e
+		}
+	}
+	return nil
+}
+
+func (s *Series) GetIntYear() int {
+	if s.Year == nil {
+		return 0
+	}
+	return int(*s.Year)
+}
+
+func ReplaceSeriesForResource(ctx context.Context, db *pg.DB, resourceID string, seriesList []*Series) error {
+	// Safety guard: never delete existing rows when the new result is empty.
+	// This preserves previously-enriched series/episode data if re-enrichment finds nothing.
+	if len(seriesList) == 0 {
+		return nil
+	}
+
+	tx, err := db.BeginContext(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Close()
+	}()
+
+	// Delete series (episodes will cascade)
+	_, err = tx.Model((*Series)(nil)).
+		Where("resource_id = ?", resourceID).
+		Context(ctx).
+		Delete()
+	if err != nil {
+		return err
+	}
+
+	for _, series := range seriesList {
+		// Insert series
+		_, err := tx.Model(series).
+			Context(ctx).
+			Insert()
+		if err != nil {
+			return err
+		}
+
+		// Insert episodes
+		_, err = tx.Model(&series.Episodes).
+			Context(ctx).
+			Insert()
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func GetSeriesByResourceID(ctx context.Context, db *pg.DB, resourceID string) ([]*Series, error) {
+	var series []*Series
+
+	err := db.Model(&series).
+		Context(ctx).
+		Where("resource_id = ?", resourceID).
+		Select()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return series, nil
+}
+
+func GetSeriesByID(ctx context.Context, db *pg.DB, uID uuid.UUID, seriesID string) (*Series, error) {
+	var s Series
+
+	query := db.Model(&s).
+		Context(ctx).
+		Join("join library as l").
+		JoinOn("series.resource_id = l.resource_id").
+		Where("series.series_id = ?", seriesID).
+		Where("l.user_id = ?", uID).
+		Relation("Episodes.EpisodeMetadata").
+		Limit(1)
+
+	err := query.Select()
+	if err != nil {
+		return nil, pkgerrors.Wrap(err, "failed to fetch series")
+	}
+
+	return &s, nil
+}
+
+func GetSeriesByVideoID(ctx context.Context, db *pg.DB, uID uuid.UUID, videoID string) ([]*Series, error) {
+	var list []*Series
+
+	query := db.Model(&list).
+		Context(ctx).
+		Join("join series_metadata as smd").
+		JoinOn("series.series_metadata_id = smd.series_metadata_id").
+		Where("smd.video_id = ?", videoID).
+		Relation("SeriesMetadata").
+		Relation("Episodes.EpisodeMetadata")
+
+	if uID != uuid.Nil {
+		query.Join("join library as l").
+			JoinOn("series.resource_id = l.resource_id").
+			Where("l.user_id = ?", uID)
+	} else {
+		query.Join("join (select distinct resource_id from library) as l").
+			JoinOn("series.resource_id = l.resource_id")
+	}
+
+	err := query.Select()
+	if err != nil {
+		return nil, pkgerrors.Wrap(err, "failed to fetch series list")
+	}
+
+	return list, nil
+}
+
+func GetSeriesWithMetadataByResourceID(ctx context.Context, db *pg.DB, resourceID string) (*Series, error) {
+	var s Series
+	err := db.Model(&s).
+		Context(ctx).
+		Where("resource_id = ?", resourceID).
+		Relation("SeriesMetadata").
+		Relation("Episodes.EpisodeMetadata").
+		Limit(1).
+		Select()
+	if errors.Is(err, pg.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func GetSeriesWithEpisodes(ctx context.Context, db *pg.DB, sID uuid.UUID) (*Series, error) {
+	var s Series
+	err := db.Model(&s).
+		Context(ctx).
+		Where("series.series_id = ?", sID).
+		Relation("Episodes.EpisodeMetadata").
+		Select()
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func DeleteSeriesForResource(ctx context.Context, db *pg.DB, resourceID string) error {
+	_, err := db.Model((*Series)(nil)).
+		Where("resource_id = ?", resourceID).
+		Context(ctx).
+		Delete()
+	return err
+}

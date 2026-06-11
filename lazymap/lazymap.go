@@ -1,0 +1,343 @@
+package lazymap
+
+import (
+	"math"
+	"sort"
+	"sync"
+	"time"
+)
+
+type ItemStatus int
+
+const (
+	None ItemStatus = iota
+	Enqueued
+	Running
+	Done
+	Failed
+	Canceled
+)
+
+type LazyMap[T any] struct {
+	// noCopy prevents accidental copying of the LazyMap, which would duplicate
+	// the mutex and cause data races or fatal errors like concurrent map writes.
+	// See https://github.com/golang/go/issues/8005
+	noCopy         noCopy
+	mux            sync.RWMutex
+	m              map[string]*lazyMapItem[T]
+	expire         time.Duration
+	errorExpire    time.Duration
+	storeErrors    bool
+	initExpire     time.Duration
+	c              chan bool
+	capacity       int
+	cleanThreshold float64
+	cleanRatio     float64
+	cleaning       bool
+	evictNotInited bool
+}
+
+// noCopy may be embedded into structs which must not be copied
+// after the first use. See `go vet -copylocks` and `-copylocks` analyzer.
+// The Lock method does nothing but fulfills the analyzer's expectations.
+type noCopy struct{}
+
+func (*noCopy) Lock()   {}
+func (*noCopy) Unlock() {}
+
+type Config struct {
+	Concurrency    int
+	Expire         time.Duration
+	ErrorExpire    time.Duration
+	StoreErrors    bool
+	InitExpire     time.Duration
+	Capacity       int
+	CleanThreshold float64
+	CleanRatio     float64
+	EvictNotInited bool
+}
+
+type EvictedError struct{}
+
+func (s *EvictedError) Error() string {
+	return "Evicted"
+}
+
+func New[T any](cfg *Config) *LazyMap[T] {
+	capacity := cfg.Capacity
+	concurrency := 10
+	if cfg.Concurrency != 0 {
+		concurrency = cfg.Concurrency
+	}
+	expire := cfg.Expire
+	errorExpire := expire
+	if cfg.ErrorExpire != 0 {
+		errorExpire = cfg.ErrorExpire
+	}
+	cleanThreshold := 0.9
+	if cfg.CleanThreshold != 0 {
+		cleanThreshold = cfg.CleanThreshold
+	}
+	cleanRatio := 0.1
+	if cfg.CleanRatio != 0 {
+		cleanRatio = cfg.CleanRatio
+	}
+	c := make(chan bool, concurrency)
+	for i := 0; i < concurrency; i++ {
+		c <- true
+	}
+	return &LazyMap[T]{
+		c:              c,
+		expire:         expire,
+		errorExpire:    errorExpire,
+		storeErrors:    cfg.StoreErrors,
+		initExpire:     cfg.InitExpire,
+		capacity:       capacity,
+		cleanThreshold: cleanThreshold,
+		cleanRatio:     cleanRatio,
+		evictNotInited: cfg.EvictNotInited,
+		m:              make(map[string]*lazyMapItem[T], capacity),
+	}
+}
+
+type lazyMapItem[T any] struct {
+	key     string
+	val     T
+	f       func() (T, error)
+	inited  bool
+	err     error
+	la      time.Time
+	mux     sync.RWMutex
+	cancel  bool
+	t       *time.Timer
+	exp     time.Duration
+	running bool
+}
+
+func (s *lazyMapItem[T]) Touch() {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	if s.t != nil {
+		s.t.Reset(s.exp)
+	}
+	s.la = time.Now()
+}
+
+func (s *lazyMapItem[T]) Cancel() {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	if s.cancel {
+		return
+	}
+	if s.t != nil {
+		s.t.Stop()
+	}
+	s.cancel = true
+}
+
+func (s *lazyMapItem[T]) doExpire(exp time.Duration) <-chan time.Time {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	if s.t != nil {
+		s.t.Stop()
+	}
+	s.exp = exp
+	s.t = time.NewTimer(exp)
+	return s.t.C
+}
+
+func (s *lazyMapItem[T]) Get() (T, error) {
+	s.mux.Lock()
+	s.la = time.Now()
+	if s.inited {
+		s.mux.Unlock()
+		return s.val, s.err
+	}
+
+	if s.t != nil {
+		s.t.Stop()
+		s.t = nil
+	}
+	s.running = true
+	canceled := s.cancel
+	f := s.f
+	s.mux.Unlock()
+
+	// Execute the function without holding the lock
+	// This allows Status() to check the running flag
+	var val T
+	var err error
+	if canceled {
+		var zero T
+		val, err = zero, &EvictedError{}
+	} else {
+		val, err = f()
+	}
+
+	s.mux.Lock()
+	s.val = val
+	s.err = err
+	s.inited = true
+	s.running = false
+	s.mux.Unlock()
+	return val, err
+}
+
+func (s *LazyMap[T]) doExpire(expire time.Duration, key string, v *lazyMapItem[T]) {
+	c := v.doExpire(expire)
+	go func() {
+		<-c
+		s.mux.Lock()
+		v.Cancel()
+		delete(s.m, key)
+		s.mux.Unlock()
+	}()
+}
+
+func (s *LazyMap[T]) clean() {
+	if s.capacity == 0 {
+		return
+	}
+	thr := int(math.Ceil(s.cleanThreshold * float64(s.capacity)))
+	if len(s.m) <= thr {
+		return
+	}
+	if s.cleaning {
+		return
+	}
+	s.cleaning = true
+	t := make([]*lazyMapItem[T], 0, len(s.m))
+	for _, v := range s.m {
+		t = append(t, v)
+	}
+	sort.Slice(t, func(i, j int) bool {
+		t[i].mux.RLock()
+		t[j].mux.RLock()
+		iLa := t[i].la
+		jLa := t[j].la
+		t[j].mux.RUnlock()
+		t[i].mux.RUnlock()
+		return iLa.Before(jLa)
+	})
+	cq := int(math.Ceil(s.cleanRatio * float64(s.capacity)))
+	dc := 0
+	for i := 0; i < len(t); i++ {
+		t[i].mux.RLock()
+		running := t[i].running
+		inited := t[i].inited
+		t[i].mux.RUnlock()
+		if !running && (inited || s.evictNotInited) {
+			t[i].Cancel()
+			delete(s.m, t[i].key)
+			dc++
+		}
+		if dc >= cq {
+			break
+		}
+	}
+	s.cleaning = false
+}
+
+func (s *lazyMapItem[T]) Status() ItemStatus {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+	if s.cancel {
+		return Canceled
+	}
+	if s.running {
+		return Running
+	}
+	if s.inited && s.err != nil {
+		return Failed
+	}
+	if s.inited && s.err == nil {
+		return Done
+	}
+	return Enqueued
+}
+
+func (s *LazyMap[T]) Status(key string) (ItemStatus, bool) {
+	s.mux.RLock()
+	v, loaded := s.m[key]
+	s.mux.RUnlock()
+	if !loaded {
+		return None, false
+	}
+	return v.Status(), true
+}
+
+func (s *LazyMap[T]) Touch(key string) bool {
+	s.mux.RLock()
+	v, loaded := s.m[key]
+	s.mux.RUnlock()
+	if loaded {
+		v.Touch()
+		return true
+	}
+	return false
+}
+
+func (s *LazyMap[T]) Get(key string, f func() (T, error)) (T, error) {
+	s.mux.RLock()
+	v, loaded := s.m[key]
+	if loaded {
+		s.mux.RUnlock()
+		return v.Get()
+	}
+	s.mux.RUnlock()
+	s.mux.Lock()
+	v, loaded = s.m[key]
+	if loaded {
+		s.mux.Unlock()
+		return v.Get()
+	}
+	v = &lazyMapItem[T]{
+		key: key,
+		f:   f,
+		la:  time.Now(),
+	}
+	s.m[key] = v
+	s.mux.Unlock()
+	if s.initExpire != 0 {
+		s.doExpire(s.initExpire, key, v)
+	}
+	<-s.c
+	r, err := v.Get()
+	s.c <- true
+	if err != nil && !s.storeErrors {
+		s.Drop(key)
+	} else if err != nil && s.errorExpire != 0 {
+		s.doExpire(s.errorExpire, key, v)
+	} else if err == nil && s.expire != 0 {
+		s.doExpire(s.expire, key, v)
+	}
+	s.mux.Lock()
+	s.clean()
+	s.mux.Unlock()
+	return r, err
+}
+
+func (s *LazyMap[T]) Drop(key string) {
+	s.mux.Lock()
+	if v, ok := s.m[key]; ok {
+		v.Cancel()
+		delete(s.m, key)
+	}
+	s.mux.Unlock()
+}
+
+func (s *LazyMap[T]) Len() int {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+	return len(s.m)
+}
+
+func (s *LazyMap[T]) Keys() []string {
+	s.mux.RLock()
+	defer s.mux.RUnlock()
+	keys := make([]string, 0, len(s.m))
+	for k := range s.m {
+		keys = append(keys, k)
+	}
+	return keys
+}

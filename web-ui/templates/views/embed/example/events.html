@@ -1,0 +1,16 @@
+{{ define "main" }}
+<div id="player" class="octor"></div>
+<script>
+    window.octor = window.octor || [];
+    window.octor.push({
+        id: 'player',
+        magnet: '{{ demoMagnet }}',
+        baseUrl: '{{ domain }}',
+        on: function(e) {
+            if (e.name === window.octor.INITED) {
+                console.log('inited!', e);
+            }
+        }
+    });
+</script>
+{{ end}}

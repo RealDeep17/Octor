@@ -1,0 +1,226 @@
+{{ define "profile/appearance" }}
+<div class="card bg-base-300/50 border border-o-line p-5 sm:p-7 rounded-2xl">
+    <div class="max-w-[780px]">
+        <p class="text-o-sub text-sm mb-6">Choose your preferred Octor skin. Changes are applied instantly to your current device.</p>
+        
+        <h3 class="text-[10px] font-bold uppercase tracking-[0.2em] text-o-muted mb-4">Dark Skins</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4 mb-10">
+            <!-- Linear -->
+            <button onclick="setSkin('linear')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="linear">
+                <div class="absolute inset-0 bg-[#0c0d10]"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#5e6ad2] shadow-[0_0_8px_rgba(94,106,210,0.5)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-white/50 uppercase tracking-tighter truncate">Linear</div>
+            </button>
+
+            <!-- Lapis -->
+            <button onclick="setSkin('lapis')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="lapis">
+                <div class="absolute inset-0 bg-[#060918]"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#38bdf8] shadow-[0_0_8px_rgba(56,189,248,0.5)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-white/50 uppercase tracking-tighter truncate">Lapis</div>
+            </button>
+
+            <!-- Vercel -->
+            <button onclick="setSkin('vercel')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="vercel">
+                <div class="absolute inset-0 bg-black"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-white/50 uppercase tracking-tighter truncate">Vercel</div>
+            </button>
+
+            <!-- Max -->
+            <button onclick="setSkin('max')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="max">
+                <div class="absolute inset-0 bg-[#02020f]"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#a855f7] shadow-[0_0_8px_rgba(168,85,247,0.5)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-white/50 uppercase tracking-tighter truncate">Max</div>
+            </button>
+
+            <!-- Cyberpunk -->
+            <button onclick="setSkin('cyberpunk')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="cyberpunk">
+                <div class="absolute inset-0 bg-black"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#f43f5e] shadow-[0_0_8px_rgba(244,63,94,0.5)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-[#f43f5e]/50 uppercase tracking-tighter truncate">Cyber</div>
+            </button>
+
+            <!-- Heritage -->
+            <button onclick="setSkin('webtor')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="webtor">
+                <div class="absolute inset-0 bg-[#0a0e1a]"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#e84393] shadow-[0_0_8px_rgba(232,67,147,0.5)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-white/50 uppercase tracking-tighter truncate">Heritage</div>
+            </button>
+        </div>
+
+        <h3 class="text-[10px] font-bold uppercase tracking-[0.2em] text-o-muted mb-4">Light Skins</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4">
+            <!-- Geist -->
+            <button onclick="setSkin('geist')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="geist">
+                <div class="absolute inset-0 bg-white"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-black shadow-[0_0_8px_rgba(0,0,0,0.2)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-black/50 uppercase tracking-tighter truncate">Geist</div>
+            </button>
+
+            <!-- Slate -->
+            <button onclick="setSkin('slate')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="slate">
+                <div class="absolute inset-0 bg-[#ffffff]"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#0969da] shadow-[0_0_8px_rgba(9,105,218,0.2)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-black/40 uppercase tracking-tighter truncate">Slate</div>
+            </button>
+
+            <!-- Cloud -->
+            <button onclick="setSkin('cloud')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="cloud">
+                <div class="absolute inset-0 bg-[#eff6ff]"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#2563eb] shadow-[0_0_8px_rgba(37,99,235,0.2)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-black/40 uppercase tracking-tighter truncate">Cloud</div>
+            </button>
+
+            <!-- Latte -->
+            <button onclick="setSkin('latte')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="latte">
+                <div class="absolute inset-0 bg-[#eff1f5]"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#1e66f5] shadow-[0_0_8px_rgba(30,102,245,0.2)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-[#4c4f69]/50 uppercase tracking-tighter truncate">Latte</div>
+            </button>
+
+            <!-- Nord -->
+            <button onclick="setSkin('nord')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="nord">
+                <div class="absolute inset-0 bg-[#eceff4]"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#5e81ac] shadow-[0_0_8px_rgba(94,129,172,0.2)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-[#2e3440]/50 uppercase tracking-tighter truncate">Nord</div>
+            </button>
+
+            <!-- Solar -->
+            <button onclick="setSkin('solar')" class="skin-btn group relative aspect-[4/3] rounded-xl border-2 border-o-line overflow-hidden transition-all hover:border-o-primary" data-skin-id="solar">
+                <div class="absolute inset-0 bg-[#fdf6e3]"></div>
+                <div class="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-[#268bd2] shadow-[0_0_8px_rgba(38,139,210,0.2)]"></div>
+                <div class="absolute bottom-2 left-2 right-2 text-[8px] font-black text-[#073642]/50 uppercase tracking-tighter truncate">Solar</div>
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="card bg-base-300/50 border border-o-line p-5 sm:p-7 rounded-2xl mt-6">
+    <div class="max-w-[780px]">
+        <h3 class="text-[clamp(1.2rem,3vw,1.5rem)] font-bold tracking-tight mb-2">Grid Density</h3>
+        <p class="text-o-sub text-sm mb-6">Control how many items are displayed per row on large screens.</p>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <!-- Default (Low) -->
+            <button onclick="setDensity('default')" class="density-btn p-4 rounded-xl border-2 border-o-line hover:border-o-primary transition-all text-left" data-density-id="default">
+                <div class="text-xs font-bold uppercase tracking-widest text-o-muted mb-1">Low</div>
+                <div class="text-sm font-bold text-w-text mb-2">2 Horiz / 4 Vert</div>
+                <div class="flex gap-1 opacity-40">
+                    <div class="w-4 h-6 rounded bg-o-line"></div>
+                    <div class="w-4 h-6 rounded bg-o-line"></div>
+                </div>
+            </button>
+
+            <!-- Medium -->
+            <button onclick="setDensity('medium')" class="density-btn p-4 rounded-xl border-2 border-o-line hover:border-o-primary transition-all text-left" data-density-id="medium">
+                <div class="text-xs font-bold uppercase tracking-widest text-o-muted mb-1">Medium</div>
+                <div class="text-sm font-bold text-w-text mb-2">3 Horiz / 6 Vert</div>
+                <div class="flex gap-1 opacity-60">
+                    <div class="w-3 h-5 rounded bg-o-line"></div>
+                    <div class="w-3 h-5 rounded bg-o-line"></div>
+                    <div class="w-3 h-5 rounded bg-o-line"></div>
+                </div>
+            </button>
+
+            <!-- High (Gorgeous) -->
+            <button onclick="setDensity('high')" class="density-btn p-4 rounded-xl border-2 border-o-line hover:border-o-primary transition-all text-left" data-density-id="high">
+                <div class="text-xs font-bold uppercase tracking-widest text-o-primary mb-1">High</div>
+                <div class="text-sm font-bold text-w-text mb-2">4 Horiz / 8 Vert</div>
+                <div class="flex gap-1">
+                    <div class="w-2.5 h-4 rounded bg-o-primary/40"></div>
+                    <div class="w-2.5 h-4 rounded bg-o-primary/40"></div>
+                    <div class="w-2.5 h-4 rounded bg-o-primary/40"></div>
+                    <div class="w-2.5 h-4 rounded bg-o-primary/40"></div>
+                </div>
+            </button>
+
+            <!-- Ultra (Compact) -->
+            <button onclick="setDensity('ultra')" class="density-btn p-4 rounded-xl border-2 border-o-line hover:border-o-primary transition-all text-left" data-density-id="ultra">
+                <div class="text-xs font-bold uppercase tracking-widest text-o-cyan mb-1">Ultra</div>
+                <div class="text-sm font-bold text-w-text mb-2">5 Horiz / 10 Vert</div>
+                <div class="flex gap-0.5">
+                    <div class="w-2 h-3.5 rounded bg-o-cyan/40"></div>
+                    <div class="w-2 h-3.5 rounded bg-o-cyan/40"></div>
+                    <div class="w-2 h-3.5 rounded bg-o-cyan/40"></div>
+                    <div class="w-2 h-3.5 rounded bg-o-cyan/40"></div>
+                    <div class="w-2 h-3.5 rounded bg-o-cyan/40"></div>
+                </div>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function setSkin(id) {
+        localStorage.setItem('octor-skin', id);
+        document.documentElement.setAttribute('data-skin', id);
+        updateActiveSkin(id);
+        
+        const hasAuth = "{{ if $.User | hasAuth }}1{{ end }}" === "1";
+        if (hasAuth) {
+            fetch('/profile/skin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': window._CSRF || ''
+                },
+                body: JSON.stringify({ skin: id })
+            }).catch(err => console.error('Failed to save skin preference to account:', err));
+        }
+    }
+
+    function setDensity(id) {
+        localStorage.setItem('octor-grid-density', id);
+        document.documentElement.setAttribute('data-grid-density', id);
+        updateActiveDensity(id);
+        
+        const hasAuth = "{{ if $.User | hasAuth }}1{{ end }}" === "1";
+        if (hasAuth) {
+            fetch('/profile/grid-density', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': window._CSRF || ''
+                },
+                body: JSON.stringify({ density: id })
+            }).catch(err => console.error('Failed to save density preference to account:', err));
+        }
+    }
+
+    function updateActiveSkin(id) {
+        document.querySelectorAll('.skin-btn').forEach(btn => {
+            const active = btn.getAttribute('data-skin-id') === id;
+            btn.classList.toggle('border-o-primary', active);
+            btn.classList.toggle('border-o-line', !active);
+            btn.classList.toggle('ring-2', active);
+            btn.classList.toggle('ring-o-primary', active);
+            btn.classList.toggle('ring-offset-2', active);
+            btn.classList.toggle('ring-offset-base-100', active);
+        });
+    }
+
+    function updateActiveDensity(id) {
+        document.querySelectorAll('.density-btn').forEach(btn => {
+            const active = btn.getAttribute('data-density-id') === id;
+            btn.classList.toggle('border-o-primary', active);
+            btn.classList.toggle('border-o-line', !active);
+            btn.classList.toggle('bg-o-primary/5', active);
+        });
+    }
+
+    // Initial state
+    (function() {
+        const dbSkin = "{{ if $.User | hasAuth }}{{ $.User.Skin }}{{ end }}";
+        const currentSkin = dbSkin || localStorage.getItem('octor-skin') || 'linear';
+        updateActiveSkin(currentSkin);
+
+        const dbDensity = "{{ if $.User | hasAuth }}{{ $.User.GridDensity }}{{ end }}";
+        const currentDensity = dbDensity || localStorage.getItem('octor-grid-density') || 'default';
+        updateActiveDensity(currentDensity);
+    })();
+</script>
+
+<style>
+    .text-shadow { text-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+</style>
+{{ end }}

@@ -1,0 +1,243 @@
+{{ define "title" }}{{ t $.Lang "profile.badge" }}{{ end }}
+{{ define "main" }}
+<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
+  <div class="max-w-[900px] mx-auto">
+    <div class="hidden sm:inline-flex badge badge-lg bg-o-primary/10 border-o-primary/30 text-o-primaryL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+      {{ t $.Lang "profile.badge" }}
+    </div>
+
+    <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-4">{{ t $.Lang "profile.title" }}</h1>
+
+    <p class="hidden sm:block text-[1.05rem] text-o-sub leading-relaxed mb-10">{{ t $.Lang "profile.subtitle" }}</p>
+
+    <div id="tier" class="mb-12">
+        {{ template "profile/tier" $ }}
+    </div>
+
+    <!-- Appearance -->
+    <div class="flex items-center gap-3 mt-12 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">Personalization</h2>
+        <div class="flex-1 h-px bg-o-line/50"></div>
+    </div>
+    <div id="appearance">
+        {{ template "profile/appearance" $ }}
+    </div>
+
+    <!-- Vault -->
+    {{ if .Data.VaultStats }}
+    <div class="flex items-center gap-3 mt-12 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">{{ t $.Lang "vault.dashboard.title" }}</h2>
+        <div class="flex-1 h-px bg-o-line/50"></div>
+    </div>
+    <div id="vault" data-async-layout="{{`{{ template "profile/vault" (withContext $ .Data.VaultStats) }}`}}">
+        {{ template "profile/vault" (withContext $ .Data.VaultStats) }}
+    </div>
+    {{ end }}
+
+    <!-- Stremio -->
+    <div class="flex items-center gap-3 mt-12 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">{{ t $.Lang "profile.stremio" }}</h2>
+        <div class="flex-1 h-px bg-o-line/50"></div>
+    </div>
+
+    <div id="stremio" data-async-layout="{{`{{ template "profile/stremio" (withContext $ .Data.StremioAddonURL) }}`}}">
+        {{ template "profile/stremio" (withContext $ .Data.StremioAddonURL) }}
+    </div>
+    <div id="streaming-backends" data-async-layout="{{`{{ template "profile/streaming_backends" $ }}`}}">
+        {{ template "profile/streaming_backends" $ }}
+    </div>
+    <div id="addon-urls" data-async-layout="{{`{{ template "profile/addon_urls" $ }}`}}">
+        {{ template "profile/addon_urls" $ }}
+    </div>
+    <div id="stremio-settings" data-async-layout="{{`{{ template "profile/stremio_settings" (withContext $ .Data.StremioSettings) }}`}}">
+        {{ template "profile/stremio_settings" (withContext $ .Data.StremioSettings) }}
+    </div>
+
+    <!-- Integrations -->
+    <div class="flex items-center gap-3 mt-10 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">{{ t $.Lang "profile.integrations" }}</h2>
+        <div class="flex-1 h-px bg-w-line/50"></div>
+    </div>
+
+    {{ if not .Data.DisableWebDAV }}
+    <div id="webdav" data-async-layout="{{`{{ template "profile/webdav" $ }}`}}">
+        {{ template "profile/webdav" $ }}
+    </div>
+    {{ end }}
+    {{ if not .Data.DisableEmbed }}
+    <div id="embed-domains" data-async-layout="{{`{{ template "profile/embed_domains" (withContext $ .Data) }}`}}">
+        {{ template "profile/embed_domains" (withContext $ .Data) }}
+    </div>
+    {{ end }}
+    {{ if .IsAdmin }}
+    <div class="flex items-center gap-3 mt-12 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">Admin Controls</h2>
+        <div class="flex-1 h-px bg-o-line/50"></div>
+    </div>
+    
+    <!-- Auto-Vault Toggle -->
+    <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
+        <div class="flex items-start gap-4">
+            <div class="flex-1">
+                <h3 class="text-sm font-semibold mb-1">Auto-Vault on Automation Ingest</h3>
+                <p class="text-xs text-o-muted leading-relaxed">
+                    Automatically queue torrents pushed via the Transmission RPC
+                    (<span class="font-mono bg-base-200 px-1 rounded text-[10px]">/transmission/rpc</span>)
+                    for vault storage. Also set via
+                    <span class="font-mono bg-base-200 px-1 rounded text-[10px]">AUTOMATION_AUTO_VAULT=true</span>.
+                </p>
+            </div>
+            <form method="post" action="{{ langPath $.Lang "/profile/settings" }}" data-async-target="main">
+                <label class="cursor-pointer pt-0.5 flex items-center gap-2">
+                    {{ if .Data.AutoVaultEnabled }}
+                      <span class="badge badge-sm bg-o-primaryL/10 border-o-primaryL/30 text-o-primaryL">On</span>
+                    {{ else }}
+                      <span class="badge badge-sm bg-w-muted/10 border-o-line text-o-muted">Off</span>
+                    {{ end }}
+                    <!-- Hidden input ensures value=0 when checkbox is unchecked -->
+                    <input type="hidden" name="auto_vault" value="0">
+                    <input type="checkbox" name="auto_vault" value="1" class="toggle toggle-soft toggle-primary toggle-sm" {{ if .Data.AutoVaultEnabled }}checked{{ end }} onchange="this.form.submit()" />
+                </label>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
+        <h3 class="text-sm font-semibold mb-1">Metadata Enrichment</h3>
+
+        {{/* ── Smart Refresh ── */}}
+        <div class="flex items-start gap-4 mt-4">
+            <div class="flex-1">
+                <p class="text-xs text-o-muted leading-relaxed">
+                    <strong class="text-base-content font-semibold">Smart Refresh</strong> —
+                    re-processes only missing, failed, or stale (&gt;7 days) resources.
+                    Respects retry cooldowns. Safe to run any time.
+                </p>
+            </div>
+            <form method="post" action="{{ langPath $.Lang "/admin/enrichment/refresh" }}" data-async-target="main" class="shrink-0">
+                <button type="submit" class="btn btn-soft btn-sm" data-umami-event="admin-enrichment-smart">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                    Smart Refresh
+                </button>
+            </form>
+        </div>
+
+        <div class="border-t border-o-line/30 my-4"></div>
+
+        {{/* ── Force All ── */}}
+        <div class="flex items-start gap-4">
+            <div class="flex-1">
+                <p class="text-xs text-o-muted leading-relaxed">
+                    <strong class="text-error font-semibold">Force All Active</strong> —
+                    re-enriches resources currently in library or vault (all users), regardless of status, including abandoned ones.
+                </p>
+            </div>
+            <div class="shrink-0">
+                <button type="button" class="btn btn-outline btn-error btn-sm" data-umami-event="admin-enrichment-force-all" onclick="document.getElementById('force-all-modal').showModal()">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
+                    Force All Active
+                </button>
+            </div>
+        </div>
+
+        <div class="border-t border-o-line/30 my-4"></div>
+
+        {{/* ── Force Everything ── */}}
+        <div class="flex items-start gap-4">
+            <div class="flex-1">
+                <p class="text-xs text-o-muted leading-relaxed">
+                    <strong class="text-error font-semibold">Force Everything</strong> —
+                    re-enriches absolutely every resource in the database, including stream-only and abandoned ones.
+                </p>
+            </div>
+            <div class="shrink-0">
+                <button type="button" class="btn btn-outline btn-error btn-sm" data-umami-event="admin-enrichment-force-everything" onclick="document.getElementById('force-everything-modal').showModal()">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
+                    Force Everything
+                </button>
+            </div>
+        </div>
+    </div>
+    {{ end }}
+
+
+    <div class="text-center mt-12 flex flex-col items-center gap-3">
+        <a href="{{ langPath $.Lang "/logout" }}" class="btn btn-ghost text-o-muted hover:text-error text-sm" data-async-target="main" data-umami-event="logout">{{ t $.Lang "profile.logout" }}</a>
+        <button type="button" class="btn btn-ghost text-o-muted hover:text-error text-xs"
+            data-umami-event="profile-delete" onclick="document.getElementById('delete-account-modal').showModal()">
+            {{ t $.Lang "profile.deleteAccount" }}
+        </button>
+    </div>
+  </div>
+
+  {{/* ── Custom Force All Confirmation Modal ── */}}
+  <dialog id="force-all-modal" class="modal">
+      <div class="modal-box max-w-sm bg-base-300 border border-o-line rounded-2xl shadow-xl">
+          <h3 class="text-lg font-bold text-error flex items-center gap-2 mb-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              Re-enrich Active?
+          </h3>
+          <p class="text-sm text-o-muted leading-relaxed mb-4">Are you sure you want to re-enrich all resources currently in user libraries or vault? This will run in the background and may take a long time to complete.</p>
+          <div class="modal-action justify-end gap-2">
+              <form method="dialog" class="inline">
+                  <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
+              </form>
+              <form method="post" action="{{ langPath $.Lang "/admin/enrichment/force-all" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('force-all-modal').close()">
+                  <button type="submit" class="btn btn-sm btn-error">Proceed</button>
+              </form>
+          </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  {{/* ── Custom Force Everything Confirmation Modal ── */}}
+  <dialog id="force-everything-modal" class="modal">
+      <div class="modal-box max-w-sm bg-base-300 border border-o-line rounded-2xl shadow-xl">
+          <h3 class="text-lg font-bold text-error flex items-center gap-2 mb-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              Re-enrich Absolutely All?
+          </h3>
+          <p class="text-sm text-o-muted leading-relaxed mb-4">Are you sure you want to re-enrich absolutely every resource in the database? This will run in the background and may take a long time to complete.</p>
+          <div class="modal-action justify-end gap-2">
+              <form method="dialog" class="inline">
+                  <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
+              </form>
+              <form method="post" action="{{ langPath $.Lang "/admin/enrichment/force-everything" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('force-everything-modal').close()">
+                  <button type="submit" class="btn btn-sm btn-error">Proceed</button>
+              </form>
+          </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  {{/* ── Custom Delete Account Confirmation Modal ── */}}
+  <dialog id="delete-account-modal" class="modal">
+      <div class="modal-box max-w-sm bg-base-300 border border-o-line rounded-2xl shadow-xl">
+          <h3 class="text-lg font-bold text-error flex items-center gap-2 mb-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              {{ t $.Lang "profile.deleteAccount" }}?
+          </h3>
+          <p class="text-sm text-o-muted leading-relaxed mb-4">{{ t $.Lang "profile.deleteConfirm" }}</p>
+          <div class="modal-action justify-end gap-2">
+              <form method="dialog" class="inline">
+                  <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
+              </form>
+              <form method="post" action="{{ langPath $.Lang "/profile/delete" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('delete-account-modal').close()">
+                  <button type="submit" class="btn btn-sm btn-error">Delete</button>
+              </form>
+          </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+</section>
+{{ end }}

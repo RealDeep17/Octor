@@ -1,0 +1,109 @@
+{{ define "library/torrent_list" }}
+<div class="bg-base-200/50 rounded-xl p-2 sm:p-4 space-y-1">
+    {{ range $.Data }}
+        {{ template "library/torrent_node" (withContext $.Ctx .) }}
+    {{ end }}
+</div>
+{{ end }}
+
+{{ define "library/torrent_node" }}
+    {{ if eq .Data.Type "folder" }}
+        <details open class="group/folder select-none">
+            <summary class="flex items-center gap-2 cursor-pointer p-3 hover:bg-base-300/30 rounded-xl transition-colors text-w-text
+                {{ if eq .Data.Category "movie" }}hover:text-sky-300{{ else if eq .Data.Category "series" }}hover:text-violet-300{{ else if eq .Data.Category "adult" }}hover:text-rose-300{{ else }}hover:text-amber-300{{ end }}">
+                <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap" onclick="event.stopPropagation()">
+                    <input type="checkbox" class="library-folder-cb checkbox checkbox-sm checkbox-primary rounded-md" />
+                </div>
+                <svg class="w-3.5 h-3.5 text-o-muted/60 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M9 18l6-6-6-6" />
+                </svg>
+                {{ if eq .Data.Category "movie" }}
+                    <svg class="w-4 h-4 text-sky-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                        <line x1="7" y1="2" x2="7" y2="22"></line>
+                        <line x1="17" y1="2" x2="17" y2="22"></line>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <line x1="2" y1="7" x2="7" y2="7"></line>
+                        <line x1="2" y1="17" x2="7" y2="17"></line>
+                        <line x1="17" y1="17" x2="22" y2="17"></line>
+                        <line x1="17" y1="7" x2="22" y2="7"></line>
+                    </svg>
+                {{ else if eq .Data.Category "series" }}
+                    <svg class="w-4 h-4 text-violet-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                        <polyline points="17 2 12 7 7 2"></polyline>
+                    </svg>
+                {{ else if eq .Data.Category "adult" }}
+                    <svg class="w-4 h-4 text-rose-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
+                    </svg>
+                {{ else }}
+                    <svg class="w-4 h-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                {{ end }}
+                <span class="font-semibold text-sm">{{ .Data.Name }}</span>
+                <span class="text-xs text-o-muted">({{ .Data.ItemCount }})</span>
+            </summary>
+            <div class="pl-5 ml-4 border-l space-y-1 mt-1 transition-all duration-300
+                {{ if eq .Data.Category "movie" }}border-sky-500/10{{ else if eq .Data.Category "series" }}border-violet-500/10{{ else if eq .Data.Category "adult" }}border-rose-500/10{{ else }}border-amber-500/10{{ end }}">
+                {{ range .Data.Children }}
+                    {{ template "library/torrent_node" (withContext $.Ctx .) }}
+                {{ end }}
+            </div>
+        </details>
+    {{ else }}
+        {{ $lib := .Data.Item }}
+        <div class="library-item flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group
+             {{ if eq .Data.Category "movie" }}hover:bg-sky-500/5 hover:shadow-[0_2px_8px_-2px_rgba(56,189,248,0.15)]{{ else if eq .Data.Category "series" }}hover:bg-violet-500/5 hover:shadow-[0_2px_8px_-2px_rgba(139,92,246,0.15)]{{ else if eq .Data.Category "adult" }}hover:bg-rose-500/5 hover:shadow-[0_2px_8px_-2px_rgba(244,63,94,0.15)]{{ else }}hover:bg-amber-500/5 hover:shadow-[0_2px_8px_-2px_rgba(245,158,11,0.15)]{{ end }}">
+            <div class="shrink-0 flex items-center pr-2 hidden library-item-cb-wrap">
+                <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md" data-resource-id="{{ $lib.ResourceID }}" />
+            </div>
+            <a href="{{ langPath $.Ctx.Lang (printf "/%s" $lib.ResourceID) }}" data-async-target="main"
+               class="flex-1 min-w-0 flex items-center gap-4 text-w-text
+                      {{ if eq .Data.Category "movie" }}hover:text-sky-300{{ else if eq .Data.Category "series" }}hover:text-violet-300{{ else if eq .Data.Category "adult" }}hover:text-rose-300{{ else }}hover:text-amber-300{{ end }} transition-colors">
+                {{ if eq .Data.Category "movie" }}
+                    <svg class="w-4 h-4 text-sky-400/80 group-hover:text-sky-300 shrink-0 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polygon points="10 8 16 12 10 16 10 8"></polygon>
+                    </svg>
+                {{ else if eq .Data.Category "series" }}
+                    <svg class="w-4 h-4 text-violet-400/80 group-hover:text-violet-300 shrink-0 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                {{ else if eq .Data.Category "adult" }}
+                    <svg class="w-4 h-4 text-rose-400/80 group-hover:text-rose-300 shrink-0 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                {{ else }}
+                    <svg class="w-4 h-4 text-amber-400/80 group-hover:text-amber-300 shrink-0 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                {{ end }}
+                <div class="flex-1 min-w-0 flex items-center justify-between gap-4">
+                    <div class="font-medium text-sm truncate flex-1 min-w-0">{{ if $lib.Torrent }}{{ $lib.Torrent.Name }}{{ else }}{{ $lib.Name }}{{ end }}</div>
+                    <div class="text-xs text-o-muted shrink-0 text-right whitespace-nowrap">{{ if $lib.Torrent }}{{ $lib.Torrent.SizeBytes | bitsForHumans }}{{ if $lib.Torrent.FileCount }} · {{ $lib.Torrent.FileCount }} {{ t $.Ctx.Lang "library.files" }}{{ end }}{{ else }}0 B{{ end }} · {{ timeAgoLang $.Ctx.Lang $lib.CreatedAt }}</div>
+                </div>
+            </a>
+            <form method="post" action="{{ langPath $.Ctx.Lang "/lib/remove" }}" data-async-target="main" data-async-no-scroll="true" data-async-push-state="false" class="shrink-0" onsubmit="return window.handleConfirmRemove(this, 'library')">
+                <input type="hidden" name="resource_id" value="{{ $lib.ResourceID }}" />
+                <button type="submit" class="p-1.5 text-o-muted/40 hover:text-error transition-colors rounded hover:bg-base-300" title="Remove from Library">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
+                </button>
+            </form>
+            
+            <a href="{{ langPath $.Ctx.Lang (printf "/%s" $lib.ResourceID) }}" data-async-target="main" class="text-o-muted/40 hover:text-o-purpleL shrink-0 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                </svg>
+            </a>
+        </div>
+    {{ end }}
+{{ end }}

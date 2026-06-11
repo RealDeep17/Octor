@@ -1,0 +1,18 @@
+#!/bin/bash
+# ==============================================================================
+# Octor Auto-Prune Weekly Maintenance Cron Job
+# ==============================================================================
+# Executed automatically by system cron every week to reclaim disk space.
+# Logs are appended to /var/log/octor-prune.log
+# ==============================================================================
+
+echo -e "\n=== Auto-Prune Started: $(date) ===" >> /var/log/octor-prune.log
+
+# 1. Run workspace and Go cleanups as 'ubuntu' user
+sudo -u ubuntu /home/ubuntu/octor/run.sh prune >> /var/log/octor-prune.log 2>&1
+
+# 2. Run system-wide log cleaning as root
+echo "  • System log maintenance..." >> /var/log/octor-prune.log
+journalctl --vacuum-time=3d >> /var/log/octor-prune.log 2>&1
+
+echo -e "=== Auto-Prune Finished: $(date) ===\n" >> /var/log/octor-prune.log

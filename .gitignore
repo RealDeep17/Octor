@@ -1,0 +1,53 @@
+# Local-only top-level workspace state.
+/infra-data/
+/server/
+/bin/
+/.antigravitycli/
+# OS/editor noise.
+.DS_Store
+**/.DS_Store
+.!*!*
+*.swp
+*.swo
+
+# Dependency trees.
+node_modules/
+vendor/
+
+# Local environment files. Keep checked-in examples such as example.env visible.
+.env
+.env.*
+custom.env
+.env_backups/
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Application data and logs. These are intentionally anchored to avoid hiding
+# source directories in service repos.
+/data/
+/log/
+/logs/
+/dbs/
+*.log
+*.db
+*.sqlite
+badger_data/ badger-data/
+
+# Ignore all root-level markdown files except core repository docs
+/*.md
+!/README.md
+!/CHANGELOG.md
+!/DEVELOPMENT.md
+!/TODO.md
+
+# Scratch and disposable files
+/scratch/
+
+# Compiled binaries
+/caddy-custom
+

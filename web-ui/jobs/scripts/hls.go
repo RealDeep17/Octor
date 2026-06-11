@@ -1,0 +1,206 @@
+package scripts
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+	"github.com/webtor-io/web-ui/services/api"
+	"github.com/webtor-io/web-ui/services/job"
+)
+
+type hlsSegment struct {
+	URL      string
+	Duration float64
+}
+
+func parseMasterVideoVariantURL(body string) (string, error) {
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#EXT-X-STREAM-INF:") {
+			for j := i + 1; j < len(lines); j++ {
+				next := strings.TrimSpace(lines[j])
+				if next != "" && !strings.HasPrefix(next, "#") {
+					return next, nil
+				}
+			}
+		}
+	}
+	return "", errors.New("no video variant found in master playlist")
+}
+
+func parseMediaPlaylist(body string) (segments []hlsSegment, endList bool, err error) {
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "#EXT-X-ENDLIST" {
+			endList = true
+			continue
+		}
+		if strings.HasPrefix(line, "#EXTINF:") {
+			durStr := strings.TrimPrefix(line, "#EXTINF:")
+			if idx := strings.IndexByte(durStr, ','); idx >= 0 {
+				durStr = durStr[:idx]
+			}
+			dur, perr := strconv.ParseFloat(durStr, 64)
+			if perr != nil {
+				err = errors.Wrapf(perr, "failed to parse EXTINF duration %q", durStr)
+				return
+			}
+			for j := i + 1; j < len(lines); j++ {
+				next := strings.TrimSpace(lines[j])
+				if next != "" && !strings.HasPrefix(next, "#") {
+					segments = append(segments, hlsSegment{URL: next, Duration: dur})
+					break
+				}
+			}
+		}
+	}
+	return
+}
+
+func resolveURL(base, target string) (string, error) {
+	t, err := url.Parse(target)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse target URL")
+	}
+	if t.IsAbs() {
+		return target, nil
+	}
+	b, err := url.Parse(base)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse base URL")
+	}
+	return b.ResolveReference(t).String(), nil
+}
+
+func fetchBody(ctx context.Context, a *api.Api, u string) (string, error) {
+	rc, err := a.Download(ctx, u)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read response body")
+	}
+	return string(data), nil
+}
+
+
+type SessionBufferResult struct {
+	Session *api.TranscoderSession
+	BaseURL string
+	HLSURL  string
+	SeekURL string
+}
+
+func (s *ActionScript) bufferSessionHLS(ctx context.Context, j *job.Job, streamURL string, bufferDuration time.Duration) (*SessionBufferResult, error) {
+	bufferCtx, cancel := context.WithTimeout(ctx, time.Duration(s.warmup.TimeoutMin)*time.Minute)
+	defer cancel()
+
+	baseURL, err := sessionBaseURL(streamURL)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to derive session base URL")
+	}
+
+	j.InProgress(s.t("job.creatingTranscoder"))
+	session, err := s.api.CreateTranscoderSession(bufferCtx, baseURL)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create transcoder session")
+	}
+	j.Done()
+
+	hlsURL, err := sessionHLSURL(baseURL, session.ID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to construct session HLS URL")
+	}
+
+	j.InProgress(s.t("job.bufferingContent"))
+
+	masterBody, err := fetchBody(bufferCtx, s.api, hlsURL)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to fetch session master playlist")
+	}
+
+	variantRel, err := parseMasterVideoVariantURL(masterBody)
+	if err != nil {
+		return nil, err
+	}
+
+	variantURL, err := resolveURL(hlsURL, variantRel)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to resolve variant URL")
+	}
+
+	target := bufferDuration.Seconds()
+
+	for {
+		select {
+		case <-bufferCtx.Done():
+			err := bufferCtx.Err()
+			if errors.Is(err, context.DeadlineExceeded) {
+				return nil, errors.New("hls_buffering_timeout")
+			}
+			return nil, err
+		default:
+		}
+
+		playlistBody, err := fetchBody(bufferCtx, s.api, variantURL)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to fetch session video playlist")
+		}
+
+		segments, endList, err := parseMediaPlaylist(playlistBody)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to parse session video playlist")
+		}
+
+		if endList {
+			log.Info("session HLS stream complete, no buffering needed")
+			break
+		}
+
+		var buffered float64
+		for _, seg := range segments {
+			buffered += seg.Duration
+		}
+
+		j.StatusUpdate(fmt.Sprintf("%.0f%%", buffered/target*100))
+
+		if buffered >= target {
+			break
+		}
+
+		select {
+		case <-time.After(2 * time.Second):
+		case <-bufferCtx.Done():
+			err := bufferCtx.Err()
+			if errors.Is(err, context.DeadlineExceeded) {
+				return nil, errors.New("hls_buffering_timeout")
+			}
+			return nil, err
+		}
+	}
+
+	j.Done()
+
+	seekURL, err := sessionSeekURL(baseURL, session.ID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to construct session seek URL")
+	}
+
+	return &SessionBufferResult{
+		Session: session,
+		BaseURL: baseURL,
+		HLSURL:  hlsURL,
+		SeekURL: seekURL,
+	}, nil
+}
