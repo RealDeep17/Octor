@@ -21,6 +21,67 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+func TestEffectiveWantedIndices(t *testing.T) {
+	t.Run("all wanted when no selection", func(t *testing.T) {
+		wanted, all := effectiveWantedIndices(4, nil, nil)
+		assert.True(t, all)
+		assert.Nil(t, wanted)
+	})
+
+	t.Run("unwanted only selects everything else", func(t *testing.T) {
+		wanted, all := effectiveWantedIndices(4, nil, []int{1, 3})
+		assert.False(t, all)
+		assert.Equal(t, []int{0, 2}, wanted)
+	})
+
+	t.Run("wanted and unwanted are combined", func(t *testing.T) {
+		wanted, all := effectiveWantedIndices(5, []int{4, 2, 1}, []int{2})
+		assert.False(t, all)
+		assert.Equal(t, []int{1, 4}, wanted)
+	})
+
+	t.Run("out of range wanted indices are ignored", func(t *testing.T) {
+		wanted, all := effectiveWantedIndices(2, []int{-1, 0, 3}, nil)
+		assert.False(t, all)
+		assert.Equal(t, []int{0}, wanted)
+	})
+}
+
+func TestParseDownloadClientUsernames(t *testing.T) {
+	raw := []byte(`{"username":"first@example.com"}
+{"username":" second@example.com "}
+{"host":"transmission","username":"FIRST@example.com"}`)
+
+	assert.Equal(t, []string{"first@example.com", "second@example.com"}, parseDownloadClientUsernames(raw))
+}
+
+func TestArrRequestClassificationMatchesAnyConfiguredTransmissionClient(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/transmission/rpc", nil)
+	c.Request.SetBasicAuth("second@example.com", "secret")
+
+	assert.True(t, isWhisparrRequest(c, []string{"first@example.com", "SECOND@example.com"}))
+	assert.True(t, isRadarrOrSonarrRequest(c, []string{"radarr@example.com"}, []string{"second@example.com"}))
+	assert.False(t, isRadarrOrSonarrRequest(c, []string{"radarr@example.com"}, []string{"sonarr@example.com"}))
+}
+
+func TestTransmissionServiceSaveTorrentsUsesPersistFileDir(t *testing.T) {
+	tempDir := t.TempDir()
+	persistFile := filepath.Join(tempDir, "nested", "transmission_torrents.json")
+	s := &TransmissionService{
+		persistFile: persistFile,
+		trackedTorrent: map[string]TrackedTorrent{
+			"hash": {InfoHash: "hash", Name: "Name"},
+		},
+	}
+
+	require.NoError(t, s.saveTorrents())
+	_, err := os.Stat(persistFile)
+	require.NoError(t, err)
+}
+
 func TestTransmissionService_HandleRPC(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -300,11 +361,24 @@ func TestWeb_WebhookAndSearch(t *testing.T) {
 
 	// Mock Prowlarr Server
 	mockProwlarrServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/indexer" {
+			assert.Equal(t, "test-prowlarr-key", r.URL.Query().Get("apikey"))
+			_, _ = w.Write([]byte(`[
+				{
+					"id": 1,
+					"name": "mock-indexer",
+					"enable": true,
+					"priority": 25
+				}
+			]`))
+			return
+		}
+
 		assert.Equal(t, "/api/v1/search", r.URL.Path)
 		assert.Equal(t, "test-prowlarr-key", r.URL.Query().Get("apikey"))
 		assert.Equal(t, "ubuntu", r.URL.Query().Get("query"))
 
-		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`[
 			{
 				"title": "Ubuntu Linux ISO",
@@ -331,9 +405,10 @@ func TestWeb_WebhookAndSearch(t *testing.T) {
 	}
 
 	prowlarr := &ProwlarrClient{
-		url:    mockProwlarrServer.URL,
-		apiKey: "test-prowlarr-key",
-		client: mockProwlarrServer.Client(),
+		url:         mockProwlarrServer.URL,
+		apiKey:      "test-prowlarr-key",
+		client:      mockProwlarrServer.Client(),
+		searchCache: make(map[string]CachedSearch),
 	}
 
 	web := &Web{
@@ -419,4 +494,3 @@ func TestWeb_WebhookAndSearch(t *testing.T) {
 		assert.Equal(t, "magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Ubuntu+Linux+ISO", results[0].MagnetURL)
 	})
 }
-

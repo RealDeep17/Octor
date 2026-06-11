@@ -168,21 +168,6 @@
             </div>
         </div>
     </div>
-    <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
-        <div class="flex items-start gap-4">
-            <div class="flex-1">
-                <h3 class="text-sm font-semibold mb-1">{{ t $.Lang "profile.settings.sidecarEnrichment" }}</h3>
-                <p class="text-xs text-o-muted leading-relaxed">
-                    {{ t $.Lang "profile.settings.sidecarEnrichmentDesc" }}
-                </p>
-            </div>
-            <form method="post" enctype="multipart/form-data" data-async-push-state="false" action="{{ langPath $.Lang "/stremio/settings/update" }}" data-async-target="#stremio-settings">
-                <label class="cursor-pointer pt-0.5">
-                    <input type="checkbox" name="sidecar_enrichment" class="toggle toggle-soft" {{ if .Data.StremioSettings.SidecarEnrichment }}checked{{ end }} onchange="this.form.submit()" />
-                </label>
-            </form>
-        </div>
-    </div>
     {{ end }}
 
 

@@ -1,6 +1,8 @@
 syntax = "proto3";
 
-option go_package = "./";
+package abusestore;
+
+option go_package = "github.com/webtor-io/abuse-store/proto;proto";
 
 service AbuseStore {
   // Pushes abuse to the store

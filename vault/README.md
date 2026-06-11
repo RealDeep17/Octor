@@ -45,3 +45,12 @@ Swagger UI: http://localhost:8086/swagger/index.html
 ## License
 
 See LICENSE.
+## Workers and status semantics
+
+`WORKERS` controls how many vault worker goroutines poll and claim queue jobs. `VAULT_MAX_CONCURRENT_JOBS` caps how many store/upload jobs may actively run at once. Keeping `WORKERS >= VAULT_MAX_CONCURRENT_JOBS` leaves capacity for retries, deletes, and lease recovery while uploads are busy.
+
+User-facing status terms:
+
+- `waiting` means a funded resource is queued or an old processing claim has expired and is waiting to be claimed.
+- `vaulting` means a funded resource is actively processing/uploading.
+- `vaulted` means storage completed.

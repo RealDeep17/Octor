@@ -66,7 +66,7 @@ func (s *Worker) recordOwnership(ctx context.Context, cla *Claims, resourceID st
 		Hash  string `json:"hash"`
 		S3Key string `json:"s3_key"`
 	}
-	
+
 	var fm []fileMeta
 	for _, f := range files {
 		// Calculate what the S3 key was for this file
@@ -104,22 +104,22 @@ func (s *Worker) recordOwnership(ctx context.Context, cla *Claims, resourceID st
 // another worker can take over from wherever the previous one left off
 // (multipart upload resumes via ListPartsPages).
 type Worker struct {
-	ctx                context.Context
-	cancel             context.CancelFunc
-	pg                 *cs.PG
-	s3                 *cs.S3Client
-	nwrks              int
-	api                *Api
-	bucket             string
-	concur             int
-	part               int64
-	nats               *cs.NATS
-	resourceID         string
-	workerBase         string // hostname-derived prefix, suffixed with goroutine index
-	verifyIntegrity    bool
-	maxConcurrentJobs  int
-	humanReadable      bool
-	wg                 sync.WaitGroup
+	ctx               context.Context
+	cancel            context.CancelFunc
+	pg                *cs.PG
+	s3                *cs.S3Client
+	nwrks             int
+	api               *Api
+	bucket            string
+	concur            int
+	part              int64
+	nats              *cs.NATS
+	resourceID        string
+	workerBase        string // hostname-derived prefix, suffixed with goroutine index
+	verifyIntegrity   bool
+	maxConcurrentJobs int
+	humanReadable     bool
+	wg                sync.WaitGroup
 }
 
 const (
@@ -345,7 +345,11 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 		  %s
 		  %s
 		ORDER BY
-		  CASE WHEN status IN (%d, %d) THEN 0 ELSE 1 END,
+		  CASE
+		    WHEN status IN (%d, %d) THEN 0
+		    WHEN status IN (%d, %d) THEN 1
+		    ELSE 2
+		  END,
 		  updated_at ASC
 		LIMIT 1
 		FOR UPDATE SKIP LOCKED
@@ -355,6 +359,7 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 		StatusStoreError, StatusDeleteError, int(storeErrorBackoff.Seconds()),
 		concurrencyGuard,
 		s.debugResourceIDClause(),
+		StatusStoring, StatusDeleting,
 		StatusQueuedForStoring, StatusQueuedForDeletion,
 	)
 
@@ -1153,7 +1158,7 @@ func (s *Worker) handleError(id string, err error, errorStatus Status, workerID 
 func runPeriodicFlush(ctx context.Context, fn func()) context.CancelFunc {
 	fctx, cancel := context.WithCancel(ctx)
 	go func() {
-		ticker := time.NewTicker(200 * time.Millisecond)
+		ticker := time.NewTicker(300 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {

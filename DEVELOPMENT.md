@@ -97,9 +97,10 @@ admin/
 *Security:* The `admin/` directory path is entirely blocked/hidden from standard users. Per-user moves are strictly scoped and blocked from crossing boundary limits between different users.
 
 ### Testing and Verification
-Run targeted unit tests using the standard protobuf registration warning workaround:
+Run targeted unit tests normally; abuse-store and torrent-store now use distinct protobuf packages, so the old `GOLANG_PROTOBUF_REGISTRATION_CONFLICT` workaround is no longer required for web-ui tests:
 ```bash
-GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn /usr/bin/go test ./web-ui/handlers/admin ./web-ui/handlers/webdav ./web-ui/services/admin ./web-ui/models
+go -C /srv/octor/web-ui test ./...
+go -C /srv/octor/rest-api test ./...
 ```
 
 ## 🚀 Deployment (VPS)

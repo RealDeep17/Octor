@@ -9,8 +9,6 @@ import (
 	"github.com/webtor-io/claims-provider/models"
 	pb "github.com/webtor-io/claims-provider/proto"
 	"github.com/webtor-io/lazymap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // helpers
@@ -22,12 +20,11 @@ func val64(p *uint64) uint64 {
 	return *p
 }
 
-
 func TestGRPCGet_AllowsEmptyEmail(t *testing.T) {
 	// Prepare GRPC with a store that will be called with empty email
 	st := &Store{LazyMap: lazymap.New[*models.Claims](&lazymap.Config{Concurrency: 1, Expire: time.Second, ErrorExpire: time.Second, Capacity: 10})}
 	calledWith := "<unset>"
-	expected := &models.Claims{TierID: 2, TierName: "silver", DownloadRate: u64(777), EmbedNoAds: true, SiteNoAds: true}
+	expected := &models.Claims{TierID: 1000, TierName: "Pro", DownloadRate: u64(777), EmbedNoAds: true, SiteNoAds: true}
 	st.fetch = func(ctx context.Context, email string) (*models.Claims, error) {
 		calledWith = email
 		return expected, nil
@@ -65,11 +62,11 @@ func TestGRPCGet_AllowsEmptyEmail(t *testing.T) {
 func TestGRPCGet_SuccessMapping(t *testing.T) {
 	expected := &models.Claims{
 		Email:        "user@example.com",
-		TierID:       3,
-		TierName:     "gold",
+		TierID:       1000,
+		TierName:     "Pro",
 		DownloadRate: u64(123456),
 		EmbedNoAds:   true,
-		SiteNoAds:    false,
+		SiteNoAds:    true,
 	}
 	st := &Store{LazyMap: lazymap.New[*models.Claims](&lazymap.Config{Concurrency: 1, Expire: time.Second, ErrorExpire: time.Second, Capacity: 10})}
 	// Inject fetch to bypass DB and cache builder
@@ -102,21 +99,25 @@ func TestGRPCGet_SuccessMapping(t *testing.T) {
 	}
 }
 
-func TestGRPCGet_StoreError(t *testing.T) {
+func TestGRPCGet_StoreErrorUsesSelfHostedFallback(t *testing.T) {
 	st := &Store{LazyMap: lazymap.New[*models.Claims](&lazymap.Config{Concurrency: 1, Expire: time.Second, ErrorExpire: time.Second, Capacity: 10})}
 	st.fetch = func(ctx context.Context, email string) (*models.Claims, error) { return nil, errors.New("boom") }
 	g := &GRPC{store: st}
 
-	_, err := g.Get(context.Background(), &pb.GetRequest{Email: "user@example.com"})
-	if err == nil {
-		t.Fatalf("expected error, got nil")
+	resp, err := g.Get(context.Background(), &pb.GetRequest{Email: "user@example.com"})
+	if err != nil {
+		t.Fatalf("unexpected fallback error: %v", err)
 	}
-	stErr, ok := status.FromError(err)
-	if !ok {
-		t.Fatalf("expected gRPC status error, got: %v", err)
+	if resp == nil || resp.Context == nil || resp.Context.Tier == nil || resp.Claims == nil || resp.Claims.Connection == nil || resp.Claims.Embed == nil || resp.Claims.Site == nil {
+		t.Fatalf("response has unexpected nil parts: %+v", resp)
 	}
-	if stErr.Code() != codes.Internal {
-		t.Fatalf("expected Internal, got: %v", stErr.Code())
+	if resp.Context.Tier.Id != 1000 || resp.Context.Tier.Name != "Pro" {
+		t.Fatalf("fallback tier mismatch: got %d/%q", resp.Context.Tier.Id, resp.Context.Tier.Name)
+	}
+	if val64(resp.Claims.Connection.Rate) != 0 {
+		t.Fatalf("fallback rate mismatch: got %d want 0", val64(resp.Claims.Connection.Rate))
+	}
+	if !resp.Claims.Embed.NoAds || !resp.Claims.Site.NoAds {
+		t.Fatalf("fallback should disable ads: embed=%v site=%v", resp.Claims.Embed.NoAds, resp.Claims.Site.NoAds)
 	}
 }
-

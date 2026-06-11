@@ -67,12 +67,12 @@ func TestResolveStatus_Cached(t *testing.T) {
 	}
 }
 
-func TestResolveStatus_VaultingQueued(t *testing.T) {
+func TestResolveStatus_WaitingQueued(t *testing.T) {
 	db := &vaultModels.Resource{Funded: true, Vaulted: false}
 	apiRes := &vault.Resource{Status: vault.StatusQueued}
 	status := resolveStatus(db, apiRes, nil, 0)
-	if status.State != "vaulting" {
-		t.Errorf("expected vaulting, got %q", status.State)
+	if status.State != "waiting" {
+		t.Errorf("expected waiting, got %q", status.State)
 	}
 	if status.Progress != 0 {
 		t.Errorf("expected progress 0, got %v", status.Progress)

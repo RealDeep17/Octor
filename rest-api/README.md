@@ -36,3 +36,12 @@ TORRENT_STORE_PORT=50051
 
 Once running, the Swagger UI is available at:
 http://localhost:8080/swagger/index.html
+## Transmission RPC compatibility
+
+The REST API includes a Transmission RPC-compatible endpoint for automation and ARR clients. It tracks added torrents in `/srv/octor/infra-data/transmission_torrents.json` by default and creates that file's parent directory dynamically.
+
+Selective imports honor both `files-wanted` and `files-unwanted` when those fields are provided by a client. Stock ARR clients usually do not send file-selection fields on `torrent-add`; the handling is defensive for compatible Transmission RPC clients and duplicate/revised requests.
+
+ARR classification reads all configured Transmission download-client usernames from Sonarr, Radarr, and Whisparr SQLite databases, then matches the request BasicAuth username or the ARR user-agent. This avoids misclassification when an ARR instance has more than one Transmission client configured.
+
+When a completed vault import needs placeholder files for ARR import workflows, runtime lookup prefers `/srv/octor/infra-data/dummy*.mkv` and falls back to the tracked seed templates in `rest-api/assets/dummy/`. Keep those small files in the repository for fresh clone/setup compatibility.

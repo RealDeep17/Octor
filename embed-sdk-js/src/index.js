@@ -1,4 +1,4 @@
-import init from './octor/OctorGenerator';
+import init from './octor/WebtorGenerator';
 function clean(obj) {
     for (var propName in obj) {
         if (obj[propName] === null || obj[propName] === undefined) {

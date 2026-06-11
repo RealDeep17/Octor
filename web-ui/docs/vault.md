@@ -16,6 +16,8 @@ The Vault system manages users' virtual points (Vault Points, VP) and their pled
 
 ### Resource Lifecycle
 
+Status labels used by the web UI distinguish queued work from active work: `waiting` means the funded item is queued or ready to be reclaimed, while `vaulting` means a worker is actively processing it.
+
 1. **Created** → `funded=false`, `vaulted=false`, `expired=false`
 2. **Funded** → `funded_vp >= required_vp`, `funded=true`
 3. **Vaulted** → `vaulted=true`

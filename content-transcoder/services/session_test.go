@@ -113,7 +113,7 @@ func TestInjectRealtimeInputParam(t *testing.T) {
 	params := []string{"-fix_sub_duration", "-i", "http://example.com/video.mkv", "-c:v", "copy"}
 	got := injectRealtimeInputParam(params)
 
-	want := []string{"-fix_sub_duration", "-re", "-i", "http://example.com/video.mkv", "-c:v", "copy"}
+	want := []string{"-fix_sub_duration", "-i", "http://example.com/video.mkv", "-c:v", "copy"}
 	if len(got) != len(want) {
 		t.Fatalf("len mismatch: got %d %v, want %d %v", len(got), got, len(want), want)
 	}

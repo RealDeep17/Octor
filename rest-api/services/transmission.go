@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -9,7 +10,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -36,10 +40,14 @@ type TransmissionService struct {
 }
 
 type TrackedTorrent struct {
-	InfoHash  string    `json:"infoHash"`
-	Name      string    `json:"name"`
-	AddedAt   time.Time `json:"addedAt"`
-	TotalSize int64     `json:"totalSize"`
+	InfoHash      string      `json:"infoHash"`
+	Name          string      `json:"name"`
+	AddedAt       time.Time   `json:"addedAt"`
+	TotalSize     int64       `json:"totalSize"`
+	WantedFiles   []int       `json:"wantedFiles,omitempty"`
+	UnwantedFiles []int       `json:"unwantedFiles,omitempty"`
+	AddedBy       string      `json:"addedBy,omitempty"`
+	vaultTimer    *time.Timer `json:"-"` // not persisted; deferred auto-vault timer
 }
 
 type TransmissionRPCReq struct {
@@ -55,10 +63,10 @@ type TransmissionRPCResp struct {
 }
 
 const (
-	automationAPIKeyFlag   = "automation-apikey"
-	automationAutoVaultFlag = "automation-auto-vault"
-	transmissionSessionID  = "octor-transmission-session-id"
-	transmissionPersistDir = "/srv/octor/infra-data"
+	automationAPIKeyFlag     = "automation-apikey"
+	automationAutoVaultFlag  = "automation-auto-vault"
+	transmissionSessionID    = "octor-transmission-session-id"
+	transmissionPersistDir   = "/srv/octor/infra-data"
 	transmissionSettingsFile = "/srv/octor/infra-data/settings.json"
 )
 
@@ -100,7 +108,7 @@ func NewTransmissionService(c *cli.Context, rm *ResourceMap, db *pg.DB) *Transmi
 		vaultHost:      c.String("vault-host-rpc"),
 		vaultPort:      c.Int("vault-port-rpc"),
 		persistFile:    filepath.Join(transmissionPersistDir, "transmission_torrents.json"),
-		httpClient:     &http.Client{Timeout: 5 * time.Second},
+		httpClient:     &http.Client{Timeout: 30 * time.Second},
 		trackedTorrent: make(map[string]TrackedTorrent),
 	}
 
@@ -150,7 +158,7 @@ func (s *TransmissionService) saveTorrents() error {
 		return errors.Wrap(err, "failed to marshal torrents list")
 	}
 
-	if err := os.MkdirAll(transmissionPersistDir, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.persistFile), 0755); err != nil {
 		return errors.Wrap(err, "failed to create persist directory")
 	}
 
@@ -165,6 +173,76 @@ func stringToIntID(s string) int {
 	h := fnv.New32a()
 	h.Write([]byte(s))
 	return int(h.Sum32() & 0x7fffffff)
+}
+
+func parseIntSlice(v interface{}) []int {
+	if v == nil {
+		return nil
+	}
+	arr, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]int, 0, len(arr))
+	for _, item := range arr {
+		if num, ok := item.(float64); ok {
+			out = append(out, int(num))
+		}
+	}
+	return out
+}
+
+func effectiveWantedIndexSet(fileCount int, wantedIndices, unwantedIndices []int) (map[int]struct{}, bool) {
+	if len(wantedIndices) == 0 && len(unwantedIndices) == 0 {
+		return nil, true
+	}
+
+	wanted := make(map[int]struct{}, fileCount)
+	if len(wantedIndices) > 0 {
+		for _, idx := range wantedIndices {
+			if idx >= 0 && idx < fileCount {
+				wanted[idx] = struct{}{}
+			}
+		}
+	} else {
+		for idx := 0; idx < fileCount; idx++ {
+			wanted[idx] = struct{}{}
+		}
+	}
+
+	for _, idx := range unwantedIndices {
+		delete(wanted, idx)
+	}
+
+	return wanted, false
+}
+
+func effectiveWantedIndices(fileCount int, wantedIndices, unwantedIndices []int) ([]int, bool) {
+	wantedSet, allWanted := effectiveWantedIndexSet(fileCount, wantedIndices, unwantedIndices)
+	if allWanted {
+		return nil, true
+	}
+	wanted := make([]int, 0, len(wantedSet))
+	for idx := range wantedSet {
+		wanted = append(wanted, idx)
+	}
+	sort.Ints(wanted)
+	return wanted, false
+}
+
+func dummyTemplatePath(name string) string {
+	candidates := []string{
+		filepath.Join("/srv/octor/infra-data", name),
+		filepath.Join("/srv/octor/rest-api/assets/dummy", name),
+		filepath.Join("assets/dummy", name),
+		filepath.Join("rest-api/assets/dummy", name),
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return candidates[0]
 }
 
 // autoVaultEnabled checks the runtime settings file first, then falls back to the
@@ -184,30 +262,167 @@ func (s *TransmissionService) autoVaultEnabled() bool {
 }
 
 // triggerAutoVault calls the vault worker's PUT /resource/:id endpoint to queue
-// the torrent for long-term storage. This is a best-effort fire-and-forget;
-// failure is logged but does NOT fail the torrent-add response.
-func (s *TransmissionService) triggerAutoVault(ctx context.Context, infoHash string) {
+// the torrent for long-term storage. When selectedFiles is non-empty, only those
+// file paths are sent to the vault for selective downloading.
+// This is a best-effort fire-and-forget; failure is logged but does NOT fail
+// the torrent-add response.
+func (s *TransmissionService) triggerAutoVault(ctx context.Context, infoHash string, selectedFiles []string) {
 	if s.vaultHost == "" {
 		log.Warn("auto-vault: VAULT_SERVICE_HOST not configured, skipping")
 		return
 	}
 	u := fmt.Sprintf("http://%s:%d/resource/%s", s.vaultHost, s.vaultPort, infoHash)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, nil)
-	if err != nil {
-		log.WithError(err).Errorf("auto-vault: failed to build PUT request for %s", infoHash)
-		return
+
+	var payload []byte
+	if len(selectedFiles) > 0 {
+		var err error
+		payload, err = json.Marshal(map[string]interface{}{
+			"selected_files": selectedFiles,
+		})
+		if err != nil {
+			log.WithError(err).Errorf("auto-vault: failed to marshal selected files for %s", infoHash)
+			return
+		}
+		log.Infof("auto-vault: selective vaulting %d files for %s", len(selectedFiles), infoHash)
 	}
+
 	cl := s.httpClient
 	if cl == nil {
 		cl = http.DefaultClient
 	}
-	resp, err := cl.Do(req)
-	if err != nil {
-		log.WithError(err).Errorf("auto-vault: PUT request failed for %s", infoHash)
+
+	maxRetries := 3
+	backoff := 2 * time.Second
+
+	for i := 0; i <= maxRetries; i++ {
+		if i > 0 {
+			log.Infof("auto-vault: retrying PUT request for %s in %v (attempt %d/%d)", infoHash, backoff, i, maxRetries)
+			select {
+			case <-ctx.Done():
+				log.Errorf("auto-vault: context cancelled during retry backoff for %s", infoHash)
+				return
+			case <-time.After(backoff):
+			}
+			backoff *= 2
+		}
+
+		var bodyReader io.Reader
+		if len(payload) > 0 {
+			bodyReader = bytes.NewReader(payload)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, bodyReader)
+		if err != nil {
+			log.WithError(err).Errorf("auto-vault: failed to build PUT request for %s", infoHash)
+			return
+		}
+		if len(payload) > 0 {
+			req.Header.Set("Content-Type", "application/json")
+		}
+
+		resp, err := cl.Do(req)
+		if err != nil {
+			log.WithError(err).Errorf("auto-vault: PUT request failed for %s on attempt %d", infoHash, i)
+			continue
+		}
+
+		// Read and discard body, then close it immediately to prevent leaking connections
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode >= 500 {
+			log.Warnf("auto-vault: received status %d from vault for %s on attempt %d", resp.StatusCode, infoHash, i)
+			continue
+		}
+
+		log.Infof("auto-vault: queued %s for vaulting (status=%d, selective=%v)", infoHash, resp.StatusCode, len(selectedFiles) > 0)
 		return
 	}
-	defer resp.Body.Close()
-	log.Infof("auto-vault: queued %s for vaulting (status=%d)", infoHash, resp.StatusCode)
+
+	log.Errorf("auto-vault: failed to queue %s after %d attempts", infoHash, maxRetries+1)
+}
+
+// deferredAutoVault waits for a short delay to allow torrent-set (files-wanted)
+// to arrive from the *arr app before triggering the vault. If the torrent is
+// removed during the wait, the vault is skipped.
+func (s *TransmissionService) deferredAutoVault(infoHash string, delay time.Duration) {
+	// Add a small pseudo-random jitter (0 to 3 seconds) using FNV hash of infoHash + timestamp
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(infoHash))
+	_, _ = h.Write([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+	jitter := time.Duration(h.Sum32()%3000) * time.Millisecond
+	delay += jitter
+
+	s.torrentsLock.Lock()
+	tracked, exists := s.trackedTorrent[infoHash]
+	if !exists {
+		s.torrentsLock.Unlock()
+		return
+	}
+	// Cancel any existing timer for this torrent (e.g. from a re-add)
+	if tracked.vaultTimer != nil {
+		tracked.vaultTimer.Stop()
+	}
+	tracked.vaultTimer = time.AfterFunc(delay, func() {
+		// Safety: verify torrent still exists (could have been removed during the delay)
+		s.torrentsLock.RLock()
+		_, stillExists := s.trackedTorrent[infoHash]
+		s.torrentsLock.RUnlock()
+		if !stillExists {
+			log.Infof("auto-vault: deferred trigger cancelled — torrent %s was removed during delay", infoHash)
+			return
+		}
+
+		// Timer fired — resolve wanted files and trigger vault
+		selectedFiles := s.resolveWantedFiles(infoHash)
+		if len(selectedFiles) > 0 {
+			log.Infof("auto-vault: deferred trigger for %s with %d selected files", infoHash, len(selectedFiles))
+		} else {
+			log.Infof("auto-vault: deferred trigger for %s (full torrent, no file selection received)", infoHash)
+		}
+		s.triggerAutoVault(context.Background(), infoHash, selectedFiles)
+	})
+	s.trackedTorrent[infoHash] = tracked
+	s.torrentsLock.Unlock()
+}
+
+// resolveWantedFiles translates the integer file indices stored in
+// TrackedTorrent.WantedFiles into the actual file path strings that the
+// vault worker expects in its selected_files field.
+func (s *TransmissionService) resolveWantedFiles(infoHash string) []string {
+	s.torrentsLock.RLock()
+	tracked, exists := s.trackedTorrent[infoHash]
+	s.torrentsLock.RUnlock()
+
+	if !exists {
+		return nil
+	}
+
+	// Fetch the torrent's file list from the resource map
+	res, err := s.rm.Get(context.Background(), []byte(infoHash))
+	if err != nil || res == nil {
+		log.WithError(err).Warnf("resolveWantedFiles: failed to get resource for %s", infoHash)
+		return nil
+	}
+
+	// Build a set of wanted indices for O(1) lookup
+	wantedSet := make(map[int]struct{}, len(tracked.WantedFiles))
+	for _, idx := range tracked.WantedFiles {
+		wantedSet[idx] = struct{}{}
+	}
+
+	// If all files are wanted, skip selective vaulting
+	if len(wantedSet) >= len(res.Files) {
+		return nil
+	}
+
+	var paths []string
+	for i, f := range res.Files {
+		if _, ok := wantedSet[i]; ok {
+			paths = append(paths, strings.Join(f.Path, "/"))
+		}
+	}
+	return paths
 }
 
 func (s *TransmissionService) getVaultStatus(ctx context.Context, hash string) (stored int64, total int64, completed bool) {
@@ -283,7 +498,7 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 		g.JSON(http.StatusBadRequest, TransmissionRPCResp{Result: "invalid JSON"})
 		return
 	}
-	log.Debugf("TransmissionRPC: method=%s, targetEmails=%v", rpcReq.Method, targetEmails)
+	log.Infof("TransmissionRPC: method=%s, arguments=%v, targetEmails=%v", rpcReq.Method, rpcReq.Arguments, targetEmails)
 
 	respArgs := make(map[string]interface{})
 	result := "success"
@@ -302,6 +517,8 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 	case "torrent-add":
 		filename, _ := rpcReq.Arguments["filename"].(string)
 		metainfoStr, _ := rpcReq.Arguments["metainfo"].(string)
+		wanted := parseIntSlice(rpcReq.Arguments["files-wanted"])
+		unwanted := parseIntSlice(rpcReq.Arguments["files-unwanted"])
 
 		var payload []byte
 		var err error
@@ -313,23 +530,14 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 				break
 			}
 		} else if filename != "" {
-			if strings.HasPrefix(filename, "http://") || strings.HasPrefix(filename, "https://") {
-				payload, err = s.DownloadTorrentURL(g.Request.Context(), filename)
-				if err != nil {
-					log.WithError(err).Errorf("Failed to download torrent URL: %s", filename)
-					result = fmt.Sprintf("failed to download torrent URL: %v", err)
-					break
-				}
-			} else {
-				payload = []byte(filename)
-			}
+			payload = []byte(filename)
 		} else {
 			result = "missing filename or metainfo"
 			break
 		}
 
 		// Import the torrent into Octor
-		res, err := s.rm.Get(context.Background(), payload)
+		res, err := s.rm.Get(g.Request.Context(), payload)
 		if err != nil {
 			log.WithError(err).Errorf("Failed to add resource to Octor")
 			result = err.Error()
@@ -337,14 +545,41 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 		}
 
 		s.torrentsLock.Lock()
-		_, exists := s.trackedTorrent[res.ID]
-		tracked := TrackedTorrent{
-			InfoHash:  res.ID,
-			Name:      res.Name,
-			AddedAt:   time.Now(),
-			TotalSize: res.Size,
+		existing, exists := s.trackedTorrent[res.ID]
+		wEmails, rEmails, sEmails := getArrEmails()
+		var addedBy string
+		if isWhisparrRequest(g, wEmails) {
+			addedBy = "whisparr"
+		} else if isRadarrOrSonarrRequest(g, rEmails, sEmails) {
+			addedBy = "arr"
 		}
-		s.trackedTorrent[res.ID] = tracked
+
+		if exists {
+			// Preserve existing file selection state on re-add, updating if new selection provided
+			existing.Name = res.Name
+			existing.TotalSize = res.Size
+			if len(wanted) > 0 {
+				existing.WantedFiles = wanted
+			}
+			if len(unwanted) > 0 {
+				existing.UnwantedFiles = unwanted
+			}
+			if addedBy != "" {
+				existing.AddedBy = addedBy
+			}
+			s.trackedTorrent[res.ID] = existing
+		} else {
+			tracked := TrackedTorrent{
+				InfoHash:      res.ID,
+				Name:          res.Name,
+				AddedAt:       time.Now(),
+				TotalSize:     res.Size,
+				WantedFiles:   wanted,
+				UnwantedFiles: unwanted,
+				AddedBy:       addedBy,
+			}
+			s.trackedTorrent[res.ID] = tracked
+		}
 		s.torrentsLock.Unlock()
 
 		_ = s.saveTorrents()
@@ -357,8 +592,20 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 
 			// Auto-vault: fire-and-forget, non-blocking
 			if s.autoVaultEnabled() {
-				go s.triggerAutoVault(context.Background(), res.ID)
+				// Defer vault trigger by 30s to allow torrent-set (files-wanted)
+				// from the *arr app to arrive before we start vaulting.
+				// However, if we already received file selection in torrent-add,
+				// we can trigger it much sooner (e.g. 2s) to speed up.
+				delay := 30 * time.Second
+				if len(wanted) > 0 || len(unwanted) > 0 {
+					delay = 2 * time.Second
+					log.Infof("auto-vault: torrent-add already has file selection. Deferring trigger by 2s for %s", res.ID)
+				}
+				s.deferredAutoVault(res.ID, delay)
 			}
+		} else if s.autoVaultEnabled() && (len(wanted) > 0 || len(unwanted) > 0) {
+			// Duplicate torrent-add can still carry a revised file selection from an ARR client.
+			s.deferredAutoVault(res.ID, 2*time.Second)
 		}
 
 		addedTorrent := map[string]interface{}{
@@ -375,15 +622,37 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 
 	case "torrent-get":
 		s.torrentsLock.RLock()
-		torrentsList := []interface{}{}
+		clonedList := make([]TrackedTorrent, 0, len(s.trackedTorrent))
 		for _, tracked := range s.trackedTorrent {
+			clonedList = append(clonedList, tracked)
+		}
+		s.torrentsLock.RUnlock()
+
+		wEmails, rEmails, sEmails := getArrEmails()
+		reqWhisparr := isWhisparrRequest(g, wEmails)
+		reqRadarrSonarr := isRadarrOrSonarrRequest(g, rEmails, sEmails)
+
+		torrentsList := []interface{}{}
+		for _, tracked := range clonedList {
+			isWhisparr := s.isWhisparrTorrent(g.Request.Context(), tracked.InfoHash, tracked.AddedBy)
+
+			// Apply filtering:
+			if reqRadarrSonarr && isWhisparr {
+				// Radarr/Sonarr cannot see Whisparr torrents
+				continue
+			}
+			if reqWhisparr && !isWhisparr {
+				// Whisparr only sees Whisparr torrents
+				continue
+			}
+
 			id := stringToIntID(tracked.InfoHash)
 			stored, total, completed := s.getVaultStatus(g.Request.Context(), tracked.InfoHash)
 
 			percentDone := 0.0
 			if completed {
 				percentDone = 1.0
-				_ = s.ensureDummyFiles(g.Request.Context(), tracked.InfoHash)
+				_ = s.ensureDummyFiles(g.Request.Context(), tracked.InfoHash, tracked.WantedFiles, tracked.UnwantedFiles)
 			} else if total > 0 {
 				percentDone = float64(stored) / float64(total)
 			} else if s.autoVaultEnabled() {
@@ -410,19 +679,31 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 			}
 
 			filesList := []interface{}{}
+			fileStatsList := []interface{}{}
 			if res, err := s.rm.Get(g.Request.Context(), []byte(tracked.InfoHash)); err == nil && res != nil {
-				for _, f := range res.Files {
+				wantedSet, allWanted := effectiveWantedIndexSet(len(res.Files), tracked.WantedFiles, tracked.UnwantedFiles)
+				for i, f := range res.Files {
 					fPath := strings.Join(f.Path, "/")
+					_, isWanted := wantedSet[i]
+					if allWanted {
+						isWanted = true
+					}
 					bytesCompleted := int64(0)
-					if completed {
+					if completed && isWanted {
 						bytesCompleted = f.Size
-					} else if total > 0 {
+					} else if total > 0 && isWanted {
 						bytesCompleted = int64(float64(f.Size) * (float64(stored) / float64(total)))
 					}
 					filesList = append(filesList, map[string]interface{}{
 						"bytesCompleted": bytesCompleted,
 						"length":         f.Size,
 						"name":           fPath,
+						"wanted":         isWanted,
+					})
+					fileStatsList = append(fileStatsList, map[string]interface{}{
+						"bytesCompleted": bytesCompleted,
+						"wanted":         isWanted,
+						"priority":       0,
 					})
 				}
 			}
@@ -439,14 +720,14 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 				"rateUpload":    0,
 				"eta":           -1,
 				"error":         0,
-				"errorString":    "",
+				"errorString":   "",
 				"isFinished":    completed,
 				"downloadDir":   "/srv/Big ARRS/downloads",
 				"files":         filesList,
+				"fileStats":     fileStatsList,
 			}
 			torrentsList = append(torrentsList, torrentInfo)
 		}
-		s.torrentsLock.RUnlock()
 		respArgs["torrents"] = torrentsList
 
 	case "torrent-remove":
@@ -485,6 +766,10 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 
 			for _, hash := range hashStringsToRemove {
 				go s.removeDummyFiles(context.Background(), hash)
+				// Cancel any pending deferred vault timer to prevent ghost triggers
+				if tracked, ok := s.trackedTorrent[hash]; ok && tracked.vaultTimer != nil {
+					tracked.vaultTimer.Stop()
+				}
 				delete(s.trackedTorrent, hash)
 			}
 			s.torrentsLock.Unlock()
@@ -556,7 +841,7 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 							Column("required_vp", "funded_vp").
 							Where("resource_id = ?", hash).
 							Select(&vaultRes)
-						
+
 						if err == nil {
 							newFundedVP := vaultRes.FundedVP - deletedPledgeSum
 							if newFundedVP < 0 {
@@ -618,6 +903,95 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 			}
 		}
 
+	case "torrent-set":
+		// Handle file selection from *arr apps.
+		// Sonarr/Radarr/Whisparr send files-wanted/files-unwanted as arrays
+		// of 0-based file indices to select which files to download.
+		idsArg, _ := rpcReq.Arguments["ids"]
+		filesWanted, _ := rpcReq.Arguments["files-wanted"]
+		filesUnwanted, _ := rpcReq.Arguments["files-unwanted"]
+
+		// Resolve target torrent hash(es)
+		var targetHashes []string
+		s.torrentsLock.RLock()
+		if idsArg != nil {
+			switch val := idsArg.(type) {
+			case []interface{}:
+				for _, idVal := range val {
+					if idStr, ok := idVal.(string); ok {
+						if _, exists := s.trackedTorrent[idStr]; exists {
+							targetHashes = append(targetHashes, idStr)
+						}
+					} else if idNum, ok := idVal.(float64); ok {
+						targetID := int(idNum)
+						for hash := range s.trackedTorrent {
+							if stringToIntID(hash) == targetID {
+								targetHashes = append(targetHashes, hash)
+							}
+						}
+					}
+				}
+			case string:
+				if _, exists := s.trackedTorrent[val]; exists {
+					targetHashes = append(targetHashes, val)
+				}
+			case float64:
+				targetID := int(val)
+				for hash := range s.trackedTorrent {
+					if stringToIntID(hash) == targetID {
+						targetHashes = append(targetHashes, hash)
+					}
+				}
+			}
+		}
+		s.torrentsLock.RUnlock()
+
+		wanted := parseIntSlice(filesWanted)
+		unwanted := parseIntSlice(filesUnwanted)
+
+		if len(targetHashes) > 0 && (len(wanted) > 0 || len(unwanted) > 0) {
+			s.torrentsLock.Lock()
+			for _, hash := range targetHashes {
+				tracked, ok := s.trackedTorrent[hash]
+				if !ok {
+					continue
+				}
+
+				// Merge wanted files: add new wanted indices
+				existingSet := make(map[int]struct{}, len(tracked.WantedFiles))
+				for _, idx := range tracked.WantedFiles {
+					existingSet[idx] = struct{}{}
+				}
+				for _, idx := range wanted {
+					existingSet[idx] = struct{}{}
+				}
+				// Remove any unwanted from the set
+				for _, idx := range unwanted {
+					delete(existingSet, idx)
+				}
+				merged := make([]int, 0, len(existingSet))
+				for idx := range existingSet {
+					merged = append(merged, idx)
+				}
+				tracked.WantedFiles = merged
+
+				tracked.UnwantedFiles = unwanted
+				s.trackedTorrent[hash] = tracked
+
+				log.Infof("torrent-set: %s files-wanted=%v files-unwanted=%v", hash, tracked.WantedFiles, unwanted)
+			}
+			s.torrentsLock.Unlock()
+			_ = s.saveTorrents()
+
+			// Re-trigger deferred vault for torrents that got file selection,
+			// so the vault uses the updated selection.
+			if s.autoVaultEnabled() {
+				for _, hash := range targetHashes {
+					s.deferredAutoVault(hash, 2*time.Second)
+				}
+			}
+		}
+
 	default:
 		result = "unsupported method"
 	}
@@ -630,19 +1004,33 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 }
 
 func (s *TransmissionService) DownloadTorrentURL(ctx context.Context, url string) ([]byte, error) {
+	url = rewriteLocalDownloadURL(url)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	cl := s.httpClient
-	if cl == nil {
-		cl = http.DefaultClient
+	cl := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if strings.HasPrefix(req.URL.String(), "magnet:") || req.URL.Scheme == "magnet" {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
 	}
 	resp, err := cl.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusFound || resp.StatusCode == http.StatusTemporaryRedirect || resp.StatusCode == http.StatusMovedPermanently {
+		loc := resp.Header.Get("Location")
+		if strings.HasPrefix(loc, "magnet:") {
+			return []byte(loc), nil
+		}
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("bad status code: %d", resp.StatusCode)
@@ -726,7 +1114,7 @@ func (s *TransmissionService) HandleLibraryIngest(ctx context.Context, res *Reso
 	// 5. Vault Logic (if enabled)
 	if s.autoVaultEnabled() {
 		requiredVP := float64(res.Size) / (1024 * 1024 * 1024)
-		
+
 		// Ensure vault.resource exists
 		vaultRes := map[string]interface{}{
 			"resource_id": res.ID,
@@ -768,17 +1156,40 @@ func (s *TransmissionService) HandleLibraryIngest(ctx context.Context, res *Reso
 	}
 }
 
-func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash string) error {
-	markerPath := filepath.Join("/srv/Big ARRS/downloads", ".octor_dummy_"+infoHash)
-	if _, err := os.Stat(markerPath); err == nil {
-		return nil // already created
-	}
-
+func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash string, wantedIndices, unwantedIndices []int) error {
 	res, err := s.rm.Get(ctx, []byte(infoHash))
 	if err != nil {
 		return err
 	}
-	for _, f := range res.Files {
+
+	selectedIndices, allWanted := effectiveWantedIndices(len(res.Files), wantedIndices, unwantedIndices)
+	wantedSet := make(map[int]struct{}, len(selectedIndices))
+	for _, idx := range selectedIndices {
+		wantedSet[idx] = struct{}{}
+	}
+
+	// Build a selection-aware marker so dummies are re-created if file selection changes.
+	// e.g. ".octor_dummy_<hash>" (all files) vs ".octor_dummy_<hash>_sel_3_7" (selective)
+	markerSuffix := ""
+	if !allWanted {
+		parts := make([]string, len(selectedIndices))
+		for i, idx := range selectedIndices {
+			parts[i] = fmt.Sprintf("%d", idx)
+		}
+		markerSuffix = "_sel_" + strings.Join(parts, "_")
+	}
+	markerPath := filepath.Join("/srv/Big ARRS/downloads", ".octor_dummy_"+infoHash+markerSuffix)
+	if _, err := os.Stat(markerPath); err == nil {
+		return nil // already created with this exact selection
+	}
+
+	for i, f := range res.Files {
+		// Skip files not in the wanted set (selective mode)
+		if !allWanted {
+			if _, ok := wantedSet[i]; !ok {
+				continue
+			}
+		}
 		fPath := strings.Join(f.Path, "/")
 		fullPath := filepath.Join("/srv/Big ARRS/downloads", fPath)
 
@@ -804,19 +1215,60 @@ func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash str
 
 		var createErr error
 		if isVideo {
-			// Copy dummy.mkv template
-			createErr = copyFile("/srv/octor/infra-data/dummy.mkv", cleanPath)
+			// Detect resolution from torrent/file name and pick matching dummy template.
+			// Uses explicit resolution tokens to avoid false positives (e.g. "hd" in "DTS-HD").
+			// Covers common naming patterns used by Sonarr, Radarr and Whisparr release groups.
+			name := strings.ToLower(res.Name + " " + fPath)
+			is4K := strings.Contains(name, "2160p") || strings.Contains(name, "2160i") ||
+				strings.Contains(name, ".4k.") || strings.Contains(name, " 4k ") ||
+				strings.Contains(name, "-4k-") || strings.Contains(name, "_4k_") ||
+				strings.HasSuffix(name, " 4k") || strings.HasPrefix(name, "4k ") ||
+				strings.Contains(name, ".uhd.") || strings.Contains(name, " uhd ") ||
+				strings.Contains(name, "-uhd-") || strings.Contains(name, "_uhd_") ||
+				strings.Contains(name, "4kuhd") || strings.Contains(name, "uhd4k") ||
+				strings.Contains(name, "ultrahd") || strings.Contains(name, "ultra.hd") ||
+				strings.Contains(name, "ultra-hd") || strings.Contains(name, "ultra_hd")
+			is1080 := strings.Contains(name, "1080p") || strings.Contains(name, "1080i") ||
+				strings.Contains(name, "fhd") || strings.Contains(name, "fullhd") ||
+				strings.Contains(name, "full.hd") || strings.Contains(name, "full-hd") ||
+				strings.Contains(name, "full_hd")
+			is720 := strings.Contains(name, "720p") || strings.Contains(name, "720i")
+			is480 := strings.Contains(name, "480p") || strings.Contains(name, "480i") ||
+				strings.Contains(name, "576p") || strings.Contains(name, "576i") ||
+				strings.Contains(name, "dvdrip") || strings.Contains(name, "dvdscr") ||
+				strings.Contains(name, ".dvd.") || strings.Contains(name, " dvd ") ||
+				strings.Contains(name, "-dvd-")
+
+			templatePath := dummyTemplatePath("dummy_1080p.mkv")
+			var width int
+			switch {
+			case is4K:
+				templatePath = dummyTemplatePath("dummy_2160p.mkv")
+				width = 3840
+			case is1080:
+				templatePath = dummyTemplatePath("dummy_1080p.mkv")
+				width = 1920
+			case is720:
+				templatePath = dummyTemplatePath("dummy_720p.mkv")
+				width = 1280
+			case is480:
+				templatePath = dummyTemplatePath("dummy_480p.mkv")
+				width = 720
+			default:
+				width = 1920 // safe fallback
+			}
+			createErr = copyFile(templatePath, cleanPath)
 			if createErr != nil {
 				log.WithError(createErr).Errorf("Failed to copy dummy video template: %s", cleanPath)
 				// Fallback to 0-byte file
 				createErr = createEmptyFile(cleanPath)
 			} else {
-				log.Infof("Created dummy video file for Sonarr import: %s", cleanPath)
+				log.Infof("Created dummy video file (%dx%d) for *arr import: %s", width, width*9/16, cleanPath)
 			}
 		} else {
 			createErr = createEmptyFile(cleanPath)
 			if createErr == nil {
-				log.Infof("Created empty dummy file for Sonarr import: %s", cleanPath)
+				log.Infof("Created empty dummy file for *arr import: %s", cleanPath)
 			}
 		}
 
@@ -834,8 +1286,10 @@ func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash str
 }
 
 func (s *TransmissionService) removeDummyFiles(ctx context.Context, infoHash string) {
-	markerPath := filepath.Join("/srv/Big ARRS/downloads", ".octor_dummy_"+infoHash)
-	_ = os.Remove(markerPath)
+	m, _ := filepath.Glob(filepath.Join("/srv/Big ARRS/downloads", ".octor_dummy_"+infoHash+"*"))
+	for _, f := range m {
+		_ = os.Remove(f)
+	}
 
 	res, err := s.rm.Get(ctx, []byte(infoHash))
 	if err != nil {
@@ -894,3 +1348,146 @@ func createEmptyFile(dst string) error {
 	return nil
 }
 
+var (
+	arrEmailsLock  sync.Mutex
+	whisparrEmails []string
+	radarrEmails   []string
+	sonarrEmails   []string
+	lastArrRead    time.Time
+)
+
+func parseDownloadClientUsernames(out []byte) []string {
+	seen := map[string]struct{}{}
+	var usernames []string
+	add := func(username string) {
+		username = strings.TrimSpace(username)
+		if username == "" {
+			return
+		}
+		key := strings.ToLower(username)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		usernames = append(usernames, username)
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var settings struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal([]byte(line), &settings); err == nil {
+			add(settings.Username)
+			continue
+		}
+	}
+
+	re := regexp.MustCompile(`"username"\s*:\s*"([^"]+)"`)
+	for _, matches := range re.FindAllStringSubmatch(string(out), -1) {
+		if len(matches) > 1 {
+			add(matches[1])
+		}
+	}
+	return usernames
+}
+
+func getArrEmails() ([]string, []string, []string) {
+	arrEmailsLock.Lock()
+	defer arrEmailsLock.Unlock()
+
+	if time.Since(lastArrRead) < 5*time.Minute && (len(whisparrEmails) > 0 || len(radarrEmails) > 0 || len(sonarrEmails) > 0) {
+		return whisparrEmails, radarrEmails, sonarrEmails
+	}
+
+	extractUsernames := func(dbPath string) []string {
+		if _, err := os.Stat(dbPath); err != nil {
+			return nil
+		}
+		cmd := exec.Command("sqlite3", dbPath, "SELECT Settings FROM DownloadClients WHERE Implementation='Transmission';")
+		out, err := cmd.Output()
+		if err != nil {
+			return nil
+		}
+		return parseDownloadClientUsernames(out)
+	}
+
+	sonarrEmails = extractUsernames("/srv/Big ARRS/config/sonarr/sonarr.db")
+	radarrEmails = extractUsernames("/srv/Big ARRS/config/radarr/radarr.db")
+	whisparrEmails = nil
+	for _, dbName := range []string{"whisparr3.db", "whisparr2.db", "whisparr.db"} {
+		path := filepath.Join("/srv/Big ARRS/config/whisparr", dbName)
+		if emails := extractUsernames(path); len(emails) > 0 {
+			whisparrEmails = emails
+			break
+		}
+	}
+
+	lastArrRead = time.Now()
+	log.Debugf("Arr emails resolved from SQLite: Whisparr=%v, Radarr=%v, Sonarr=%v", whisparrEmails, radarrEmails, sonarrEmails)
+	return whisparrEmails, radarrEmails, sonarrEmails
+}
+
+func containsUsername(usernames []string, username string) bool {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return false
+	}
+	for _, candidate := range usernames {
+		if strings.EqualFold(strings.TrimSpace(candidate), username) {
+			return true
+		}
+	}
+	return false
+}
+
+func isWhisparrRequest(g *gin.Context, wEmails []string) bool {
+	ua := strings.ToLower(g.Request.UserAgent())
+	if strings.Contains(ua, "whisparr") || strings.Contains(ua, "wishparr") {
+		return true
+	}
+	username, _, _ := g.Request.BasicAuth()
+	return containsUsername(wEmails, username)
+}
+
+func isRadarrOrSonarrRequest(g *gin.Context, rEmails, sEmails []string) bool {
+	ua := strings.ToLower(g.Request.UserAgent())
+	if strings.Contains(ua, "radarr") || strings.Contains(ua, "sonarr") {
+		return true
+	}
+	username, _, _ := g.Request.BasicAuth()
+	return containsUsername(rEmails, username) || containsUsername(sEmails, username)
+}
+
+func (s *TransmissionService) isWhisparrTorrent(ctx context.Context, infoHash string, addedBy string) bool {
+	if addedBy == "whisparr" {
+		return true
+	}
+	if addedBy == "arr" {
+		return false
+	}
+	if s.db == nil {
+		return false
+	}
+
+	wEmails, _, _ := getArrEmails()
+	if len(wEmails) == 0 {
+		return false
+	}
+
+	var exists bool
+	_, err := s.db.QueryOneContext(ctx, pg.Scan(&exists), `
+		SELECT EXISTS (
+			SELECT 1 FROM library l
+			JOIN "user" u ON l.user_id = u.user_id
+			WHERE l.resource_id = ? AND u.email IN (?)
+		)
+	`, infoHash, pg.In(wEmails))
+	if err == nil {
+		return exists
+	}
+	return false
+}

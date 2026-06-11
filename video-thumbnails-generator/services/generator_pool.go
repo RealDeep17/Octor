@@ -25,7 +25,7 @@ func NewGeneratorPool(s3 *S3Storage) *GeneratorPool {
 
 // Get gets Generator
 func (s *GeneratorPool) Get(sourceURL string, offset time.Duration, length time.Duration, infoHash string, path string) *Generator {
-	key := fmt.Sprintf("%v%v%v%v%v%v", offset, length, infoHash, path)
+	key := fmt.Sprintf("%v%v%v%v", offset, length, infoHash, path)
 	v, _ := s.sm.LoadOrStore(key, NewGenerator(s.s3, sourceURL, offset, length, infoHash, path))
 	t, tLoaded := s.timers.LoadOrStore(key, time.NewTimer(s.expire))
 	timer := t.(*time.Timer)

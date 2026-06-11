@@ -255,13 +255,29 @@ func (s *ResourceMap) get(ctx context.Context, r *Resource, b []byte) (*Resource
 	return nil, nil
 }
 
+var localDownloadHosts = []string{"prowlarr", "sonarr", "radarr", "whisparr", "wishparr"}
+
+func rewriteLocalDownloadURL(urlStr string) string {
+	if strings.Contains(urlStr, "://zilean:8181") {
+		return strings.Replace(urlStr, "://zilean:8181", "://127.0.0.1:8182", 1)
+	}
+	for _, host := range localDownloadHosts {
+		if strings.Contains(urlStr, "://"+host+":") {
+			return strings.Replace(urlStr, "://"+host+":", "://127.0.0.1:", 1)
+		}
+	}
+	return urlStr
+}
+
 func (s *ResourceMap) downloadTorrentURL(ctx context.Context, urlStr string) ([]byte, error) {
+	urlStr = rewriteLocalDownloadURL(urlStr)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
-	
+
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {

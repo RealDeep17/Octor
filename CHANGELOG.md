@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## [Unreleased] - 2026-06-10
+
+### Fixed
+- **Web UI Protobuf Loading**: Added unique protobuf package namespaces for abuse-store and torrent-store so full `web-ui test ./...` no longer needs conflict-policy workarounds.
+- **WebDAV Admin Root**: Normal users can no longer list or resolve the `admin/` WebDAV child.
+- **REST API Transmission RPC**: ARR request classification now reads all configured Transmission download clients from Sonarr/Radarr/Whisparr SQLite DBs instead of only the first row.
+- **REST API Dummy Templates**: Fresh clones now include small tracked dummy media templates under `rest-api/assets/dummy/`, with runtime fallback from `/srv/octor/infra-data`.
+- **Embed SDK Build**: Fixed the SDK entrypoint import so `npm --prefix embed-sdk-js run build` succeeds after `npm ci`.
+- **Sidecar Tests**: Replaced the live API stress script with deterministic pytest coverage for filename parsing and adult-studio detection.
+- **NSFW/Adult Discover Watchlist & Badges**: Resolved issues preventing the watchlist, watched status, and rating badges from working for NSFW (Adult, Porn, JAV) content.
+  - Updated backend watchlist validation to accept `tpdb:`, `tpdb_jav:`, and `stash:` video ID prefixes.
+  - Updated backend content type parsing to map `"adult"`, `"porn"`, and `"jav"` types to `ContentTypeMovie`.
+  - Updated frontend `discoverUtils.js` to normalize the type parameter to `"movie"` when making API calls for adult/porn/jav content, and corrected the status check filter to allow `tpdb_jav:` IDs.
+  - Updated frontend layout toggle type mapping in `ItemGrid.jsx` to map adult/porn/jav items to `"movie"`.
+
 ## [2.3.0] - 2026-05-19
 
 ### Fixed

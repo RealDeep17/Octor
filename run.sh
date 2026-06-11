@@ -246,6 +246,12 @@ cmd_mode() {
 
     if [[ -z "$MODE" ]]; then echo "❌ No mode specified"; exit 1; fi
 
+    # 3. Transition to Benchmark if requested and not already in benchmark loop
+    if [[ "$BENCH_FLAG" = "true" && "${BENCHMARK_MODE:-false}" != "true" ]]; then
+        cmd_benchmark "$MODE"
+        return
+    fi
+
     # 3. Mode Mapping Logic
     local MODE_NAME=""
     local RAM_CACHE_ENABLED=false
@@ -455,7 +461,7 @@ cmd_mode() {
 
     if [ "$BENCH_FLAG" = "true" ] || [ "${BENCHMARK_MODE:-false}" = "true" ]; then
         echo "⚡ BENCHMARK MODE ACTIVE"
-        SERVICES=("octor-torrent-store" "octor-magnet2torrent" "octor-rest-api" "octor-vault" "octor-s3-gateway" "octor-torrent-web-seeder")
+        SERVICES=("octor-abuse-store" "octor-url-store" "octor-torrent-store" "octor-magnet2torrent" "octor-rest-api" "octor-vault" "octor-s3-gateway" "octor-torrent-web-seeder")
     else
         SERVICES=("octor-torrent-store" "octor-magnet2torrent" "octor-video-info" "octor-abuse-store" "octor-url-store" "octor-rest-api" "octor-vault" "octor-s3-gateway" "octor-torrent-web-seeder" "octor-torrent-web-seeder-cleaner" "octor-torrent-http-proxy" "octor-content-prober" "octor-content-transcoder" "octor-srt2vtt" "octor-torrent-archiver" "octor-claims-provider" "octor-ai-proxy" "octor-sidecar" "octor-web-ui")
     fi
@@ -1058,15 +1064,24 @@ stty sane 2>/dev/null || true
 COMMAND="${1:-mode}"
 
 case "$COMMAND" in
-    mode) [[ $# -gt 0 ]] && shift; cmd_mode "$@" ;;
-    benchmark|bench) [[ $# -gt 0 ]] && shift; cmd_benchmark "$@" ;;
-    prune) [[ $# -gt 0 ]] && shift; cmd_prune "$@" ;;
+    mode|benchmark|bench|prune|reset|factory-reset|--factory-reset|install|build|status|doctor|enrich|stop|start|help|-h|--help)
+        [[ $# -gt 0 ]] && shift
+        ;;
+    *)
+        COMMAND="mode"
+        ;;
+esac
+
+case "$COMMAND" in
+    mode) cmd_mode "$@" ;;
+    benchmark|bench) cmd_benchmark "$@" ;;
+    prune) cmd_prune "$@" ;;
     reset|factory-reset|--factory-reset) cmd_factory_reset ;;
     install) cmd_install ;;
     build) cmd_build ;;
     status) cmd_status ;;
     doctor) cmd_doctor ;;
-    enrich) [[ $# -gt 0 ]] && shift; cmd_enrich "$@" ;;
+    enrich) cmd_enrich "$@" ;;
     stop) stop_all_octor ;;
     start) cmd_mode "$(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r')" ;;
     help|-h|--help)

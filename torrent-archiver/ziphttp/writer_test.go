@@ -106,12 +106,34 @@ func runServer() *httptest.Server {
 
 func runGBServer(size int) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		var f = make([]byte, 1024*1024)
-		for i := 0; i < len(f); i++ {
-			f[i] = 1
+		sizeBytes := int64(size) * 1024 * 1024 * 1024
+		begin, end := int64(0), sizeBytes-1
+		if req.Header.Get("Range") != "" {
+			parts := strings.Split(strings.TrimPrefix(req.Header.Get("Range"), "bytes="), "-")
+			begin, _ = strconv.ParseInt(parts[0], 10, 64)
+			if parts[1] != "" {
+				end, _ = strconv.ParseInt(parts[1], 10, 64)
+			}
+			if end >= sizeBytes {
+				end = sizeBytes - 1
+			}
+			if begin > end {
+				rw.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+				return
+			}
 		}
-		for i := 0; i < size*1024; i++ {
-			rw.Write(f)
+		chunk := make([]byte, 1024*1024)
+		for i := 0; i < len(chunk); i++ {
+			chunk[i] = 1
+		}
+		remaining := end - begin + 1
+		for remaining > 0 {
+			n := int64(len(chunk))
+			if remaining < n {
+				n = remaining
+			}
+			_, _ = rw.Write(chunk[:n])
+			remaining -= n
 		}
 	}))
 }
@@ -152,29 +174,30 @@ func TestWriteWithOffset34(t *testing.T) {
 
 func Test5GBZipping(t *testing.T) {
 	size := 5
+	sizeBytes := int64(size) * 1024 * 1024 * 1024
 	var buf bytes.Buffer
 	s := runGBServer(size)
 	defer s.Close()
-	zw := ziphttp.NewWriter(&buf, 0, -1, s.Client())
+	zw := ziphttp.NewWriter(&buf, sizeBytes+1, -1, s.Client())
 	header := &ziphttp.FileHeader{
 		Name:               fmt.Sprintf("%vGB", size),
 		URL:                s.URL,
-		UncompressedSize64: uint64(size * 1024 * 1024 * 1024),
+		UncompressedSize64: uint64(sizeBytes),
 	}
 	header.SetMode(os.FileMode(int(0644)))
-	zw.CreateHeader(context.Background(), header)
-	zw.Close()
-	// f, _ := os.Create(fmt.Sprintf("%vGB.zip", size))
-	// f.Write(buf.Bytes())
-	len := int64(len(buf.Bytes()))
-	r, err := ziphttp.NewReader(bytes.NewReader(buf.Bytes()), len)
-	if err != nil {
-		log.Fatal(err)
+	if err := zw.CreateHeader(context.Background(), header); err != nil {
+		t.Fatalf("CreateHeader() error = %v", err)
 	}
-	for _, f := range r.File {
-		_, err := f.Open()
-		if err != nil {
-			t.Fatalf("Got error %v", err)
+	if err := zw.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	b := buf.Bytes()
+	if len(b) == 0 {
+		t.Fatal("expected tail range to include zip64 records")
+	}
+	for _, sig := range [][]byte{[]byte("PK\x06\x06"), []byte("PK\x06\x07"), []byte("PK\x05\x06")} {
+		if !bytes.Contains(b, sig) {
+			t.Fatalf("expected zip tail to contain signature % x", sig)
 		}
 	}
 }

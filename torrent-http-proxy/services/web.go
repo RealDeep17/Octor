@@ -128,9 +128,9 @@ func RegisterWebFlags(f []cli.Flag) []cli.Flag {
 			Usage:  "use bandwidth limit",
 			EnvVar: "USE_BANDWIDTH_LIMIT",
 		},
-		cli.BoolTFlag{
+		cli.BoolFlag{
 			Name:   enforceSessionIPFlag,
-			Usage:  "reject requests whose client IP doesn't match the remoteAddress claim in the JWT (normalized to /24 for v4, /64 for v6). Disable to unblock mobile users if false positives appear.",
+			Usage:  "reject requests whose client IP doesn't match the remoteAddress claim in the JWT (normalized to /24 for v4, /64 for v6). Off by default; enable only when client IPs are stable.",
 			EnvVar: "ENFORCE_SESSION_IP",
 		},
 	)

@@ -1,6 +1,8 @@
 syntax = "proto3";
 
-option go_package = "./";
+package torrentstore;
+
+option go_package = "github.com/webtor-io/torrent-store/proto;proto";
 
 service TorrentStore {
   // Pushes torrent to the store

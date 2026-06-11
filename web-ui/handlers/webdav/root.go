@@ -35,6 +35,9 @@ func (s *RootDirectory) ReadDir(ctx context.Context, path string, recursive bool
 	if isRoot(path) {
 		var dirs []webdav.FileInfo
 		for k := range s.Children {
+			if k == "admin" && !s.canUseAdmin(ctx) {
+				continue
+			}
 			dirs = append(dirs, newDirectoryFileInfo(k))
 		}
 		return dirs, nil
@@ -124,6 +127,9 @@ func (s *RootDirectory) getChild(ctx context.Context, path string) *ChildRespons
 		path = "/" + path
 	}
 	for name, d := range s.Children {
+		if name == "admin" && !s.canUseAdmin(ctx) {
+			continue
+		}
 		prefix := "/" + name
 		// Match /name/something or exact /name
 		if strings.HasPrefix(path, prefix+"/") || path == prefix {
