@@ -17,7 +17,9 @@ RUN mkdir -p /app/bin && \
         fi; \
     done && \
     echo "Building create_nats_stream..." && \
-    go build -o /app/bin/create_nats_stream scripts/create_nats_stream.go
+    go build -o /app/bin/create_nats_stream scripts/create_nats_stream.go && \
+    echo "Building recover_db..." && \
+    go build -o /app/bin/recover_db scripts/recover_db.go
 
 # --- Stage 2: Web UI & Node Builder ---
 FROM node:24-bookworm AS node-builder

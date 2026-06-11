@@ -33,12 +33,12 @@ DRY_RUN=${DRY_RUN:-y}
 
 if [[ "$DRY_RUN" =~ ^[yY]$ ]]; then
     echo "Running in DRY-RUN mode..."
-    sudo docker exec -it octor-monolith /bin/bash -c "go run scripts/recover_db.go --dry-run=true"
+    sudo docker exec -it octor-monolith /app/bin/recover_db --dry-run=true
 else
     echo "⚠️  WARNING: Running in LIVE mode. This will modify the database."
     read -p "Type 'RECOVER' to confirm: " CONFIRM
     if [ "$CONFIRM" = "RECOVER" ]; then
-        sudo docker exec -it octor-monolith /bin/bash -c "go run scripts/recover_db.go --dry-run=false"
+        sudo docker exec -it octor-monolith /app/bin/recover_db --dry-run=false
     else
         echo "Aborted."
     fi
