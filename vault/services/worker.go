@@ -1505,7 +1505,7 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	// uploaded prefix from this file's S3 object so the in-progress piece
 	// state matches the actual stored bytes.
 	var verifier *pieceVerifier
-	if mi != nil {
+	if s.verifyIntegrity && mi != nil {
 		fileOff := fileOffsetInTorrent(mi, item.PathStr, item.Size)
 		if fileOff < 0 {
 			return nil, errors.Errorf("verify: file %q (size %d) not found in torrent metainfo", item.PathStr, item.Size)

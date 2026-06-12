@@ -58,7 +58,7 @@ services:
       - PG_PORT=5432
       - OCTOR_ARR_CONFIG_DIR=/config
     volumes:
-      - ./infra-data:/app/infra-data
+      - ./infra-data:/app/infra-data:rslave
       - /mnt/seeder-cache:/mnt/seeder-cache
       - ../Big ARRS/downloads:/downloads
       - ../Big ARRS/config:/config
