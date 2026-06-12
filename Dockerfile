@@ -34,7 +34,7 @@ RUN cd web-ui && npm install && npm run build
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install core runtime dependencies
+# Install core runtime dependencies (build-essential removed to reduce size)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
@@ -43,7 +43,6 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js v24.x
@@ -53,14 +52,19 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
 
 # Setup application directories
 WORKDIR /app
-RUN mkdir -p bin sidecar/venv ai-proxy web-ui infra-data/badger /mnt/seeder-cache && \
+RUN mkdir -p bin sidecar/venv ai-proxy web-ui/templates web-ui/locales web-ui/pub web-ui/assets/dist web-ui/migrations infra-data/badger /mnt/seeder-cache && \
     ln -s /app /srv/octor
 
 # Copy Go binaries
 COPY --from=go-builder /app/bin/ bin/
 
-# Copy Web UI files and compiled node assets
-COPY --from=node-builder /app/web-ui/ web-ui/
+# Copy Web UI templates, locales, public assets, compiled webpack assets, and migrations
+# This avoids copying the massive node_modules directory and raw source files into the production image.
+COPY --from=node-builder /app/web-ui/templates/ web-ui/templates/
+COPY --from=node-builder /app/web-ui/locales/ web-ui/locales/
+COPY --from=node-builder /app/web-ui/pub/ web-ui/pub/
+COPY --from=node-builder /app/web-ui/assets/dist/ web-ui/assets/dist/
+COPY --from=node-builder /app/web-ui/migrations/ web-ui/migrations/
 COPY --from=node-builder /app/ai-proxy/ ai-proxy/
 
 # Copy python sidecar code and other microservices configuration/assets
