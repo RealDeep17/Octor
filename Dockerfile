@@ -117,6 +117,8 @@ COPY abuse-store/migrations/ abuse-store/migrations/
 COPY url-store/migrations/ url-store/migrations/
 COPY vault/migrations/ vault/migrations/
 COPY torrent-http-proxy/services.yaml torrent-http-proxy/services.yaml
+COPY rest-api/assets/ rest-api/assets/
+
 
 # Copy Go binaries
 COPY --from=go-builder /app/bin/ bin/
