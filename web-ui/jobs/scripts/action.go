@@ -449,9 +449,15 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 		return errors.Wrap(err, "failed to retrieve stream url")
 	}
 	j.Done()
-	sc.ExportTag = exportResponse.ExportItems["stream"].Tag
+	if exportResponse.ExportItems == nil {
+		return errors.New("export response items not found")
+	}
+	se, ok := exportResponse.ExportItems["stream"]
+	if !ok || se.Tag == nil {
+		return errors.New("stream export not found")
+	}
+	sc.ExportTag = se.Tag
 	sc.Item = &exportResponse.Source
-	se := exportResponse.ExportItems["stream"]
 	sessionStreamURL := se.URL
 	if exportResponse.Source.MediaFormat == ra.Video {
 		fallbackURL, fallbackType := detachDirectVideoFallback(sc.ExportTag)
@@ -467,7 +473,11 @@ func (s *ActionScript) streamContent(ctx context.Context, j *job.Job, c *web.Con
 	if half := fileSize / 2; half > 0 && warmupSize > half {
 		warmupSize = half
 	}
-	downloadURL := exportResponse.ExportItems["download"].URL
+	dl, ok := exportResponse.ExportItems["download"]
+	if !ok {
+		return errors.New("download export not found")
+	}
+	downloadURL := dl.URL
 
 	// Step 0: Handle global Direct Play override
 	directPlayFallback := false

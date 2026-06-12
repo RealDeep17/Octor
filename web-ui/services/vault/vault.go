@@ -401,8 +401,17 @@ func (s *Vault) GetUserStats(ctx context.Context, user *auth.User) (*UserStats, 
 				stats.LoadingCount++
 				// Fetch worker status for funded but not yet vaulted resources
 				status, err := s.GetVaultAPIResource(ctx, pledge.ResourceID)
-				if err == nil && status != nil {
-					item.WorkerStatus = status
+				if err == nil {
+					if status != nil {
+						item.WorkerStatus = status
+					} else {
+						// Resource is funded but missing from Vault API: auto re-queue
+						log.WithField("resource_id", pledge.ResourceID).
+							Warn("Resource funded but missing from Vault API; auto re-queueing")
+						if status, err := s.PutResource(ctx, pledge.ResourceID); err == nil && status != nil {
+							item.WorkerStatus = status
+						}
+					}
 				}
 			}
 		}

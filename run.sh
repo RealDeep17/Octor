@@ -829,13 +829,6 @@ cmd_mode() {
         if [[ "$INFRA_READY" = "false" ]]; then
             echo " ❌"
         fi
-
-        echo "=== INITIALIZING NATS JETSTREAM ==="
-        if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
-            sudo docker exec -i octor-monolith /app/bin/create_nats_stream >/dev/null 2>&1 || echo "⚠️  NATS Init failed - services might crash!"
-        else
-            (cd "$PROJECT_ROOT" && go run scripts/create_nats_stream.go >/dev/null) || echo "⚠️  NATS Init failed - services might crash!"
-        fi
     fi
 
     backup_env
@@ -902,7 +895,62 @@ cmd_mode() {
     if sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
         echo "  Detected octor-monolith container. Reloading Docker Compose to apply new env..."
         (cd "$PROJECT_ROOT" && run_sudo docker compose --ansi never up -d)
+
+        # Wait for NATS to be responsive inside monolith container
+        echo -n "  Waiting for NATS container connectivity"
+        local NATS_READY=false
+        for i in {1..30}; do
+            if sudo docker exec octor-monolith python3 -c "import os, socket; s = socket.socket(); s.settimeout(1); s.connect((os.getenv('NATS_HOST', 'octor-nats'), int(os.getenv('NATS_PORT', '4222'))))" >/dev/null 2>&1; then
+                NATS_READY=true
+                echo " ✓"
+                break
+            fi
+            printf "."
+            sleep 1
+        done
+        if [[ "$NATS_READY" = "false" ]]; then
+            echo " ❌"
+        fi
+
+        echo "=== INITIALIZING NATS JETSTREAM ==="
+        sudo docker exec -i octor-monolith /app/bin/create_nats_stream >/dev/null 2>&1 || echo "⚠️  NATS Init failed - services might crash!"
     else
+        # In systemd host mode, NATS runs in the octor-nats container. Resolve host/port from custom.env.
+        local NATS_SH
+        local NATS_SP
+        NATS_SH=$(grep '^NATS_SERVICE_HOST=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "localhost")
+        NATS_SP=$(grep '^NATS_SERVICE_PORT=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "4222")
+
+        echo -n "  Waiting for NATS host connectivity"
+        local NATS_READY=false
+        for i in {1..30}; do
+            if command -v nc >/dev/null 2>&1; then
+                if nc -z "$NATS_SH" "$NATS_SP" >/dev/null 2>&1; then
+                    NATS_READY=true
+                    echo " ✓"
+                    break
+                fi
+            elif command -v python3 >/dev/null 2>&1; then
+                if python3 -c "import socket; s = socket.socket(); s.settimeout(1); s.connect(('$NATS_SH', $NATS_SP))" >/dev/null 2>&1; then
+                    NATS_READY=true
+                    echo " ✓"
+                    break
+                fi
+            else
+                NATS_READY=true
+                echo " ✓ (assuming ready)"
+                break
+            fi
+            printf "."
+            sleep 1
+        done
+        if [[ "$NATS_READY" = "false" ]]; then
+            echo " ❌"
+        fi
+
+        echo "=== INITIALIZING NATS JETSTREAM ==="
+        (cd "$PROJECT_ROOT" && go run scripts/create_nats_stream.go >/dev/null) || echo "⚠️  NATS Init failed - services might crash!"
+
         for svc in "${SERVICES[@]}"; do start_service_with_retry "$svc" 2 10; done
     fi
 

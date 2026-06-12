@@ -300,9 +300,13 @@ func (s *Api) GetResource(ctx context.Context, c *Claims, infohash string) (e *r
 }
 
 func (s *Api) GetResourceCached(ctx context.Context, c *Claims, infohash string) (e *ra.ResourceResponse, err error) {
-	return s.resourcesCache.Get(infohash, func() (*ra.ResourceResponse, error) {
+	res, err := s.resourcesCache.Get(infohash, func() (*ra.ResourceResponse, error) {
 		return s.GetResource(ctx, c, infohash)
 	})
+	if res == nil && err == nil {
+		s.resourcesCache.Drop(infohash)
+	}
+	return res, err
 }
 
 func (s *Api) GetTorrent(ctx context.Context, c *Claims, infohash string) (closer io.ReadCloser, err error) {

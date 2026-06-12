@@ -35,8 +35,15 @@ function convertSchema(schema) {
   if (!schema || typeof schema !== 'object') return { type: 'STRING' };
   const out = {};
   if (schema.type) {
+    let typeVal = schema.type;
+    if (Array.isArray(typeVal)) {
+      if (typeVal.includes('null')) {
+        out.nullable = true;
+      }
+      typeVal = typeVal.find(t => t !== 'null') || 'string';
+    }
     // Gemini doesn't have INTEGER; use NUMBER
-    out.type = schema.type === 'integer' ? 'NUMBER' : schema.type.toUpperCase();
+    out.type = typeVal === 'integer' ? 'NUMBER' : String(typeVal).toUpperCase();
   }
   if (schema.description) out.description = schema.description;
   if (schema.enum)         out.enum        = schema.enum;

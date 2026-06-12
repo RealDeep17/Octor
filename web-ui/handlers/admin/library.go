@@ -579,7 +579,7 @@ func (h *Handler) loadOwnerSummaries(ctx context.Context, db *pg.DB, resourceIDs
 		ColumnExpr("string_agg(distinct u.email, ', ') AS owner_emails").
 		ColumnExpr("string_agg(distinct u.user_id::text, ', ') AS owner_ids").
 		ColumnExpr("min(u.email) AS primary_email").
-		ColumnExpr("min(u.user_id) AS primary_user_id").
+		ColumnExpr("min(u.user_id::text)::uuid AS primary_user_id").
 		Join("join \"user\" as u").
 		JoinOn("u.user_id = library.user_id").
 		Where("library.resource_id IN (?)", pg.In(resourceIDs)).
