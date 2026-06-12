@@ -110,11 +110,10 @@ func (s *Service) WarmSinglePoster(urlStr, destPath, shape string, isJav bool) e
 	var resp *http.Response
 	var err error
 
-	cl := &http.Client{
-		Timeout: 10 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	cl := *s.client
+	cl.Timeout = 10 * time.Second
+	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
 
 	if isJav {

@@ -17,6 +17,17 @@ TEMP_DIR="/tmp/octor-setup-$$"
 mkdir -p "$TEMP_DIR"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
+# Helper function to run sed -i portably across GNU (Linux) and BSD (macOS)
+run_sed_in_place() {
+    local expr="$1"
+    local file="$2"
+    if sed --version >/dev/null 2>&1; then
+        sed -i "$expr" "$file"
+    else
+        sed -i "" "$expr" "$file"
+    fi
+}
+
 
 echo "=== OCTOR UNIVERSAL MONOLITH DEPLOYMENT INITIALIZED ==="
 echo "Working Directory: $PROJECT_ROOT"
@@ -25,10 +36,10 @@ echo "Working Directory: $PROJECT_ROOT"
 update_env_var() {
     local key="$1"
     local val="$2"
-    # Escape special regex characters for sed replacement
-    local esc_val=$(echo "$val" | sed 's/[&/\]/\\&/g')
+    # Escape special regex characters for sed replacement including pipe delimiter
+    local esc_val=$(echo "$val" | sed 's/[&/\|]/\\&/g')
     if grep -q "^$key=" "$ENV_FILE"; then
-        sed -i "s|^$key=.*|$key=$esc_val|g" "$ENV_FILE"
+        run_sed_in_place "s|^$key=.*|$key=$esc_val|g" "$ENV_FILE"
     else
         echo "$key=$val" >> "$ENV_FILE"
     fi
@@ -39,15 +50,32 @@ load_env() {
     local file="$1"
     if [[ -f "$file" ]]; then
         while IFS= read -r line || [[ -n "$line" ]]; do
-            # Trim leading whitespace
-            line="${line#"${line%%[![:space:]]*}"}"
-            # Trim trailing whitespace
-            line="${line%"${line##*[![:space:]]}"}"
+            # Trim leading and trailing whitespace
+            line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             # Skip empty lines or comments
             if [[ -z "$line" || "$line" =~ ^# ]]; then
                 continue
             fi
-            export "$line"
+            # Strip inline comments (keep anything before the first #)
+            line="${line%%#*}"
+            # Trim trailing whitespace again after comment stripping
+            line=$(echo "$line" | sed -e 's/[[:space:]]*$//')
+            if [[ -z "$line" ]]; then
+                continue
+            fi
+            # Extract key and value
+            if [[ "$line" =~ ^([A-Za-z0-9_]+)=(.*)$ ]]; then
+                local key="${BASH_REMATCH[1]}"
+                local val="${BASH_REMATCH[2]}"
+                # Strip surrounding double quotes
+                if [[ "$val" =~ ^\"(.*)\"$ ]]; then
+                    val="${BASH_REMATCH[1]}"
+                # Strip surrounding single quotes
+                elif [[ "$val" =~ ^\'(.*)\'$ ]]; then
+                    val="${BASH_REMATCH[1]}"
+                fi
+                export "$key=$val"
+            fi
         done < "$file"
     fi
 }
@@ -558,8 +586,8 @@ if [ "$PROMPT_OAUTH" = "y" ]; then
         ESC_CLIENT_SECRET=$(echo "$INPUT_CLIENT_SECRET" | sed 's/[&/\]/\\&/g')
         
         # Replace the placeholders in custom.env
-        sed -i "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=$ESC_CLIENT_ID|g" "$ENV_FILE"
-        sed -i "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$ESC_CLIENT_SECRET|g" "$ENV_FILE"
+        run_sed_in_place "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=$ESC_CLIENT_ID|g" "$ENV_FILE"
+        run_sed_in_place "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$ESC_CLIENT_SECRET|g" "$ENV_FILE"
         
         # Reload/export the new variables
         export GOOGLE_CLIENT_ID="$INPUT_CLIENT_ID"
@@ -597,7 +625,8 @@ sudo cp "$TEMP_DIR"/octor-seeder-cache.service /etc/systemd/system/octor-seeder-
 
 # 2. Rclone Google Drive union mount service
 echo "Configuring octor-rclone-mount.service..."
-sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__ENV_FILE__|$ENV_FILE|g" << 'EOF' > "$TEMP_DIR"/octor-rclone-mount.service
+RCLONE_BIN=$(which rclone 2>/dev/null || echo "/usr/bin/rclone")
+sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__ENV_FILE__|$ENV_FILE|g" -e "s|__RCLONE_BIN__|$RCLONE_BIN|g" << 'EOF' > "$TEMP_DIR"/octor-rclone-mount.service
 [Unit]
 Description=Octor Rclone Google Drive Union Mount
 After=network.target octor-seeder-cache.service
@@ -611,7 +640,7 @@ Group=root
 EnvironmentFile=__ENV_FILE__
 ExecStartPre=/usr/bin/mkdir -p __PROJECT_ROOT__/infra-data/drive-mount-vfs
 ExecStartPre=/usr/bin/mkdir -p ${RCLONE_CACHE_DIR}
-ExecStart=/usr/bin/rclone --config ${VAULT_RCLONE_CONFIG} mount ${VAULT_RCLONE_REMOTE} __PROJECT_ROOT__/infra-data/drive-mount-vfs \
+ExecStart=__RCLONE_BIN__ --config ${VAULT_RCLONE_CONFIG} mount ${VAULT_RCLONE_REMOTE} __PROJECT_ROOT__/infra-data/drive-mount-vfs \
     --vfs-cache-mode ${RCLONE_VFS_CACHE_MODE} \
     --vfs-cache-max-size ${RCLONE_VFS_CACHE_MAX_SIZE} \
     --vfs-cache-max-age ${RCLONE_VFS_CACHE_MAX_AGE} \
@@ -726,12 +755,12 @@ if [ ! -f "$REAL_CERT_DIR/fullchain.pem" ]; then
         -subj "/CN=$DOMAIN"
     
     # Rewrite template cert path to self-signed path
-    sed -i "s|/etc/letsencrypt/live/.*/fullchain.pem|/etc/ssl/certs/$DOMAIN.crt|g" "$TEMP_DIR"/octor.nginx
-    sed -i "s|/etc/letsencrypt/live/.*/privkey.pem|/etc/ssl/private/$DOMAIN.key|g" "$TEMP_DIR"/octor.nginx
+    run_sed_in_place "s|/etc/letsencrypt/live/.*/fullchain.pem|/etc/ssl/certs/$DOMAIN.crt|g" "$TEMP_DIR"/octor.nginx
+    run_sed_in_place "s|/etc/letsencrypt/live/.*/privkey.pem|/etc/ssl/private/$DOMAIN.key|g" "$TEMP_DIR"/octor.nginx
 else
     # Correct path to domain cert
-    sed -i "s|/etc/letsencrypt/live/.*/fullchain.pem|$REAL_CERT_DIR/fullchain.pem|g" "$TEMP_DIR"/octor.nginx
-    sed -i "s|/etc/letsencrypt/live/.*/privkey.pem|$REAL_CERT_DIR/privkey.pem|g" "$TEMP_DIR"/octor.nginx
+    run_sed_in_place "s|/etc/letsencrypt/live/.*/fullchain.pem|$REAL_CERT_DIR/fullchain.pem|g" "$TEMP_DIR"/octor.nginx
+    run_sed_in_place "s|/etc/letsencrypt/live/.*/privkey.pem|$REAL_CERT_DIR/privkey.pem|g" "$TEMP_DIR"/octor.nginx
 fi
 
 sudo cp "$TEMP_DIR"/octor.nginx "$NGINX_CONF"

@@ -36,15 +36,32 @@ load_env() {
     local file="$1"
     if [[ -f "$file" ]]; then
         while IFS= read -r line || [[ -n "$line" ]]; do
-            # Trim leading whitespace
-            line="${line#"${line%%[![:space:]]*}"}"
-            # Trim trailing whitespace
-            line="${line%"${line##*[![:space:]]}"}"
+            # Trim leading and trailing whitespace
+            line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             # Skip empty lines or comments
             if [[ -z "$line" || "$line" =~ ^# ]]; then
                 continue
             fi
-            export "$line"
+            # Strip inline comments (keep anything before the first #)
+            line="${line%%#*}"
+            # Trim trailing whitespace again after comment stripping
+            line=$(echo "$line" | sed -e 's/[[:space:]]*$//')
+            if [[ -z "$line" ]]; then
+                continue
+            fi
+            # Extract key and value
+            if [[ "$line" =~ ^([A-Za-z0-9_]+)=(.*)$ ]]; then
+                local key="${BASH_REMATCH[1]}"
+                local val="${BASH_REMATCH[2]}"
+                # Strip surrounding double quotes
+                if [[ "$val" =~ ^\"(.*)\"$ ]]; then
+                    val="${BASH_REMATCH[1]}"
+                # Strip surrounding single quotes
+                elif [[ "$val" =~ ^\'(.*)\'$ ]]; then
+                    val="${BASH_REMATCH[1]}"
+                fi
+                export "$key=$val"
+            fi
         done < "$file"
     fi
 }

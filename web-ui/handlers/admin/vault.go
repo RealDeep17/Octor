@@ -17,6 +17,7 @@ import (
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/vault"
 	"github.com/webtor-io/web-ui/services/web"
+	"golang.org/x/sync/errgroup"
 )
 
 type AdminVaultStats struct {
@@ -78,20 +79,30 @@ func (h *Handler) vaultIndex(c *gin.Context) {
 		return
 	}
 
-	enrichedPledges := make([]AdminPledgeDisplay, 0, len(pledges))
-	for _, p := range pledges {
-		item := AdminPledgeDisplay{Pledge: p}
-		if p.Resource != nil && p.Resource.Funded && !p.Resource.Vaulted && !p.Resource.Expired {
-			status, err := h.vault.GetVaultAPIResource(ctx, p.ResourceID)
-			if err == nil && status != nil {
-				// We map vault.Resource to any or wait, in vault.go the package is "github.com/webtor-io/web-ui/services/vault"
-				// So we can use type assertion or import vault
-				item.WorkerStatus = status
-			}
-			item.SeedCount = h.getLiveSeeds(ctx, c, p.ResourceID)
-		}
-		enrichedPledges = append(enrichedPledges, item)
+	enrichedPledges := make([]AdminPledgeDisplay, len(pledges))
+	for i, p := range pledges {
+		enrichedPledges[i] = AdminPledgeDisplay{Pledge: p}
 	}
+
+	wcc := web.NewContext(c)
+	apiClaims := wcc.ApiClaims
+
+	var eg errgroup.Group
+	for i := range enrichedPledges {
+		i := i
+		p := enrichedPledges[i].Pledge
+		if p.Resource != nil && p.Resource.Funded && !p.Resource.Vaulted && !p.Resource.Expired {
+			eg.Go(func() error {
+				status, err := h.vault.GetVaultAPIResource(ctx, p.ResourceID)
+				if err == nil && status != nil {
+					enrichedPledges[i].WorkerStatus = status
+				}
+				enrichedPledges[i].SeedCount = h.getLiveSeeds(ctx, apiClaims, p.ResourceID)
+				return nil
+			})
+		}
+	}
+	_ = eg.Wait()
 
 	users, err := h.loadUsers(ctx, db, selected)
 	if err != nil {
@@ -362,9 +373,8 @@ func (h *Handler) retryMultiplePledge(c *gin.Context) {
 	web.RedirectWithSuccessAndMessage(c, "toast.vaultRetrying")
 }
 
-func (h *Handler) getLiveSeeds(ctx context.Context, c *gin.Context, resourceID string) int {
-	wcc := web.NewContext(c)
-	er, err := h.api.ExportResourceContent(ctx, wcc.ApiClaims, resourceID, resourceID, "")
+func (h *Handler) getLiveSeeds(ctx context.Context, apiClaims *api.Claims, resourceID string) int {
+	er, err := h.api.ExportResourceContent(ctx, apiClaims, resourceID, resourceID, "")
 	if err != nil {
 		return 0
 	}

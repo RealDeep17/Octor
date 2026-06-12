@@ -31,7 +31,13 @@ func (h *Handler) runEnrichPool(ctx context.Context, ids []string, force bool, l
 		id := id
 		i := i
 		wg.Add(1)
-		sem <- struct{}{}
+		select {
+		case <-ctx.Done():
+			wg.Done()
+			log.Infof("%s: context cancelled, stopping queue insertion", label)
+			goto loopExit
+		case sem <- struct{}{}:
+		}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
@@ -41,6 +47,7 @@ func (h *Handler) runEnrichPool(ctx context.Context, ids []string, force bool, l
 			}
 		}()
 	}
+loopExit:
 
 	wg.Wait()
 	log.Infof("%s: completed", label)

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/webtor-io/web-ui/services/tpdb"
@@ -181,14 +182,17 @@ func (s *Service) resolveStudiosJob() {
 				break
 			}
 
-			req, err := http.NewRequest("POST", "https://stashdb.org/graphql", strings.NewReader(string(bodyBytes)))
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			req, err := http.NewRequestWithContext(ctx, "POST", "https://stashdb.org/graphql", strings.NewReader(string(bodyBytes)))
 			if err != nil {
+				cancel()
 				break
 			}
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("ApiKey", s.apiKey)
 
 			resp, err := s.client.Do(req)
+			cancel()
 			if err != nil {
 				log.WithError(err).Warn("StashDB queryStudios request failed")
 				break

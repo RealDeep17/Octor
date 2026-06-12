@@ -22,7 +22,10 @@ import (
 	"github.com/webtor-io/web-ui/services/prowlarr"
 	"github.com/webtor-io/web-ui/services/stashdb"
 	"github.com/webtor-io/web-ui/services/tpdb"
+	"golang.org/x/sync/singleflight"
 )
+
+var posterSingleFlight singleflight.Group
 
 func RegisterAdultRoutes(
 	r *gin.Engine,
@@ -499,7 +502,12 @@ func handlePoster(posterSvc *adultposter.Service) gin.HandlerFunc {
 			return
 		}
 
-		err := posterSvc.WarmSinglePoster(originalURL, filePath, shape, isJav)
+		_, err, _ := posterSingleFlight.Do(filePath, func() (interface{}, error) {
+			if _, err := os.Stat(filePath); err == nil {
+				return nil, nil
+			}
+			return nil, posterSvc.WarmSinglePoster(originalURL, filePath, shape, isJav)
+		})
 		if err == nil {
 			c.Header("Cache-Control", "public, max-age=604800")
 			c.File(filePath)

@@ -105,13 +105,14 @@ func (s *Service) getEnabledProwlarrIndexers(ctx context.Context) ([]ProwlarrInd
 		return nil, fmt.Errorf("Prowlarr is not configured")
 	}
 	apiURL := fmt.Sprintf("%s/api/v1/indexer?apikey=%s", s.prowlarrURL, s.apiKey)
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, "GET", apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	cl := &http.Client{Timeout: 5 * time.Second}
-	resp, err := cl.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -197,14 +198,16 @@ func (s *Service) searchProwlarrDirect(ctx context.Context, query string, indexe
 		apiURL += "&" + strings.Join(ids, "&")
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 
-	cl := &http.Client{Timeout: 5 * time.Second}
-	resp, err := cl.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -808,9 +811,10 @@ func (s *Service) SearchAdultStreams(ctx context.Context, id string, scene *tpdb
 		}
 	}
 
-	// Resolve infohashes in parallel
+	// Resolve infohashes in parallel with limited concurrency
 	{
 		var wg sync.WaitGroup
+		sem := make(chan struct{}, 5) // Limit to 5 concurrent downloads
 		for i := range torrents {
 			if parsed := tryParseInfoHash(torrents[i].InfoHash); parsed != "" {
 				torrents[i].InfoHash = parsed
@@ -822,8 +826,10 @@ func (s *Service) SearchAdultStreams(ctx context.Context, id string, scene *tpdb
 
 			if torrents[i].InfoHash == "" && torrents[i].DownloadURL != "" && !strings.HasPrefix(strings.ToLower(torrents[i].DownloadURL), "magnet:") {
 				wg.Add(1)
+				sem <- struct{}{}
 				go func(idx int) {
 					defer wg.Done()
+					defer func() { <-sem }()
 					resolvedHash, err := resolveInfoHashFromTorrent(ctx, torrents[idx].DownloadURL)
 					if err == nil && resolvedHash != "" {
 						torrents[idx].InfoHash = resolvedHash

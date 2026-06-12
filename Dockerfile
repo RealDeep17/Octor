@@ -106,8 +106,17 @@ WORKDIR /app
 RUN mkdir -p bin sidecar/venv ai-proxy web-ui/templates web-ui/locales web-ui/pub web-ui/assets/dist web-ui/migrations infra-data/badger /mnt/seeder-cache && \
     ln -s /app /srv/octor
 
-# Copy the entire workspace code (excluding items in .dockerignore like node_modules and venv)
-COPY . .
+# Copy runtime assets and application files (excluding source code and raw dev files)
+COPY sidecar/ sidecar/
+COPY ai-proxy/ ai-proxy/
+COPY web-ui/templates/ web-ui/templates/
+COPY web-ui/locales/ web-ui/locales/
+COPY web-ui/pub/ web-ui/pub/
+COPY web-ui/migrations/ web-ui/migrations/
+COPY abuse-store/migrations/ abuse-store/migrations/
+COPY url-store/migrations/ url-store/migrations/
+COPY vault/migrations/ vault/migrations/
+COPY torrent-http-proxy/services.yaml torrent-http-proxy/services.yaml
 
 # Copy Go binaries
 COPY --from=go-builder /app/bin/ bin/

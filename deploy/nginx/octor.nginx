@@ -276,6 +276,10 @@ server {
         proxy_redirect / /zilean/;
     }
 
+    location = /rclone {
+        return 301 /rclone/;
+    }
+
     location /rclone/ {
         auth_request /admin/auth-check;
         error_page 403 = @auth_redirect;

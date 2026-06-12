@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,6 +65,7 @@ type StatusPageData struct {
 var (
 	liveTelemetry      StatusPageData
 	liveTelemetryMutex sync.RWMutex
+	baseDiskRx         = regexp.MustCompile(`^([sv]d[a-z]+|nvme[0-9]+n[0-9]+)$`)
 )
 
 // StartStatsCollector collects network and disk I/O metrics and stores hourly/minutely diffs in the database
@@ -319,12 +321,7 @@ func readDiskStats() (int64, int64, error) {
 		if strings.HasPrefix(dev, "loop") || strings.HasPrefix(dev, "ram") || strings.Contains(dev, "dm-") {
 			continue
 		}
-		isBaseDisk := false
-		if (strings.HasPrefix(dev, "sd") && len(dev) == 3) ||
-			(strings.HasPrefix(dev, "vd") && len(dev) == 3) ||
-			(strings.HasPrefix(dev, "nvme") && !strings.Contains(dev, "p")) {
-			isBaseDisk = true
-		}
+		isBaseDisk := baseDiskRx.MatchString(dev)
 		if !isBaseDisk {
 			continue
 		}
@@ -741,7 +738,8 @@ func getDiskTotalVal() int64 {
 }
 
 func getStreamCountVal() int {
-	resp, err := http.Get("http://localhost:52086/metrics") // query octor-vault probe port
+	client := &http.Client{Timeout: 1 * time.Second}
+	resp, err := client.Get("http://localhost:52086/metrics") // query octor-vault probe port
 	if err != nil {
 		return 0
 	}
@@ -761,7 +759,8 @@ func getStreamCountVal() int {
 }
 
 func getSeedCountVal() int {
-	resp, err := http.Get("http://localhost:52054/metrics") // query octor-torrent-web-seeder probe port
+	client := &http.Client{Timeout: 1 * time.Second}
+	resp, err := client.Get("http://localhost:52054/metrics") // query octor-torrent-web-seeder probe port
 	if err != nil {
 		return 0
 	}

@@ -60,18 +60,18 @@ while true; do
                     ;;
                 restart-monolith)
                     echo "Action: Restarting monolith docker container..."
-                    (cd "$PROJECT_ROOT" && sudo -u "$OCTOR_USER" docker compose restart monolith)
+                    (cd "$PROJECT_ROOT" && docker compose restart monolith)
                     ;;
                 rebuild-docker)
                     echo "Action: Rebuilding and recreating Docker containers..."
-                    (cd "$PROJECT_ROOT" && sudo -u "$OCTOR_USER" ./run.sh custom d f r)
+                    (cd "$PROJECT_ROOT" && ./run.sh custom d f r)
                     ;;
                 fix-rclone-cache)
                     echo "Action: Wiping rclone cache and restarting mount..."
                     echo "Forcefully unmounting stale mount points..."
                     fusermount -u -z "$PROJECT_ROOT/infra-data/drive-mount-vfs" || umount -l "$PROJECT_ROOT/infra-data/drive-mount-vfs" || true
                     # Safety check to avoid destroying root directories
-                    if [ -n "$RCLONE_CACHE_DIR" ] && [ "$RCLONE_CACHE_DIR" != "/" ] && [ "$RCLONE_CACHE_DIR" != "$PROJECT_ROOT" ]; then
+                    if [ -n "$RCLONE_CACHE_DIR" ] && [ "$RCLONE_CACHE_DIR" != "/" ] && [ "$RCLONE_CACHE_DIR" != "$PROJECT_ROOT" ] && [[ "$RCLONE_CACHE_DIR" == *"/rclone-vfs"* ]]; then
                         echo "Wiping VFS cache at: $RCLONE_CACHE_DIR"
                         rm -rf "$RCLONE_CACHE_DIR"/*
                     fi
@@ -82,7 +82,7 @@ while true; do
                     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
                         docker exec -i octor-monolith /app/bin/clean_orphans --dry-run=false
                     else
-                        sudo -u "$OCTOR_USER" "$PROJECT_ROOT/bin/clean_orphans" --dry-run=false
+                        "$PROJECT_ROOT/bin/clean_orphans" --dry-run=false
                     fi
                     ;;
                 recover-db)
@@ -90,7 +90,7 @@ while true; do
                     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
                         docker exec -i octor-monolith /app/bin/recover_db --dry-run=false
                     else
-                        sudo -u "$OCTOR_USER" "$PROJECT_ROOT/bin/recover_db" --dry-run=false
+                        "$PROJECT_ROOT/bin/recover_db" --dry-run=false
                     fi
                     ;;
                 restart-all)
@@ -99,7 +99,7 @@ while true; do
                     fusermount -u -z "$PROJECT_ROOT/infra-data/drive-mount-vfs" || umount -l "$PROJECT_ROOT/infra-data/drive-mount-vfs" || true
                     systemctl restart octor-rclone-mount
                     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
-                        (cd "$PROJECT_ROOT" && sudo -u "$OCTOR_USER" docker compose restart monolith)
+                        (cd "$PROJECT_ROOT" && docker compose restart monolith)
                     else
                         systemctl restart octor-web-ui
                     fi
