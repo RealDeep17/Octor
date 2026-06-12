@@ -1387,7 +1387,7 @@ func (h *Handler) vaultIndex(c *gin.Context) {
 		}
 		_, _ = db.QueryOneContext(ctx, &dbStats, `
 			SELECT 
-				COALESCE(SUM(r.required_vp), 0) as total_vaulted_gb,
+				COALESCE(SUM(CASE WHEN r.vaulted = true AND r.expired = false THEN r.required_vp ELSE 0 END), 0) as total_vaulted_gb,
 				COUNT(CASE WHEN r.vaulted = true AND r.expired = false THEN 1 END) as saved_count,
 				COUNT(CASE WHEN r.vaulted = false AND r.expired = false THEN 1 END) as processing_count
 			FROM vault.pledge p
@@ -1405,7 +1405,7 @@ func (h *Handler) vaultIndex(c *gin.Context) {
 		}
 		_, _ = db.QueryOneContext(ctx, &dbStats, `
 			SELECT 
-				COALESCE(SUM(required_vp), 0) as total_vaulted_gb,
+				COALESCE(SUM(CASE WHEN vaulted = true AND expired = false THEN required_vp ELSE 0 END), 0) as total_vaulted_gb,
 				COUNT(CASE WHEN vaulted = true AND expired = false THEN 1 END) as saved_count,
 				COUNT(CASE WHEN vaulted = false AND expired = false THEN 1 END) as processing_count
 			FROM vault.resource

@@ -510,12 +510,26 @@ func (s *Vault) GetTotalSpaceGB() float64 {
 	if bits := s.cachedTotalSpaceGB.Load(); bits != 0 {
 		return math.Float64frombits(bits)
 	}
+	if s.storagePath != "" {
+		var stat unix.Statfs_t
+		if err := unix.Statfs(s.storagePath, &stat); err == nil {
+			total := float64(stat.Blocks) * float64(stat.Bsize)
+			return total / (1024 * 1024 * 1024)
+		}
+	}
 	return 0
 }
 
 func (s *Vault) GetUsedSpaceGB() float64 {
 	if bits := s.cachedUsedSpaceGB.Load(); bits != 0 {
 		return math.Float64frombits(bits)
+	}
+	if s.storagePath != "" {
+		var stat unix.Statfs_t
+		if err := unix.Statfs(s.storagePath, &stat); err == nil {
+			used := (float64(stat.Blocks) - float64(stat.Bfree)) * float64(stat.Bsize)
+			return used / (1024 * 1024 * 1024)
+		}
 	}
 	return 0
 }
