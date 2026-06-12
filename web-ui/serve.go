@@ -3,6 +3,7 @@ package main
 import (
 	"io/fs"
 	"net/http"
+	"os"
 
 	"github.com/webtor-io/web-ui/handlers/about"
 	"github.com/webtor-io/web-ui/handlers/docs"
@@ -65,6 +66,9 @@ import (
 	uvss "github.com/webtor-io/web-ui/services/user_video_status"
 	"github.com/webtor-io/web-ui/services/vault"
 	"github.com/webtor-io/web-ui/services/javguru"
+	"github.com/webtor-io/web-ui/services/stashdb"
+	"github.com/webtor-io/web-ui/services/prowlarr"
+	"github.com/webtor-io/web-ui/services/adultposter"
 
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-gonic/gin"
@@ -402,9 +406,18 @@ func serve(c *cli.Context) error {
 	// Setting TPDB service
 	tpdbSvc := tpdb.New(c, cl, pg)
 
+	// Setting StashDB service
+	stashdbSvc := stashdb.New(cl, os.Getenv("STASHDB_API_KEY"))
+
+	// Setting Prowlarr service
+	prowlarrSvc := prowlarr.New(cl, redis, os.Getenv("PROWLARR_URL"), os.Getenv("PROWLARR_API_KEY"))
+
+	// Setting Adult Poster service
+	posterSvc := adultposter.New(cl, cs.GetInfraDataPath("cache/adult-posters"))
+
 	// Setting Discover
 	javGuruSvc := javguru.New(cl, redis)
-	discover.RegisterHandler(r, tm, pg, sapi, tpdbSvc, adminSvc, redis, javGuruSvc)
+	discover.RegisterHandler(r, tm, pg, sapi, tpdbSvc, adminSvc, redis, javGuruSvc, stashdbSvc, prowlarrSvc, posterSvc)
 
 	// Setting AI Recommendations (Discover)
 	//

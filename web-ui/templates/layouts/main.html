@@ -173,11 +173,16 @@
                 // If it's a bulk form, populate selected inputs
                 if (form.id === 'vault-bulk-remove-form') {
                     form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+                    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
                     document.querySelectorAll('.vault-item-cb').forEach(cb => {
                         if (cb.checked) {
                             const r = document.createElement('input');
                             r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
                             form.appendChild(r);
+                            
+                            const u = document.createElement('input');
+                            u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId || '';
+                            form.appendChild(u);
                         }
                     });
                     if (window.toggleVaultMode) window.toggleVaultMode();
@@ -189,11 +194,10 @@
                             const r = document.createElement('input');
                             r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
                             form.appendChild(r);
-                            if (cb.dataset.userId) {
-                                const u = document.createElement('input');
-                                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
-                                form.appendChild(u);
-                            }
+                            
+                            const u = document.createElement('input');
+                            u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId || '';
+                            form.appendChild(u);
                         }
                     });
                     if (window.toggleLibraryMode) window.toggleLibraryMode();

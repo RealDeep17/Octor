@@ -12,14 +12,17 @@ import (
 	cs "github.com/webtor-io/common-services"
 	"github.com/webtor-io/web-ui/models"
 	"github.com/webtor-io/web-ui/services/admin"
+	"github.com/webtor-io/web-ui/services/adultposter"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/enrich"
 	"github.com/webtor-io/web-ui/services/i18n"
+	"github.com/webtor-io/web-ui/services/javguru"
+	"github.com/webtor-io/web-ui/services/prowlarr"
+	"github.com/webtor-io/web-ui/services/stashdb"
 	"github.com/webtor-io/web-ui/services/template"
 	"github.com/webtor-io/web-ui/services/tpdb"
 	"github.com/webtor-io/web-ui/services/web"
-	"github.com/webtor-io/web-ui/services/javguru"
 )
 
 // addonView is the per-addon shape we serialize into the page bootstrap
@@ -54,7 +57,7 @@ type Handler struct {
 	admin *admin.Admin
 }
 
-func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, api *api.Api, tpdbSvc *tpdb.Service, adminSvc *admin.Admin, redis *cs.RedisClient, javGuruSvc *javguru.Service) {
+func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, api *api.Api, tpdbSvc *tpdb.Service, adminSvc *admin.Admin, redis *cs.RedisClient, javGuruSvc *javguru.Service, stashdbSvc *stashdb.Service, prowlarrSvc *prowlarr.Service, posterSvc *adultposter.Service) {
 	h := &Handler{
 		tb:    tm.MustRegisterViews("discover/*").WithLayout("main"),
 		pg:    pg,
@@ -63,7 +66,7 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 	}
 	r.GET("/discover", h.index)
 	r.GET("/discover/search", h.search)
-	RegisterAdultRoutes(r, tpdbSvc, adminSvc, redis, javGuruSvc)
+	RegisterAdultRoutes(r, tpdbSvc, adminSvc, redis, javGuruSvc, stashdbSvc, prowlarrSvc, posterSvc)
 }
 
 func (h *Handler) search(c *gin.Context) {

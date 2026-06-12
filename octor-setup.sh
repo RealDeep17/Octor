@@ -12,22 +12,411 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$PROJECT_ROOT/custom.env"
 
+# Process-specific temporary directory to avoid sharing/permission conflicts
+TEMP_DIR="/tmp/octor-setup-$$"
+mkdir -p "$TEMP_DIR"
+trap 'rm -rf "$TEMP_DIR"' EXIT
+
+
 echo "=== OCTOR UNIVERSAL MONOLITH DEPLOYMENT INITIALIZED ==="
 echo "Working Directory: $PROJECT_ROOT"
 
-# Ensure environment file exists
-if [[ ! -f "$ENV_FILE" ]]; then
-    if [[ -f "$PROJECT_ROOT/example.env" ]]; then
-        echo "Creating custom.env from example.env template..."
-        sed "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" "$PROJECT_ROOT/example.env" > "$ENV_FILE"
+# Helper function to safely update key=value pairs in custom.env
+update_env_var() {
+    local key="$1"
+    local val="$2"
+    # Escape special regex characters for sed replacement
+    local esc_val=$(echo "$val" | sed 's/[&/\]/\\&/g')
+    if grep -q "^$key=" "$ENV_FILE"; then
+        sed -i "s|^$key=.*|$key=$esc_val|g" "$ENV_FILE"
     else
-        echo "❌ Error: custom.env or example.env not found!"
-        exit 1
+        echo "$key=$val" >> "$ENV_FILE"
     fi
-fi
+}
 
-# Load variables
-export $(grep -v '^#' "$ENV_FILE" | xargs)
+# Helper function to safely load environment variables with spaces
+load_env() {
+    local file="$1"
+    if [[ -f "$file" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Trim leading whitespace
+            line="${line#"${line%%[![:space:]]*}"}"
+            # Trim trailing whitespace
+            line="${line%"${line##*[![:space:]]}"}"
+            # Skip empty lines or comments
+            if [[ -z "$line" || "$line" =~ ^# ]]; then
+                continue
+            fi
+            export "$line"
+        done < "$file"
+    fi
+}
+
+
+# Run the interactive configuration wizard
+run_config_wizard() {
+    # Check if custom.env exists. If not, copy example.env
+    if [[ ! -f "$ENV_FILE" ]]; then
+        if [[ -f "$PROJECT_ROOT/example.env" ]]; then
+            echo "Creating custom.env from example.env template..."
+            sed "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" "$PROJECT_ROOT/example.env" > "$ENV_FILE"
+        else
+            echo "❌ Error: example.env template not found!"
+            exit 1
+        fi
+    fi
+
+    # Load existing variables so we can show current defaults
+    # Use || true to prevent set -e from exiting if grep returns no matches
+    local CURRENT_DOMAIN=$(grep '^DOMAIN=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_LETSENCRYPT_EMAIL=$(grep '^LETSENCRYPT_EMAIL=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_ADMIN_EMAILS=$(grep '^ADMIN_EMAILS=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_GOOGLE_CLIENT_ID=$(grep '^GOOGLE_CLIENT_ID=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_GOOGLE_CLIENT_SECRET=$(grep '^GOOGLE_CLIENT_SECRET=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_GEMINI_API_KEY=$(grep '^GEMINI_API_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_TMDB_API_KEY=$(grep '^TMDB_API_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_TMDB_API_READ_ACCESS_TOKEN=$(grep '^TMDB_API_READ_ACCESS_TOKEN=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_VAULT_RCLONE_CONFIG=$(grep '^VAULT_RCLONE_CONFIG=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_VAULT_RCLONE_REMOTE=$(grep '^VAULT_RCLONE_REMOTE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_OCTOR_ARR_CONFIG_DIR=$(grep '^OCTOR_ARR_CONFIG_DIR=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_SESSION_SECRET=$(grep '^SESSION_SECRET=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+    local CURRENT_AUTOMATION_API_KEY=$(grep '^AUTOMATION_API_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+
+    local RUN_WIZARD="y"
+    if [[ -n "$CURRENT_DOMAIN" ]]; then
+        echo "✓ Found existing Octor configuration in custom.env (Domain: $CURRENT_DOMAIN)."
+        read -p "Run interactive configuration wizard? (y/n) [n]: " CONFIRM_WIZARD
+        CONFIRM_WIZARD=${CONFIRM_WIZARD:-n}
+        if [[ ! "$CONFIRM_WIZARD" =~ ^[yY]$ ]]; then
+            RUN_WIZARD="n"
+        fi
+    fi
+
+    if [[ "$RUN_WIZARD" = "n" ]]; then
+        echo "Skipping interactive wizard. Loading existing configuration..."
+        load_env "$ENV_FILE"
+        return 0
+    fi
+
+    echo "========================================================"
+    echo "         OCTOR INTERACTIVE CONFIGURATION WIZARD"
+    echo "========================================================"
+    
+    # 1. Domain
+    echo "🌐 Domain Configuration"
+    echo "--------------------------------------------------------"
+    echo "If you don't have a public domain, get a free subdomain at: https://www.duckdns.org/"
+    local INPUT_DOMAIN=""
+    while [[ -z "$INPUT_DOMAIN" ]]; do
+        read -p "Enter public domain name (e.g. yourname.duckdns.org) [$CURRENT_DOMAIN]: " INPUT_DOMAIN
+        INPUT_DOMAIN=${INPUT_DOMAIN:-$CURRENT_DOMAIN}
+        if [[ -z "$INPUT_DOMAIN" ]]; then
+            echo "❌ Domain is mandatory. Please enter a valid domain."
+        fi
+    done
+    update_env_var "DOMAIN" "$INPUT_DOMAIN"
+    update_env_var "OCTOR_DOMAIN" "https://$INPUT_DOMAIN"
+    update_env_var "EXTERNAL_URL" "https://$INPUT_DOMAIN"
+    echo "✓ Set DOMAIN=$INPUT_DOMAIN"
+    echo "✓ Set OCTOR_DOMAIN=https://$INPUT_DOMAIN"
+    echo "✓ Set EXTERNAL_URL=https://$INPUT_DOMAIN"
+    echo ""
+
+    # 2. Let's Encrypt Email
+    echo "🔒 Let's Encrypt SSL Setup"
+    echo "--------------------------------------------------------"
+    local INPUT_SSL=""
+    while [[ -z "$INPUT_SSL" ]]; do
+        read -p "Enter email for certbot SSL registrations [$CURRENT_LETSENCRYPT_EMAIL]: " INPUT_SSL
+        INPUT_SSL=${INPUT_SSL:-$CURRENT_LETSENCRYPT_EMAIL}
+        if [[ -z "$INPUT_SSL" ]]; then
+            echo "❌ SSL Email is mandatory."
+        fi
+    done
+    update_env_var "LETSENCRYPT_EMAIL" "$INPUT_SSL"
+    echo "✓ Set LETSENCRYPT_EMAIL=$INPUT_SSL"
+    echo ""
+
+    # 3. Admin Access
+    echo "👤 Administrator Access"
+    echo "--------------------------------------------------------"
+    local INPUT_ADMIN=""
+    read -p "Enter Google admin email addresses (comma-separated) [$CURRENT_ADMIN_EMAILS]: " INPUT_ADMIN
+    INPUT_ADMIN=${INPUT_ADMIN:-$CURRENT_ADMIN_EMAILS}
+    update_env_var "ADMIN_EMAILS" "$INPUT_ADMIN"
+    echo "✓ Set ADMIN_EMAILS=$INPUT_ADMIN"
+    echo ""
+
+    # 4. Adult Metadata Setup (conditional on admin email)
+    if [[ -n "$INPUT_ADMIN" ]]; then
+        read -p "Configure Adult Search & Enrichment API keys? (y/n) [y]: " CONFIRM_ADULT
+        CONFIRM_ADULT=${CONFIRM_ADULT:-y}
+        if [[ "$CONFIRM_ADULT" =~ ^[yY]$ ]]; then
+            local CURRENT_STASH=$(grep '^STASHDB_API_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+            local CURRENT_TPDB=$(grep '^THEPORNDB_API_KEY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+
+            echo "Get a free StashDB scene key at: https://stashdb.org/"
+            read -p "Enter StashDB API Key [$CURRENT_STASH]: " INPUT_STASH
+            INPUT_STASH=${INPUT_STASH:-$CURRENT_STASH}
+            update_env_var "STASHDB_API_KEY" "$INPUT_STASH"
+
+            echo "Get a free ThePornDB studio key at: https://theporndb.net/"
+            read -p "Enter ThePornDB API Key [$CURRENT_TPDB]: " INPUT_TPDB
+            INPUT_TPDB=${INPUT_TPDB:-$CURRENT_TPDB}
+            update_env_var "THEPORNDB_API_KEY" "$INPUT_TPDB"
+            
+            echo "✓ Adult metadata keys configured."
+        fi
+    else
+        echo "Skipping Adult Search API keys setup (no administrator emails configured)."
+    fi
+    echo ""
+
+    # 5. Google Sign-In / OAuth
+    echo "🔑 Google Login / OAuth Setup"
+    echo "--------------------------------------------------------"
+    echo "To log in to the Octor admin panel, you must configure Google Sign-In:"
+    echo "1. Go to: https://console.cloud.google.com/apis/credentials"
+    echo "2. Click 'Create Credentials' -> 'OAuth Client ID' (Web Application)."
+    echo "3. Enable Google People API in API Library for profile details."
+    echo "4. Under 'Authorized redirect URIs', add this exact URI:"
+    echo "   👉 https://$INPUT_DOMAIN/auth/callback/google"
+    echo "--------------------------------------------------------"
+    local INPUT_G_ID=""
+    read -p "Enter Google OAuth Client ID [$CURRENT_GOOGLE_CLIENT_ID]: " INPUT_G_ID
+    INPUT_G_ID=${INPUT_G_ID:-$CURRENT_GOOGLE_CLIENT_ID}
+    update_env_var "GOOGLE_CLIENT_ID" "$INPUT_G_ID"
+
+    local INPUT_G_SECRET=""
+    read -p "Enter Google OAuth Client Secret [$CURRENT_GOOGLE_CLIENT_SECRET]: " INPUT_G_SECRET
+    INPUT_G_SECRET=${INPUT_G_SECRET:-$CURRENT_GOOGLE_CLIENT_SECRET}
+    update_env_var "GOOGLE_CLIENT_SECRET" "$INPUT_G_SECRET"
+    echo "✓ Google OAuth credentials saved."
+    echo ""
+
+    # 6. Gemini AI
+    echo "🤖 Gemini AI Recommendations & Enrichment Setup"
+    echo "--------------------------------------------------------"
+    read -p "Configure AI Recommendations & Enrichment features? (y/n) [y]: " CONFIRM_GEMINI
+    CONFIRM_GEMINI=${CONFIRM_GEMINI:-y}
+    if [[ "$CONFIRM_GEMINI" =~ ^[yY]$ ]]; then
+        echo "Register for a free Gemini API key at: https://aistudio.google.com/"
+        local INPUT_GEMINI=""
+        read -p "Enter Gemini API Key [$CURRENT_GEMINI_API_KEY]: " INPUT_GEMINI
+        INPUT_GEMINI=${INPUT_GEMINI:-$CURRENT_GEMINI_API_KEY}
+        
+        if [[ -n "$INPUT_GEMINI" ]]; then
+            update_env_var "GEMINI_API_KEY" "$INPUT_GEMINI"
+            update_env_var "AI_RECOMMENDATIONS_ENABLED" "true"
+            update_env_var "AI_ENRICH_ENABLED" "true"
+            echo "✓ AI features enabled with Gemini API key."
+        else
+            update_env_var "AI_RECOMMENDATIONS_ENABLED" "false"
+            update_env_var "AI_ENRICH_ENABLED" "false"
+            echo "⚠️  Gemini API key empty. AI features disabled to prevent container errors."
+        fi
+    else
+        update_env_var "AI_RECOMMENDATIONS_ENABLED" "false"
+        update_env_var "AI_ENRICH_ENABLED" "false"
+        echo "✓ AI features disabled."
+    fi
+    echo ""
+
+    # 7. Rclone & Storage Pools
+    echo "💾 Rclone & Storage Pools Setup"
+    echo "--------------------------------------------------------"
+    local INPUT_R_CONFIG=""
+    local DEFAULT_R_CONFIG="/home/ubuntu/.config/rclone/rclone.conf"
+    if [[ -n "$CURRENT_VAULT_RCLONE_CONFIG" ]]; then
+        DEFAULT_R_CONFIG="$CURRENT_VAULT_RCLONE_CONFIG"
+    fi
+    read -p "Enter path to rclone.conf [$DEFAULT_R_CONFIG]: " INPUT_R_CONFIG
+    INPUT_R_CONFIG=${INPUT_R_CONFIG:-$DEFAULT_R_CONFIG}
+    update_env_var "VAULT_RCLONE_CONFIG" "$INPUT_R_CONFIG"
+
+    # Auto-create directory if config path parent doesn't exist
+    mkdir -p "$(dirname "$INPUT_R_CONFIG")"
+    if [[ ! -f "$INPUT_R_CONFIG" ]]; then
+        touch "$INPUT_R_CONFIG"
+    fi
+
+    # Prompt to run rclone config in foreground
+    read -p "Run 'rclone config' in the foreground to manage cloud remotes? (y/n) [n]: " CONFIRM_R_CFG
+    CONFIRM_R_CFG=${CONFIRM_R_CFG:-n}
+    if [[ "$CONFIRM_R_CFG" =~ ^[yY]$ ]]; then
+        rclone --config "$INPUT_R_CONFIG" config
+    fi
+
+    # Read active remotes from rclone.conf (exclude ALPHA_UNION, ALPHA_CHUNKER, and comments)
+    local REMOTES=($(grep -E '^\[[a-zA-Z0-9_-]+\]' "$INPUT_R_CONFIG" | tr -d '[]' | grep -vE 'ALPHA_UNION|ALPHA_CHUNKER' || true))
+    local REMOTE_COUNT=${#REMOTES[@]}
+
+    local R_REMOTE=""
+    if [[ $REMOTE_COUNT -eq 0 ]]; then
+        echo "⚠️  No cloud drives found in $INPUT_R_CONFIG."
+        read -p "Enter name of rclone remote (must configure it later): " R_REMOTE
+        update_env_var "VAULT_RCLONE_REMOTE" "$R_REMOTE:"
+    elif [[ $REMOTE_COUNT -eq 1 ]]; then
+        local DETECTED_REMOTE="${REMOTES[0]}"
+        echo "Single cloud drive detected: $DETECTED_REMOTE"
+        echo "1) Use directly"
+        echo "2) Set up a multi-drive storage pool (pre-configures a pool so you can easily add more cloud accounts later)"
+        local SINGLE_DRIVE_CHOICE=""
+        while [[ ! "$SINGLE_DRIVE_CHOICE" =~ ^[12]$ ]]; do
+            read -p "Select option [1]: " SINGLE_DRIVE_CHOICE
+            SINGLE_DRIVE_CHOICE=${SINGLE_DRIVE_CHOICE:-1}
+        done
+
+        if [[ "$SINGLE_DRIVE_CHOICE" -eq 1 ]]; then
+            R_REMOTE="$DETECTED_REMOTE"
+            update_env_var "VAULT_RCLONE_REMOTE" "$R_REMOTE:"
+            echo "✓ Configured Vault remote to direct drive: $R_REMOTE:"
+        else
+            # Pre-configure ALPHA_UNION with single drive
+            echo "Generating multi-drive union storage pool (ALPHA_UNION)..."
+            python3 -c "
+import configparser
+config = configparser.ConfigParser()
+config.read('$INPUT_R_CONFIG')
+if 'ALPHA_UNION' in config:
+    config.remove_section('ALPHA_UNION')
+config['ALPHA_UNION'] = {
+    'type': 'union',
+    'upstreams': '$DETECTED_REMOTE:',
+    'action_policy': 'mfs',
+    'create_policy': 'mfs',
+    'search_policy': 'ff',
+    'cache_time': '600'
+}
+with open('$INPUT_R_CONFIG', 'w') as f:
+    config.write(f)
+"
+            R_REMOTE="ALPHA_UNION"
+            update_env_var "VAULT_RCLONE_REMOTE" "ALPHA_UNION:"
+            echo "✓ pre-configured storage pool (ALPHA_UNION) with drive: $DETECTED_REMOTE:"
+        fi
+    else
+        # Multiple remotes exist, configure storage pool (ALPHA_UNION)
+        echo "Available cloud storage remotes:"
+        for i in "${!REMOTES[@]}"; do
+            echo "  $((i+1))) ${REMOTES[$i]}"
+        done
+        echo "  c) Custom name (enter custom remote name manually)"
+
+        read -p "Select which drives to combine into a storage pool (comma-separated numbers, e.g. 1,2) [c]: " UNION_SELECT
+        UNION_SELECT=${UNION_SELECT:-c}
+
+        if [[ "$UNION_SELECT" != "c" ]]; then
+            # Build list of upstreams
+            local UPSTREAMS=""
+            IFS=',' read -ra ADDR <<< "$UNION_SELECT"
+            for idx in "${ADDR[@]}"; do
+                idx=$(echo "$idx" | xargs)
+                if [[ $idx -ge 1 && $idx -le $REMOTE_COUNT ]]; then
+                    local r_name="${REMOTES[$((idx-1))]}"
+                    UPSTREAMS="$UPSTREAMS $r_name:"
+                fi
+            done
+            UPSTREAMS=$(echo "$UPSTREAMS" | xargs)
+
+            if [[ -n "$UPSTREAMS" ]]; then
+                echo "Generating union storage pool (ALPHA_UNION) with upstreams: $UPSTREAMS"
+                python3 -c "
+import configparser
+config = configparser.ConfigParser()
+config.read('$INPUT_R_CONFIG')
+if 'ALPHA_UNION' in config:
+    config.remove_section('ALPHA_UNION')
+config['ALPHA_UNION'] = {
+    'type': 'union',
+    'upstreams': '$UPSTREAMS',
+    'action_policy': 'mfs',
+    'create_policy': 'mfs',
+    'search_policy': 'ff',
+    'cache_time': '600'
+}
+with open('$INPUT_R_CONFIG', 'w') as f:
+    config.write(f)
+"
+                R_REMOTE="ALPHA_UNION"
+                update_env_var "VAULT_RCLONE_REMOTE" "ALPHA_UNION:"
+                echo "✓ preconfigured storage pool (ALPHA_UNION) successfully."
+            else
+                echo "⚠️  No valid remotes selected. Defaulting to custom name..."
+                UNION_SELECT="c"
+            fi
+        fi
+
+        if [[ "$UNION_SELECT" = "c" ]]; then
+            read -p "Enter Rclone remote name manually (e.g. GDrive:) [$CURRENT_VAULT_RCLONE_REMOTE]: " R_REMOTE
+            R_REMOTE=${R_REMOTE:-$CURRENT_VAULT_RCLONE_REMOTE}
+            if [[ "$R_REMOTE" != *":" ]]; then R_REMOTE="${R_REMOTE}:"; fi
+            update_env_var "VAULT_RCLONE_REMOTE" "$R_REMOTE"
+            echo "✓ Vault remote set to: $R_REMOTE"
+        fi
+    fi
+    echo ""
+
+    # 8. TMDB API
+    echo "🎬 TMDB Movie/TV Metadata Setup"
+    echo "--------------------------------------------------------"
+    echo "Get a free TMDB API key at: https://www.themoviedb.org/"
+    local INPUT_TMDB=""
+    read -p "Enter TMDB API Key [$CURRENT_TMDB_API_KEY]: " INPUT_TMDB
+    INPUT_TMDB=${INPUT_TMDB:-$CURRENT_TMDB_API_KEY}
+    update_env_var "TMDB_API_KEY" "$INPUT_TMDB"
+
+    local INPUT_TMDB_READ=""
+    read -p "Enter TMDB Read Access Token (Optional) [$CURRENT_TMDB_API_READ_ACCESS_TOKEN]: " INPUT_TMDB_READ
+    INPUT_TMDB_READ=${INPUT_TMDB_READ:-$CURRENT_TMDB_API_READ_ACCESS_TOKEN}
+    update_env_var "TMDB_API_READ_ACCESS_TOKEN" "$INPUT_TMDB_READ"
+    echo "✓ TMDB API key saved."
+    echo ""
+
+    # 9. Octor Arr Config Dir
+    echo "📂 Arr Application Integration"
+    echo "--------------------------------------------------------"
+    local DEFAULT_ARR_DIR="$PROJECT_ROOT/../Big ARRS/config"
+    if [[ -n "$CURRENT_OCTOR_ARR_CONFIG_DIR" ]]; then
+        DEFAULT_ARR_DIR="$CURRENT_OCTOR_ARR_CONFIG_DIR"
+    fi
+    local INPUT_ARR_DIR=""
+    read -p "Enter absolute path to Arr config directory [$DEFAULT_ARR_DIR]: " INPUT_ARR_DIR
+    INPUT_ARR_DIR=${INPUT_ARR_DIR:-$DEFAULT_ARR_DIR}
+    update_env_var "OCTOR_ARR_CONFIG_DIR" "$INPUT_ARR_DIR"
+    echo "✓ Arr config directory path saved."
+    echo ""
+
+    # 10. Secrets generation
+    echo "⚙️  Generating Security Credentials"
+    echo "--------------------------------------------------------"
+    if [[ -z "$CURRENT_SESSION_SECRET" ]]; then
+        local RAND_SESSION=$(openssl rand -hex 32)
+        update_env_var "SESSION_SECRET" "$RAND_SESSION"
+        echo "✓ Generated new secure SESSION_SECRET."
+    else
+        echo "✓ Preserved existing SESSION_SECRET."
+    fi
+
+    if [[ -z "$CURRENT_AUTOMATION_API_KEY" ]]; then
+        local RAND_AUTO=$(openssl rand -hex 16)
+        update_env_var "AUTOMATION_API_KEY" "$RAND_AUTO"
+        echo "✓ Generated new secure AUTOMATION_API_KEY (Transmission client RPC token)."
+    else
+        echo "✓ Preserved existing AUTOMATION_API_KEY."
+    fi
+    echo "--------------------------------------------------------"
+    echo "✓ Configuration wizard finished! custom.env updated."
+    echo "========================================================"
+    echo ""
+
+    # Reload variables from custom.env for the rest of setup.sh
+    load_env "$ENV_FILE"
+}
+
+# Ensure environment file exists and run wizard
+run_config_wizard
+
 
 # ------------------------------------------------------------------------------
 # 1. HOST ENVIRONMENT OPTIMIZATION (Interactive)
@@ -135,13 +524,61 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 # ------------------------------------------------------------------------------
+# INTERACTIVE GOOGLE OAUTH / SIGN-IN CONFIGURATION
+# ------------------------------------------------------------------------------
+PROMPT_OAUTH="n"
+if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
+    PROMPT_OAUTH="y"
+else
+    echo "✓ Found existing Google Sign-In / OAuth credentials in custom.env."
+    read -p "Do you want to update Google Sign-In / OAuth credentials? (y/n) [n]: " CONFIRM_UPDATE
+    CONFIRM_UPDATE=${CONFIRM_UPDATE:-n}
+    if [[ "$CONFIRM_UPDATE" =~ ^[yY]$ ]]; then
+        PROMPT_OAUTH="y"
+    fi
+fi
+
+if [ "$PROMPT_OAUTH" = "y" ]; then
+    echo "--------------------------------------------------------"
+    echo "🔑 Google Sign-In / OAuth Credentials Configuration"
+    echo "--------------------------------------------------------"
+    echo "To log in to your Octor, you must configure Google Sign-In."
+    echo "Please configure your OAuth 2.0 Client credentials:"
+    echo "1. Go to: https://console.cloud.google.com/apis/credentials"
+    echo "2. Create a new OAuth 2.0 Client ID (Web Application type)."
+    echo "3. Under 'Authorized redirect URIs', add this exact URI:"
+    echo "   👉 https://$DOMAIN/auth/callback/google"
+    echo "--------------------------------------------------------"
+    read -p "Enter Google OAuth Client ID: " INPUT_CLIENT_ID
+    read -p "Enter Google OAuth Client Secret: " INPUT_CLIENT_SECRET
+
+    if [ -n "$INPUT_CLIENT_ID" ] && [ -n "$INPUT_CLIENT_SECRET" ]; then
+        # Escape potential special characters for sed
+        ESC_CLIENT_ID=$(echo "$INPUT_CLIENT_ID" | sed 's/[&/\]/\\&/g')
+        ESC_CLIENT_SECRET=$(echo "$INPUT_CLIENT_SECRET" | sed 's/[&/\]/\\&/g')
+        
+        # Replace the placeholders in custom.env
+        sed -i "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=$ESC_CLIENT_ID|g" "$ENV_FILE"
+        sed -i "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$ESC_CLIENT_SECRET|g" "$ENV_FILE"
+        
+        # Reload/export the new variables
+        export GOOGLE_CLIENT_ID="$INPUT_CLIENT_ID"
+        export GOOGLE_CLIENT_SECRET="$INPUT_CLIENT_SECRET"
+        echo "✓ Google OAuth credentials saved to custom.env successfully."
+    else
+        echo "⚠️  Credentials not entered. You must configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in custom.env manually."
+    fi
+    echo "--------------------------------------------------------"
+fi
+
+# ------------------------------------------------------------------------------
 # 3. STORAGE LAYER WIRING (Systemd configuration)
 # ------------------------------------------------------------------------------
 echo "--- Step 3: Storage Layer & Cache Systemd Setup ---"
 
 # 1. Seeder cache service
 echo "Configuring octor-seeder-cache.service..."
-sed "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" << 'EOF' > /tmp/octor-seeder-cache.service
+sed "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" << 'EOF' > "$TEMP_DIR"/octor-seeder-cache.service
 [Unit]
 Description=Octor Seeder Cache Setup (SSD or RAM ext4)
 Before=docker.service
@@ -156,11 +593,11 @@ ExecStop=__PROJECT_ROOT__/scripts/teardown-seeder-cache.sh
 [Install]
 WantedBy=multi-user.target
 EOF
-sudo cp /tmp/octor-seeder-cache.service /etc/systemd/system/octor-seeder-cache.service
+sudo cp "$TEMP_DIR"/octor-seeder-cache.service /etc/systemd/system/octor-seeder-cache.service
 
 # 2. Rclone Google Drive union mount service
 echo "Configuring octor-rclone-mount.service..."
-sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__ENV_FILE__|$ENV_FILE|g" << 'EOF' > /tmp/octor-rclone-mount.service
+sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__ENV_FILE__|$ENV_FILE|g" << 'EOF' > "$TEMP_DIR"/octor-rclone-mount.service
 [Unit]
 Description=Octor Rclone Google Drive Union Mount
 After=network.target octor-seeder-cache.service
@@ -187,7 +624,12 @@ ExecStart=/usr/bin/rclone --config ${VAULT_RCLONE_CONFIG} mount ${VAULT_RCLONE_R
     --links \
     --direct-io \
     --allow-other \
-    --umask 000 --allow-non-empty
+    --umask 000 --allow-non-empty \
+    --rc \
+    --rc-addr 127.0.0.1:5572 \
+    --rc-no-auth \
+    --rc-web-gui \
+    --rc-web-gui-no-open-browser
 ExecStop=/usr/bin/fusermount -uz __PROJECT_ROOT__/infra-data/drive-mount-vfs
 Restart=always
 RestartSec=5
@@ -195,16 +637,39 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-sudo cp /tmp/octor-rclone-mount.service /etc/systemd/system/octor-rclone-mount.service
+sudo cp "$TEMP_DIR"/octor-rclone-mount.service /etc/systemd/system/octor-rclone-mount.service
 
-# 3. Reload daemon and enable services
+# 3. Host trigger watcher service
+echo "Configuring octor-host-watcher.service..."
+sed "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" << 'EOF' > "$TEMP_DIR"/octor-host-watcher.service
+[Unit]
+Description=Octor Host Recovery Trigger Watcher
+After=network.target local-fs.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/bin/bash __PROJECT_ROOT__/scripts/host-trigger-watcher.sh
+WorkingDirectory=__PROJECT_ROOT__
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo cp "$TEMP_DIR"/octor-host-watcher.service /etc/systemd/system/octor-host-watcher.service
+
+# 4. Reload daemon and enable services
 sudo systemctl daemon-reload
-sudo systemctl enable octor-seeder-cache.service octor-rclone-mount.service
+sudo systemctl enable octor-seeder-cache.service octor-rclone-mount.service octor-host-watcher.service
 
-# 4. Start caching and mount layer
-echo "Starting storage mount layers..."
+# 5. Start caching and mount layer
+echo "Starting storage mount layers and host watcher..."
 sudo systemctl restart octor-seeder-cache.service
 sudo systemctl restart octor-rclone-mount.service
+sudo systemctl restart octor-host-watcher.service
 
 # Check mount point
 echo "Verifying mount point..."
@@ -228,25 +693,9 @@ fi
 # ------------------------------------------------------------------------------
 echo "--- Step 4: Building & Launching Octor Monolith Container ---"
 
-# Build and start container services via docker-compose
-echo "Rebuilding and restarting Octor Monolith Docker container..."
-sudo docker compose down
-sudo docker compose up -d --build --force-recreate
-
-# Wait for database/infrastructure readiness
-echo -n "Waiting for database and queue connectivity"
-for i in {1..30}; do
-    if nc -z localhost 4222 >/dev/null 2>&1 && sudo docker exec octor-postgres pg_isready -U octor -q >/dev/null 2>&1; then
-        echo " ✓ Connectivity OK."
-        break
-    fi
-    printf "."
-    sleep 1
-done
-
-# Initialize NATS streams
-echo "Initializing NATS JetStream..."
-sudo docker exec -i octor-monolith /bin/bash -c "/app/bin/create_nats_stream" || echo "⚠️  NATS stream initialization failed."
+# Hand off the final launch to run.sh mode with sync, docker, build, nginx, and force options!
+echo "Handing off to Octor Performance Mode Selector to configure performance mode..."
+(cd "$PROJECT_ROOT" && ./run.sh mode --sync --docker --build --nginx --force)
 
 # ------------------------------------------------------------------------------
 # 5. HOST REVERSE PROXY & SSL (Nginx Configuration)
@@ -262,7 +711,7 @@ echo "Generating site configuration block..."
 # Replace octor.duckdns.org with current DOMAIN, and /srv/octor with actual PROJECT_ROOT
 sed -e "s|/srv/octor|$PROJECT_ROOT|g" \
     -e "s|octor.duckdns.org|$DOMAIN|g" \
-    "$NGINX_TEMPLATE" > /tmp/octor.nginx
+    "$NGINX_TEMPLATE" > "$TEMP_DIR"/octor.nginx
 
 # Handle SSL Certs Chicken-and-egg problem:
 # If real Lets Encrypt files don't exist yet, we replace Let's Encrypt configuration with self-signed certificate path
@@ -277,15 +726,15 @@ if [ ! -f "$REAL_CERT_DIR/fullchain.pem" ]; then
         -subj "/CN=$DOMAIN"
     
     # Rewrite template cert path to self-signed path
-    sed -i "s|/etc/letsencrypt/live/.*/fullchain.pem|/etc/ssl/certs/$DOMAIN.crt|g" /tmp/octor.nginx
-    sed -i "s|/etc/letsencrypt/live/.*/privkey.pem|/etc/ssl/private/$DOMAIN.key|g" /tmp/octor.nginx
+    sed -i "s|/etc/letsencrypt/live/.*/fullchain.pem|/etc/ssl/certs/$DOMAIN.crt|g" "$TEMP_DIR"/octor.nginx
+    sed -i "s|/etc/letsencrypt/live/.*/privkey.pem|/etc/ssl/private/$DOMAIN.key|g" "$TEMP_DIR"/octor.nginx
 else
     # Correct path to domain cert
-    sed -i "s|/etc/letsencrypt/live/.*/fullchain.pem|$REAL_CERT_DIR/fullchain.pem|g" /tmp/octor.nginx
-    sed -i "s|/etc/letsencrypt/live/.*/privkey.pem|$REAL_CERT_DIR/privkey.pem|g" /tmp/octor.nginx
+    sed -i "s|/etc/letsencrypt/live/.*/fullchain.pem|$REAL_CERT_DIR/fullchain.pem|g" "$TEMP_DIR"/octor.nginx
+    sed -i "s|/etc/letsencrypt/live/.*/privkey.pem|$REAL_CERT_DIR/privkey.pem|g" "$TEMP_DIR"/octor.nginx
 fi
 
-sudo cp /tmp/octor.nginx "$NGINX_CONF"
+sudo cp "$TEMP_DIR"/octor.nginx "$NGINX_CONF"
 sudo ln -sf "$NGINX_CONF" "$NGINX_LINK"
 sudo rm -f "/etc/nginx/sites-enabled/default" || true
 
@@ -338,3 +787,16 @@ curl -sfI "http://localhost:8086/liveness" | head -n 1 || echo "⚠️  Vault se
 echo "======================================================================"
 echo "🎉 OCTOR MONOLITH INSTALLED AND RUNNING AT: https://$DOMAIN"
 echo "======================================================================"
+echo ""
+echo "🔑 IMPORTANT: Google OAuth / SSO Setup"
+echo "--------------------------------------------------------"
+echo "To enable Google SSO login, you must add the following Authorized"
+echo "Redirect URI to your OAuth 2.0 client credentials in the Google Cloud Console:"
+echo "👉 https://$DOMAIN/auth/callback/google"
+echo ""
+echo "Create credentials at: https://console.cloud.google.com/apis/credentials"
+echo "And ensure they are configured in your custom.env:"
+echo "  GOOGLE_CLIENT_ID=<your-client-id>"
+echo "  GOOGLE_CLIENT_SECRET=<your-client-secret>"
+echo "======================================================================"
+

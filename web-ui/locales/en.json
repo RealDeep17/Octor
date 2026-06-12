@@ -517,6 +517,7 @@
     "toast.user_subtitle.uploaded": "Subtitle uploaded",
     "toast.user_subtitle.deleted": "Subtitle deleted",
     "toast.enrichmentRefreshStarted": "Background metadata refresh started",
+    "toast.recoveryTriggered": "System recovery action triggered",
     "toast.enrichmentStarted": "Metadata refresh started",
     "toast.forceAllEnrichmentStarted": "Full metadata re-enrichment started",
     "toast.forceEverythingEnrichmentStarted": "Absolutely all metadata re-enrichment started",

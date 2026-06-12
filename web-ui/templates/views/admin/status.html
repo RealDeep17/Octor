@@ -1,16 +1,33 @@
-{{ define "title" }}Server Status{{ end }}
+{{ define "title" }}Server Status & Diagnostics{{ end }}
 {{ define "main" }}
 <section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
   <div class="max-w-[960px] mx-auto">
     <div class="hidden sm:inline-flex badge badge-lg bg-o-purple/10 border-o-purple/30 text-o-purpleL gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
-      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
       </svg>
       Admin Panel
     </div>
 
-    <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-2 sm:mb-4">Status</h1>
-    <p class="hidden sm:block text-[1.05rem] text-o-sub leading-relaxed mb-8">Real-time telemetry and resource usage.</p>
+    <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-2 sm:mb-4">Status & Diagnostics</h1>
+    <p class="hidden sm:block text-[1.05rem] text-o-sub leading-relaxed mb-8">Real-time system telemetry, service health checks, and self-healing recovery triggers.</p>
+
+    <!-- Recovery Progress Banner -->
+    {{ if .Data.RecoveryRunning }}
+    <div class="alert bg-o-purple/10 border-o-purple/30 text-o-purpleL mb-6 flex items-center justify-between p-4 rounded-2xl animate-pulse">
+      <div class="flex items-center gap-3">
+        <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" class="opacity-25" />
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+        </svg>
+        <div>
+          <span class="font-bold block text-sm">System Recovery In Progress</span>
+          <span class="text-xs text-o-muted">Executing action: <strong class="font-semibold text-o-sub">{{ .Data.RecoveryAction }}</strong>. Live console log auto-updating...</span>
+        </div>
+      </div>
+      <span class="text-xs font-semibold uppercase bg-o-purple/20 border border-o-purple/40 px-3 py-1.5 rounded-lg text-o-purpleL">Running</span>
+    </div>
+    {{ end }}
 
     <div class="sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 mb-8 bg-w-bg/90 backdrop-blur-lg border-b border-o-line/30">
         <div class="flex gap-2">
@@ -21,12 +38,13 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <!-- Telemetry Cards Row 1 -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
       <!-- CPU -->
       <div class="bg-base-200/50 rounded-2xl p-6 border border-o-line/30">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-sm font-semibold uppercase tracking-wider text-o-muted">CPU Usage</h3>
-          <svg class="w-5 h-5 text-o-purpleL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="w-5 h-5 text-o-purpleL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21h6m-3-3v3m-8-6h3m13 0h3M5 9h3m13 0h3M9 3h6m-3 0v3M7 15h10V9H7v6z"/>
           </svg>
         </div>
@@ -40,7 +58,7 @@
       <div class="bg-base-200/50 rounded-2xl p-6 border border-o-line/30">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-sm font-semibold uppercase tracking-wider text-o-muted">Memory (RAM)</h3>
-          <svg class="w-5 h-5 text-o-primaryL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="w-5 h-5 text-o-primaryL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 8h12M6 12h12M6 16h12M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/>
           </svg>
         </div>
@@ -55,7 +73,7 @@
       <div class="bg-base-200/50 rounded-2xl p-6 border border-o-line/30">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-sm font-semibold uppercase tracking-wider text-o-muted">Storage (SSD)</h3>
-          <svg class="w-5 h-5 text-o-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg class="w-5 h-5 text-o-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2m16 0h-2M4 13h2m7 4h.01"/>
           </svg>
         </div>
@@ -67,13 +85,73 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Telemetry Cards Row 2 (I/O Rates) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <!-- Disk I/O Stats -->
+      <div class="bg-base-200/50 rounded-2xl p-6 border border-o-line/30">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-semibold uppercase tracking-wider text-o-muted">Disk I/O</h3>
+          <svg class="w-5 h-5 text-o-primaryL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+          </svg>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <span class="text-xs text-o-muted block">Live Rate</span>
+            <div class="text-lg font-bold text-o-sub flex items-center gap-1.5 mt-0.5">
+              <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4m0 0L3 8m4-4l4 4"/></svg>
+              {{ printf "%.2f" .Data.DiskReadRate }} MB/s
+            </div>
+            <div class="text-lg font-bold text-o-sub flex items-center gap-1.5 mt-1">
+              <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4v12m0 0l4-4m-4 4l-4-4"/></svg>
+              {{ printf "%.2f" .Data.DiskWriteRate }} MB/s
+            </div>
+          </div>
+          <div class="border-l border-o-line/20 pl-4">
+            <span class="text-xs text-o-muted block">Last 30 Days</span>
+            <span class="text-xs text-o-muted mt-1 block">Read: <strong class="text-o-sub font-semibold">{{ .Data.TotalDiskRead30d | bitsForHumans }}</strong></span>
+            <span class="text-xs text-o-muted mt-1 block">Write: <strong class="text-o-sub font-semibold">{{ .Data.TotalDiskWrite30d | bitsForHumans }}</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Network Bandwidth -->
+      <div class="bg-base-200/50 rounded-2xl p-6 border border-o-line/30">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-semibold uppercase tracking-wider text-o-muted">Network Traffic</h3>
+          <svg class="w-5 h-5 text-o-purpleL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M9 11l3 3L22 4"/>
+          </svg>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <span class="text-xs text-o-muted block">Live Rate</span>
+            <div class="text-lg font-bold text-o-sub flex items-center gap-1.5 mt-0.5">
+              <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4m0 0L3 8m4-4l4 4"/></svg>
+              {{ printf "%.2f" .Data.NetRxRate }} MB/s
+            </div>
+            <div class="text-lg font-bold text-o-sub flex items-center gap-1.5 mt-1">
+              <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4v12m0 0l4-4m-4 4l-4-4"/></svg>
+              {{ printf "%.2f" .Data.NetTxRate }} MB/s
+            </div>
+          </div>
+          <div class="border-l border-o-line/20 pl-4">
+            <span class="text-xs text-o-muted block">Last 30 Days</span>
+            <span class="text-xs text-o-muted mt-1 block">In: <strong class="text-o-sub font-semibold">{{ .Data.TotalNetRx30d | bitsForHumans }}</strong></span>
+            <span class="text-xs text-o-muted mt-1 block">Out: <strong class="text-o-sub font-semibold">{{ .Data.TotalNetTx30d | bitsForHumans }}</strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Streams & Seeders -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
       <!-- Active Streams -->
       <div class="bg-base-200/50 rounded-2xl p-6 border border-o-line/30">
         <h3 class="text-sm font-semibold uppercase tracking-wider text-o-muted mb-4">Active Streams</h3>
         <div class="flex items-center gap-4">
           <div class="p-3 bg-o-purple/10 rounded-xl">
-            <svg class="w-6 h-6 text-o-purpleL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="w-6 h-6 text-o-purpleL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
               <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
@@ -90,7 +168,7 @@
         <h3 class="text-sm font-semibold uppercase tracking-wider text-o-muted mb-4">Torrent Seeders</h3>
         <div class="flex items-center gap-4">
           <div class="p-3 bg-green-500/10 rounded-xl">
-            <svg class="w-6 h-6 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="w-6 h-6 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
             </svg>
           </div>
@@ -102,6 +180,158 @@
       </div>
     </div>
 
+    <!-- System Health Section -->
+    <div class="mb-8 bg-base-200/30 rounded-2xl p-6 border border-o-line/20">
+      <h2 class="text-lg font-bold text-o-sub mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-o-purpleL animate-pulse" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+        </svg>
+        System Health & Services Status
+      </h2>
+
+      <!-- Services Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        {{ range .Data.Services }}
+        <div class="bg-base-200/50 rounded-xl p-4 border border-o-line/30 flex flex-col justify-between transition-all hover:bg-base-200/75">
+          <div>
+            <div class="flex items-start justify-between mb-2">
+              <div class="font-bold text-sm text-o-sub leading-tight">{{ .Name }}</div>
+              <div>
+                {{ if eq .Status "online" }}
+                <span class="badge badge-sm bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-1">Online</span>
+                {{ else if eq .Status "degraded" }}
+                <span class="badge badge-sm bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-1">Degraded</span>
+                {{ else }}
+                <span class="badge badge-sm bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-1">Offline</span>
+                {{ end }}
+              </div>
+            </div>
+            <div class="text-[11px] text-o-muted capitalize flex items-center gap-1.5">
+              <span>Type: {{ .Type }}</span>
+              {{ if .Port }}
+              <span class="text-o-muted/40">•</span>
+              <span>Port: {{ .Port }}</span>
+              {{ end }}
+            </div>
+            {{ if .Message }}
+            <p class="text-[11px] text-red-400 mt-2 bg-red-500/5 border border-red-500/10 p-1.5 rounded-lg font-mono break-all leading-tight">{{ .Message }}</p>
+            {{ end }}
+          </div>
+
+          <div class="mt-3 flex flex-col gap-2">
+            {{ if .ErrorLogs }}
+            <details class="collapse collapse-arrow bg-base-300/30 border border-o-line/30 rounded-xl">
+              <summary class="collapse-title text-[10px] font-semibold py-1.5 min-h-0 text-o-muted hover:text-o-sub">View Error Logs</summary>
+              <div class="collapse-content py-1">
+                <pre class="text-[9px] font-mono whitespace-pre-wrap text-red-300 max-h-36 overflow-y-auto bg-black/40 p-2 rounded-lg leading-tight">{{ .ErrorLogs }}</pre>
+              </div>
+            </details>
+            {{ end }}
+
+            {{ if .Action }}
+            <form method="POST" action="{{ langPath $.Lang "/admin/status/action" }}" data-async-target="main" onsubmit="return confirm('Are you sure you want to restart/fix {{ .Name }}?')">
+              <input type="hidden" name="action" value="{{ .Action }}">
+              <button type="submit" class="btn btn-xs w-full {{ if eq .Status "online" }}bg-base-300/50 hover:bg-base-300 text-o-muted hover:text-o-sub{{ else }}bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25{{ end }} transition-all font-semibold">
+                {{ if eq .Status "online" }}Restart Service{{ else }}Fix / Restart{{ end }}
+              </button>
+            </form>
+            {{ end }}
+          </div>
+        </div>
+        {{ end }}
+      </div>
+    </div>
+
+    <!-- Diagnostics & Recovery Controls Panel -->
+    <div class="mb-8 bg-base-200/30 rounded-2xl p-6 border border-o-line/20">
+      <h2 class="text-lg font-bold text-o-sub mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-o-primaryL" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        Diagnostics & Recovery Control Center
+      </h2>
+      <p class="text-xs text-o-muted mb-6">Trigger secure self-healing supervisor processes and system recovery scripts. High-impact operations prompt for confirmation.</p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <!-- Infrastructure controls -->
+        <div class="bg-base-200/40 rounded-xl p-4 border border-o-line/30 flex flex-col justify-between">
+          <div>
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-o-purpleL mb-1">Core Stack</h3>
+            <p class="text-[11px] text-o-muted mb-4">Restart the core microservice container or run a full rebuild setup of all octor modules.</p>
+          </div>
+          <div class="flex flex-col gap-2">
+            <form method="POST" action="{{ langPath $.Lang "/admin/status/action" }}" data-async-target="main" onsubmit="return confirm('Are you sure you want to restart the Octor Monolith container? This will briefly disconnect all active stream sessions.')">
+              <input type="hidden" name="action" value="restart-monolith">
+              <button type="submit" class="btn btn-xs w-full bg-o-purple/15 border border-o-purple/30 text-o-purpleL hover:bg-o-purple/30 transition-all font-semibold">Restart Monolith</button>
+            </form>
+            <form method="POST" action="{{ langPath $.Lang "/admin/status/action" }}" data-async-target="main" onsubmit="return confirm('Are you sure you want to run Docker rebuild? This will completely rebuild and recreate all Octor Docker containers and dependencies. This may take 1-2 minutes.')">
+              <input type="hidden" name="action" value="rebuild-docker">
+              <button type="submit" class="btn btn-xs w-full bg-o-purple/15 border border-o-purple/30 text-o-purpleL hover:bg-o-purple/30 transition-all font-semibold">Rebuild Docker Compose</button>
+            </form>
+            <form method="POST" action="{{ langPath $.Lang "/admin/status/action" }}" data-async-target="main" onsubmit="return confirm('Are you sure you want to restart all components? This restarts the rclone mount as well as monolith/web-ui services.')">
+              <input type="hidden" name="action" value="restart-all">
+              <button type="submit" class="btn btn-xs w-full bg-o-purple/15 border border-o-purple/30 text-o-purpleL hover:bg-o-purple/30 transition-all font-semibold">Restart Full Stack</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- FUSE Mount controls -->
+        <div class="bg-base-200/40 rounded-xl p-4 border border-o-line/30 flex flex-col justify-between">
+          <div>
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-o-primaryL mb-1">FUSE Storage Mount</h3>
+            <p class="text-[11px] text-o-muted mb-4">Manage the host systemd Rclone cloud cache overlay mount and purge read cache loops.</p>
+          </div>
+          <div class="flex flex-col gap-2">
+            <form method="POST" action="{{ langPath $.Lang "/admin/status/action" }}" data-async-target="main" onsubmit="return confirm('Are you sure you want to restart the octor-rclone-mount service on the host?')">
+              <input type="hidden" name="action" value="restart-rclone">
+              <button type="submit" class="btn btn-xs w-full bg-o-primary/15 border border-o-primary/30 text-o-primaryL hover:bg-o-primary/30 transition-all font-semibold">Restart Rclone Mount</button>
+            </form>
+            <form method="POST" action="{{ langPath $.Lang "/admin/status/action" }}" data-async-target="main" onsubmit="return confirm('WARNING: Are you sure you want to completely clear the rclone VFS cache? This will delete local cached blocks and force streams to re-download from storage.')">
+              <input type="hidden" name="action" value="fix-rclone-cache">
+              <button type="submit" class="btn btn-xs w-full bg-o-primary/15 border border-o-primary/30 text-o-primaryL hover:bg-o-primary/30 transition-all font-semibold text-red-300">Wipe Rclone Cache</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Data Operations controls -->
+        <div class="bg-base-200/40 rounded-xl p-4 border border-o-line/30 flex flex-col justify-between">
+          <div>
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-green-400 mb-1">Maintenance Utilities</h3>
+            <p class="text-[11px] text-o-muted mb-4">Run database recovery reconstruction or force purge non-indexed orphan vault files from storage.</p>
+          </div>
+          <div class="flex flex-col gap-2">
+            <form method="POST" action="{{ langPath $.Lang "/admin/status/action" }}" data-async-target="main" onsubmit="return confirm('Are you sure you want to trigger the Clean Orphans script? This will identify and delete unindexed/orphaned files in cloud storage.')">
+              <input type="hidden" name="action" value="clean-orphans">
+              <button type="submit" class="btn btn-xs w-full bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 transition-all font-semibold">Run Clean Orphans</button>
+            </form>
+            <form method="POST" action="{{ langPath $.Lang "/admin/status/action" }}" data-async-target="main" onsubmit="return confirm('Are you sure you want to run database disaster recovery? This scans receipts/torrents and restores missing database state. This may take several minutes.')">
+              <input type="hidden" name="action" value="recover-db">
+              <button type="submit" class="btn btn-xs w-full bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 transition-all font-semibold text-yellow-300">Recover Database</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Diagnostics Logs Console -->
+    <div class="mb-8 bg-black/80 rounded-2xl p-6 border border-o-line/30 font-mono text-xs text-green-400">
+      <div class="flex items-center justify-between mb-4 border-b border-o-line/20 pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-full {{ if .Data.RecoveryRunning }}bg-green-500 animate-pulse{{ else }}bg-zinc-600{{ end }}"></div>
+          <span class="font-bold text-sm text-o-sub">Diagnostics & Host Watcher Logs</span>
+        </div>
+        <div class="text-[10px] text-o-muted">
+          {{ if .Data.RecoveryRunning }}
+          <span class="text-green-400 animate-pulse font-semibold">Running: {{ .Data.RecoveryAction }}...</span>
+          {{ else }}
+          Status: Idle
+          {{ end }}
+        </div>
+      </div>
+      <pre class="bg-black/40 p-4 rounded-xl max-h-[350px] overflow-y-auto whitespace-pre-wrap leading-relaxed text-zinc-300 font-mono text-[10px]">{{ if .Data.RecoveryLog }}{{ .Data.RecoveryLog }}{{ else }}No recovery logs available. Trigger a diagnostic/recovery action above to start.{{ end }}</pre>
+    </div>
+
     {{/* External Tools quick-links */}}
     <div class="mt-8">
       <h2 class="text-sm font-semibold uppercase tracking-wider text-o-muted mb-4">External Tools</h2>
@@ -109,7 +339,7 @@
 
         <a href="/prowlarr" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-o-purple/50 hover:bg-o-purple/5 transition-all group">
           <div class="p-2 bg-o-purple/10 rounded-xl group-hover:bg-o-purple/20 transition-colors">
-            <svg class="w-6 h-6 text-o-purpleL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="w-6 h-6 text-o-purpleL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
               <path d="M9 10h.01M15 10h.01M9.5 15a3.5 3.5 0 005 0"/>
             </svg>
@@ -119,7 +349,7 @@
 
         <a href="/sonarr" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-o-cyan/50 hover:bg-o-cyan/5 transition-all group">
           <div class="p-2 bg-o-cyan/10 rounded-xl group-hover:bg-o-cyan/20 transition-colors">
-            <svg class="w-6 h-6 text-o-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="w-6 h-6 text-o-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
             </svg>
           </div>
@@ -128,7 +358,7 @@
 
         <a href="/radarr" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-o-primary/50 hover:bg-o-primary/5 transition-all group">
           <div class="p-2 bg-o-primary/10 rounded-xl group-hover:bg-o-primary/20 transition-colors">
-            <svg class="w-6 h-6 text-o-primaryL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="w-6 h-6 text-o-primaryL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M7 4v16M17 4v16M3 8h18M3 16h18"/>
             </svg>
           </div>
@@ -137,7 +367,7 @@
 
         <a href="/whisparr" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-pink-500/50 hover:bg-pink-500/5 transition-all group">
           <div class="p-2 bg-pink-500/10 rounded-xl group-hover:bg-pink-500/20 transition-colors">
-            <svg class="w-6 h-6 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="w-6 h-6 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>
           </div>
@@ -146,7 +376,7 @@
 
         <a href="/zilean/" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-yellow-500/50 hover:bg-yellow-500/5 transition-all group">
           <div class="p-2 bg-yellow-500/10 rounded-xl group-hover:bg-yellow-500/20 transition-colors">
-            <svg class="w-6 h-6 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="w-6 h-6 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="5"/>
               <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
             </svg>
@@ -154,17 +384,31 @@
           <span class="text-xs font-medium text-o-sub group-hover:text-base-content">Zilean</span>
         </a>
 
-        <a href="/byparr/" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-green-500/50 hover:bg-green-500/5 transition-all group">
+        <a href="/rclone/" target="_blank" rel="noopener" class="flex flex-col items-center gap-2 bg-base-200/50 rounded-2xl p-4 border border-o-line/30 hover:border-green-500/50 hover:bg-green-500/5 transition-all group">
           <div class="p-2 bg-green-500/10 rounded-xl group-hover:bg-green-500/20 transition-colors">
-            <svg class="w-6 h-6 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg class="w-6 h-6 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
           </div>
-          <span class="text-xs font-medium text-o-sub group-hover:text-base-content">Byparr</span>
+          <span class="text-xs font-medium text-o-sub group-hover:text-base-content">Rclone</span>
         </a>
 
       </div>
     </div>
   </div>
 </section>
+
+{{ if .Data.RecoveryRunning }}
+<script>
+  setTimeout(function() {
+    // Dynamically request htmx/client-side refresh of status main component
+    const statusBtn = document.querySelector('a[href$="/admin/status"]');
+    if (statusBtn) {
+      statusBtn.click();
+    } else {
+      window.location.reload();
+    }
+  }, 1500);
+</script>
+{{ end }}
 {{ end }}

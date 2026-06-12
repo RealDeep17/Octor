@@ -1,0 +1,12 @@
+[Unit]
+Description=Octor Host Recovery Trigger Watcher
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=__PROJECT_ROOT__/scripts/host-trigger-watcher.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

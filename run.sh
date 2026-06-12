@@ -10,7 +10,12 @@ set -euo pipefail
 
 # Reset terminal state to fix potential "staircase" rendering issues on start and exit
 stty sane 2>/dev/null || true
-trap 'stty sane 2>/dev/null || true' EXIT
+
+# Process-specific temporary directory to avoid sharing/permission conflicts
+TEMP_DIR="/tmp/octor-run-$$"
+mkdir -p "$TEMP_DIR"
+trap 'stty sane 2>/dev/null || true; rm -rf "$TEMP_DIR"' EXIT
+
 
 # --- Configuration & Paths ---
 # Auto-detect project root based on script location
@@ -25,6 +30,25 @@ if [[ ! -f "$ENV_FILE" ]]; then
     echo "❌ Error: $ENV_FILE not found!"
     exit 1
 fi
+
+# Helper function to safely load environment variables with spaces
+load_env() {
+    local file="$1"
+    if [[ -f "$file" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Trim leading whitespace
+            line="${line#"${line%%[![:space:]]*}"}"
+            # Trim trailing whitespace
+            line="${line%"${line##*[![:space:]]}"}"
+            # Skip empty lines or comments
+            if [[ -z "$line" || "$line" =~ ^# ]]; then
+                continue
+            fi
+            export "$line"
+        done < "$file"
+    fi
+}
+
 
 # Extract key paths from custom.env or set defaults
 RCLONE_CONFIG=$(grep '^VAULT_RCLONE_CONFIG=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "$HOME/.config/rclone/rclone.conf")
@@ -241,8 +265,36 @@ backup_env() {
 # ------------------------------------------------------------------------------
 
 cmd_mode() {
-    # If no arguments provided, show menu and accept interactive input with flags
-    if [[ $# -eq 0 ]]; then
+    local MODE_ARG=""
+    if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
+        MODE_ARG="$1"
+        shift
+    fi
+
+    local CLEAN_RCLONE=false
+    local FORCE=false
+    local REBUILD_DOCKER=false
+    local SYNC_SERVICES=false
+    local BENCH_FLAG=false
+    local RESTART_NGINX=false
+    local COMPILE_BINARIES=false
+
+    # Parse initial flags (if any were passed before prompt)
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --rclone|-r|r) CLEAN_RCLONE=true; shift ;;
+            --force|-f|--f|f) FORCE=true; shift ;;
+            --docker|-d|d) REBUILD_DOCKER=true; shift ;;
+            --sync|-s|s) SYNC_SERVICES=true; shift ;;
+            --bench|-b|--b|b) BENCH_FLAG=true; shift ;;
+            --nginx|-n|n) RESTART_NGINX=true; shift ;;
+            --build|-c|c) COMPILE_BINARIES=true; shift ;;
+            *) echo "❌ Unknown option: $1"; exit 1 ;;
+        esac
+    done
+
+    # If no mode was specified, prompt the user
+    if [[ -z "$MODE_ARG" ]]; then
         echo "========================================================================="
         echo "                      OCTOR PERFORMANCE MODE SELECTOR"
         echo "========================================================================="
@@ -270,21 +322,30 @@ cmd_mode() {
         echo "  c = Compile Binaries"
         echo "========================================================================="
         read -p "Select option and flags (e.g. '1 f r d n c'): " INPUT || exit 1
-        # Split input into positional parameters
-        set -- $INPUT
+        
+        # Split inputs to extract mode and additional flags
+        local INPUT_ARR=($INPUT)
+        if [[ ${#INPUT_ARR[@]} -gt 0 ]]; then
+            MODE_ARG="${INPUT_ARR[0]}"
+            # Parse any additional flags entered during prompt
+            for ((i=1; i<${#INPUT_ARR[@]}; i++)); do
+                case "${INPUT_ARR[$i]}" in
+                    --rclone|-r|r) CLEAN_RCLONE=true ;;
+                    --force|-f|--f|f) FORCE=true ;;
+                    --docker|-d|d) REBUILD_DOCKER=true ;;
+                    --sync|-s|s) SYNC_SERVICES=true ;;
+                    --bench|-b|--b|b) BENCH_FLAG=true ;;
+                    --nginx|-n|n) RESTART_NGINX=true ;;
+                    --build|-c|c) COMPILE_BINARIES=true ;;
+                    *) echo "❌ Unknown option: ${INPUT_ARR[$i]}"; exit 1 ;;
+                esac
+            done
+        fi
     fi
 
-    local MODE_ARG="${1:-}"
-    local MODE=""
-    local CLEAN_RCLONE=false
-    local FORCE=false
-    local REBUILD_DOCKER=false
-    local SYNC_SERVICES=false
-    local BENCH_FLAG=false
-    local RESTART_NGINX=false
-    local COMPILE_BINARIES=false
+    if [[ -z "$MODE_ARG" ]]; then echo "❌ No mode specified"; exit 1; fi
 
-    # 1. Determine Mode
+    local MODE=""
     if [[ "$MODE_ARG" =~ ^[0-9]+$ ]]; then
         case "$MODE_ARG" in
             0) MODE="custom" ;;
@@ -300,27 +361,9 @@ cmd_mode() {
             10) MODE="pp-eco-ssd" ;;
             *) echo "❌ Invalid selection: $MODE_ARG"; exit 1 ;;
         esac
-        shift || true
     else
         MODE="$MODE_ARG"
-        shift || true
     fi
-
-    # 2. Parse remaining Flags
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --rclone|-r|r) CLEAN_RCLONE=true; shift ;;
-            --force|-f|--f|f) FORCE=true; shift ;;
-            --docker|-d|d) REBUILD_DOCKER=true; shift ;;
-            --sync|-s|s) SYNC_SERVICES=true; shift ;;
-            --bench|-b|--b|b) BENCH_FLAG=true; shift ;;
-            --nginx|-n|n) RESTART_NGINX=true; shift ;;
-            --build|-c|c) COMPILE_BINARIES=true; shift ;;
-            *) echo "❌ Unknown option: $1"; exit 1 ;;
-        esac
-    done
-
-    if [[ -z "$MODE" ]]; then echo "❌ No mode specified"; exit 1; fi
 
     # 3. Transition to Benchmark if requested and not already in benchmark loop
     if [[ "$BENCH_FLAG" = "true" && "${BENCHMARK_MODE:-false}" != "true" ]]; then
@@ -346,6 +389,235 @@ cmd_mode() {
     case "$MODE" in
         # Custom/Manual Mode (read existing config from ENV file)
         custom|manual)
+            # 1. Check if we should prompt for interactive customization
+            local MODIFY_CUSTOM="y"
+            if [[ "$CLEAN_RCLONE" = "true" || "$FORCE" = "true" || "$REBUILD_DOCKER" = "true" || "$SYNC_SERVICES" = "true" || "$BENCH_FLAG" = "true" || "$RESTART_NGINX" = "true" || "$COMPILE_BINARIES" = "true" ]]; then
+                MODIFY_CUSTOM="n"
+            fi
+            if [[ ! -t 0 ]]; then
+                MODIFY_CUSTOM="n"
+            fi
+
+            local CURRENT_PERF_MODE=$(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || true)
+            if [[ "$MODIFY_CUSTOM" = "y" && -n "$CURRENT_PERF_MODE" ]]; then
+                echo "Found existing custom performance configuration (Mode: $CURRENT_PERF_MODE)."
+                read -p "Modify it? (y/n) [n]: " MODIFY_CHOICE
+                MODIFY_CHOICE=${MODIFY_CHOICE:-n}
+                if [[ ! "$MODIFY_CHOICE" =~ ^[yY]$ ]]; then
+                    MODIFY_CUSTOM="n"
+                fi
+            fi
+
+            if [[ "$MODIFY_CUSTOM" = "y" ]]; then
+                echo "========================================================================"
+                echo "                  CUSTOM PERFORMANCE MODE CONFIGURATOR"
+                echo "========================================================================"
+                echo ""
+
+                update_custom_var() {
+                    local key="$1"
+                    local val="$2"
+                    local esc_val=$(echo "$val" | sed 's/[&/\]/\\&/g')
+                    if grep -q "^$key=" "$ENV_FILE"; then
+                        run_sed_in_place "s|^$key=.*|$key=$esc_val|g" "$ENV_FILE"
+                    else
+                        echo "$key=$val" >> "$ENV_FILE"
+                    fi
+                }
+
+                # 1. Storage Cache Type (RAM vs SSD)
+                echo "💾 1. Storage Cache Type"
+                echo "--------------------------------------------------------"
+                echo "SSD Cache:"
+                echo "  • Benefits: Reboot-persistent, no RAM overhead, large size."
+                echo "  • Drawbacks: Causes SSD write wear, slightly slower than RAM."
+                echo "RAM Cache:"
+                echo "  • Benefits: Zero SSD wear, maximum speed, and allows downloading"
+                echo "              torrents of infinite size on a tiny disk space due to real-time eviction."
+                echo "  • Drawbacks: Volatile (lost on reboot), high memory footprint."
+                echo "  • Note: For RAM caching, it is highly recommended to use the preconfigured"
+                echo "          RAM modes (Options 3, 4, 7, or 8) instead of Custom configuration."
+                echo "--------------------------------------------------------"
+                local CACHE_MEDIA=""
+                while [[ ! "$CACHE_MEDIA" =~ ^[12]$ ]]; do
+                    read -p "Select caching media: [1] SSD (Recommended), [2] RAM: " CACHE_MEDIA
+                    CACHE_MEDIA=${CACHE_MEDIA:-1}
+                done
+
+                local VAL_RAM_CACHE_ENABLED="false"
+                local VAL_PER_TORRENT_CACHE_BUDGET=""
+                local VAL_RCLONE_VFS_CACHE_MAX_SIZE=""
+                local VAL_RCLONE_VFS_CACHE_MODE=""
+                local VAL_RAM_CACHE_SIZE=""
+                local VAL_TMPFS_SIZE=""
+                local VAL_OCTOR_PERFORMANCE_MODE=""
+
+                if [[ "$CACHE_MEDIA" = "2" ]]; then
+                    VAL_RAM_CACHE_ENABLED="true"
+                    VAL_OCTOR_PERFORMANCE_MODE="custom-vfs-ram"
+                    echo ""
+                    echo "📦 2. RAM Cache Size limit"
+                    echo "--------------------------------------------------------"
+                    echo "⚠️  Recommend keeping budget to 10G-25G to prevent system Out-Of-Memory (OOM)."
+                    local INPUT_RAM_SIZE=""
+                    read -p "Enter RAM cache size (e.g. 10G) [default: 12288M]: " INPUT_RAM_SIZE
+                    VAL_RAM_CACHE_SIZE=${INPUT_RAM_SIZE:-12288M}
+                    
+                    local INPUT_TMPFS_SIZE=""
+                    read -p "Enter tmpfs backing size (must be >= RAM cache size, e.g. 15G) [default: 17G]: " INPUT_TMPFS_SIZE
+                    VAL_TMPFS_SIZE=${INPUT_TMPFS_SIZE:-17G}
+                    
+                    update_custom_var "RAM_CACHE_ENABLED" "true"
+                    update_custom_var "RAM_CACHE_SIZE" "$VAL_RAM_CACHE_SIZE"
+                    update_custom_var "TMPFS_SIZE" "$VAL_TMPFS_SIZE"
+                else
+                    VAL_RAM_CACHE_ENABLED="false"
+                    VAL_OCTOR_PERFORMANCE_MODE="custom-vfs-ssd"
+                    update_custom_var "RAM_CACHE_ENABLED" "false"
+                fi
+                echo ""
+
+                # 2. Local VFS Cache Mode
+                echo "🔄 2. Local VFS Cache Mode (Rclone)"
+                echo "--------------------------------------------------------"
+                echo "writes (Recommended):"
+                echo "  • Benefits: Faster uploads, smoother streaming, superior experience."
+                echo "  • Drawbacks: Torrent size MUST be smaller than available local cache space."
+                echo "off:"
+                echo "  • Benefits: Enormous disk space savings. Bypasses local write cache."
+                echo "              Allows downloading massive files (e.g. 100GB torrent) on a tiny"
+                echo "              local storage budget (e.g. 2GB) by uploading and evicting"
+                echo "              pieces in real-time as they download."
+                echo "  • Drawbacks: Slower uploads, no multi-threaded parallel uploads."
+                echo "full (NOT RECOMMENDED):"
+                echo "  • Benefits: Caches both reads and writes."
+                echo "  • Drawbacks: Heavy disk space usage and high SSD write wear."
+                echo "--------------------------------------------------------"
+                local VFS_CHOICE=""
+                while [[ ! "$VFS_CHOICE" =~ ^[123]$ ]]; do
+                    read -p "Select local VFS cache mode: [1] writes (Recommended), [2] off, [3] full (NOT RECOMMENDED): " VFS_CHOICE
+                    VFS_CHOICE=${VFS_CHOICE:-1}
+                done
+
+                if [[ "$VFS_CHOICE" = "1" ]]; then
+                    VAL_RCLONE_VFS_CACHE_MODE="writes"
+                elif [[ "$VFS_CHOICE" = "2" ]]; then
+                    VAL_RCLONE_VFS_CACHE_MODE="off"
+                else
+                    VAL_RCLONE_VFS_CACHE_MODE="full"
+                fi
+                update_custom_var "RCLONE_VFS_CACHE_MODE" "$VAL_RCLONE_VFS_CACHE_MODE"
+                echo ""
+
+                # 3. Cache Budget Limit
+                if [[ "$VAL_RCLONE_VFS_CACHE_MODE" != "off" ]]; then
+                    echo "📊 3. Local Cache Size Limit"
+                    echo "--------------------------------------------------------"
+                    if [[ "$VAL_RAM_CACHE_ENABLED" = "true" ]]; then
+                        echo "Suggest a small VFS limit that fits within your RAM Cache (e.g. 3G or 4G)."
+                        local INPUT_VFS_LIMIT=""
+                        read -p "Enter VFS cache max size (e.g. 3G) [default: 3G]: " INPUT_VFS_LIMIT
+                        VAL_RCLONE_VFS_CACHE_MAX_SIZE=${INPUT_VFS_LIMIT:-3G}
+                    else
+                        echo "Suggest a size of 50G-200G depending on available SSD space."
+                        local INPUT_VFS_LIMIT=""
+                        read -p "Enter VFS cache max size (e.g. 100G) [default: 100G]: " INPUT_VFS_LIMIT
+                        VAL_RCLONE_VFS_CACHE_MAX_SIZE=${INPUT_VFS_LIMIT:-100G}
+                    fi
+                else
+                    VAL_RCLONE_VFS_CACHE_MAX_SIZE="off"
+                fi
+                update_custom_var "RCLONE_VFS_CACHE_MAX_SIZE" "$VAL_RCLONE_VFS_CACHE_MAX_SIZE"
+                echo ""
+
+                # 4. Per-Torrent Cache Budget
+                echo "💾 4. Per-Torrent Local Cache Budget"
+                echo "--------------------------------------------------------"
+                if [[ "$VAL_RCLONE_VFS_CACHE_MODE" != "off" ]]; then
+                    echo "VFS cache mode '$VAL_RCLONE_VFS_CACHE_MODE' is selected."
+                    echo "Rclone manages caching at the mount level, so per-torrent cache budget is forced to 0."
+                    VAL_PER_TORRENT_CACHE_BUDGET="0"
+                else
+                    echo "VFS cache mode is 'off' (sequential upload to cloud)."
+                    echo "You can configure a per-torrent local write budget."
+                    echo "Suggest 2000M to 5000M depending on available space."
+                    local INPUT_TORRENT_BUDGET=""
+                    read -p "Enter cache limit per torrent (e.g. 2000M) [default: 2000M]: " INPUT_TORRENT_BUDGET
+                    VAL_PER_TORRENT_CACHE_BUDGET=${INPUT_TORRENT_BUDGET:-2000M}
+                fi
+                update_custom_var "PER_TORRENT_CACHE_BUDGET" "$VAL_PER_TORRENT_CACHE_BUDGET"
+                echo ""
+
+                # 5. Upload Worker Threads (WORKERS)
+                echo "🧵 5. Upload Worker Threads"
+                echo "--------------------------------------------------------"
+                echo "Number of background queue workers processing file uploads."
+                echo "  • Low (10-20): Friendly for weak CPU/RAM configurations."
+                echo "  • High (50-100): Speeds up upload queue processing on high-end servers."
+                local INPUT_WORKERS=""
+                read -p "Enter number of upload worker threads [default: 20]: " INPUT_WORKERS
+                INPUT_WORKERS=${INPUT_WORKERS:-20}
+                update_custom_var "WORKERS" "$INPUT_WORKERS"
+                echo ""
+
+                # 6. Max Concurrent Upload Jobs
+                echo "🚀 6. Max Concurrent Upload Jobs"
+                echo "--------------------------------------------------------"
+                echo "Number of torrents allowed to upload to cloud storage in parallel."
+                echo "  • Low (2-5): Good for low-bandwidth connections."
+                echo "  • High (10-50): Speeds up parallel torrent processing on high-bandwidth servers."
+                local INPUT_CONC_JOBS=""
+                read -p "Enter max concurrent uploads [default: 10]: " INPUT_CONC_JOBS
+                INPUT_CONC_JOBS=${INPUT_CONC_JOBS:-10}
+                update_custom_var "VAULT_MAX_CONCURRENT_JOBS" "$INPUT_CONC_JOBS"
+                echo ""
+
+                # 7. AWS Upload Concurrency
+                echo "📤 7. AWS Upload Concurrency"
+                echo "--------------------------------------------------------"
+                echo "Number of parallel parts uploaded per file to S3/Drive."
+                echo "  • Low (1-2): Safe for API rate limits and low upload bandwidth."
+                echo "  • High (4-8): Faster single-file uploads, but risks API throttling."
+                local INPUT_AWS_CONC=""
+                read -p "Enter upload parts concurrency per file [default: 2]: " INPUT_AWS_CONC
+                INPUT_AWS_CONC=${INPUT_AWS_CONC:-2}
+                update_custom_var "AWS_UPLOAD_CONCURRENCY" "$INPUT_AWS_CONC"
+                echo ""
+
+                # 8. Transfers Concurrency
+                echo "🔄 8. Transfers Concurrency"
+                echo "--------------------------------------------------------"
+                echo "Number of parallel file transfers allowed by Rclone."
+                echo "  • Low (1-2): Safe for API rate limits and low bandwidth."
+                echo "  • High (3-5): Faster parallel uploads, but risks cloud API throttling."
+                local INPUT_TRANSFERS=""
+                read -p "Enter max simultaneous file transfers [default: 2]: " INPUT_TRANSFERS
+                INPUT_TRANSFERS=${INPUT_TRANSFERS:-2}
+                update_custom_var "RCLONE_TRANSFERS" "$INPUT_TRANSFERS"
+                echo ""
+
+                # Set other helper parameters based on VFS Cache mode
+                local VAL_POLL_INTERVAL="1h"
+                if [[ "$VAL_RCLONE_VFS_CACHE_MODE" != "off" ]]; then
+                    VAL_POLL_INTERVAL="10s"
+                fi
+                update_custom_var "RCLONE_VFS_CACHE_POLL_INTERVAL" "$VAL_POLL_INTERVAL"
+                update_custom_var "OCTOR_PERFORMANCE_MODE" "$VAL_OCTOR_PERFORMANCE_MODE"
+
+                # Also update S3_GATEWAY_STORAGE_DIR and VAULT_STORAGE_PATH
+                local VAL_STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"
+                update_custom_var "VAULT_STORAGE_PATH" "$VAL_STORAGE_PATH"
+                update_custom_var "S3_GATEWAY_STORAGE_DIR" "$VAL_STORAGE_PATH"
+
+                unset -f update_custom_var
+
+                echo "--------------------------------------------------------"
+                echo "✓ Custom performance mode configured! custom.env updated."
+                echo "========================================================"
+                echo ""
+            fi
+
+            # Read all variables from the updated/existing custom.env
             MODE_NAME=$(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "non-chunker-vfs-ssd")
             RAM_CACHE_ENABLED=$(grep '^RAM_CACHE_ENABLED=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "false")
             BUDGET=$(grep '^PER_TORRENT_CACHE_BUDGET=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "2000M")
@@ -488,21 +760,21 @@ cmd_mode() {
                 -e "s|__RUN_USER__|$SYNC_USER|g" \
                 -e "s|__RUN_GROUP__|$SYNC_GROUP|g" \
                 -e "s|/srv/octor|$PROJECT_ROOT|g" \
-                "$svc" > /tmp/"$svc_name"
-            run_sudo cp /tmp/"$svc_name" /etc/systemd/system/"$svc_name"
+                "$svc" > "$TEMP_DIR"/"$svc_name"
+            run_sudo cp "$TEMP_DIR"/"$svc_name" /etc/systemd/system/"$svc_name"
         done
         # Copy cron scripts to cron.weekly (removing .cron extension so run-parts accepts them)
         local RUN_USER
         RUN_USER=$(stat -c '%U' "$PROJECT_ROOT/run.sh" 2>/dev/null || stat -f '%Su' "$PROJECT_ROOT/run.sh" || echo "ubuntu")
         
         sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__RUN_USER__|$RUN_USER|g" \
-            "$PROJECT_ROOT"/deploy/cron/octor-enrich-refresh.cron > /tmp/octor-enrich-refresh
-        run_sudo cp /tmp/octor-enrich-refresh /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
+            "$PROJECT_ROOT"/deploy/cron/octor-enrich-refresh.cron > "$TEMP_DIR"/octor-enrich-refresh
+        run_sudo cp "$TEMP_DIR"/octor-enrich-refresh /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
         run_sudo chmod +x /etc/cron.weekly/octor-enrich-refresh 2>/dev/null || true
         
         sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__RUN_USER__|$RUN_USER|g" \
-            "$PROJECT_ROOT"/deploy/cron/octor-prune.cron > /tmp/octor-prune
-        run_sudo cp /tmp/octor-prune /etc/cron.weekly/octor-prune 2>/dev/null || true
+            "$PROJECT_ROOT"/deploy/cron/octor-prune.cron > "$TEMP_DIR"/octor-prune
+        run_sudo cp "$TEMP_DIR"/octor-prune /etc/cron.weekly/octor-prune 2>/dev/null || true
         run_sudo chmod +x /etc/cron.weekly/octor-prune 2>/dev/null || true
         run_sudo systemctl daemon-reload
 
@@ -1080,7 +1352,7 @@ cmd_benchmark_multi() {
 cmd_prune() {
     # Run database pruning for inactive one-timers (>30 days)
     if [[ -f "$ENV_FILE" ]]; then
-        export $(grep -v '^#' "$ENV_FILE" | xargs)
+        load_env "$ENV_FILE"
     fi
     export GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
     if [[ -f "$BIN_DIR/web-ui" ]]; then
@@ -1332,7 +1604,7 @@ cmd_enrich() {
     local SUB="${1:-help}"
     # Source env so the binary has all required vars
     if [[ -f "$ENV_FILE" ]]; then
-        export $(grep -v '^#' "$ENV_FILE" | xargs)
+        load_env "$ENV_FILE"
     fi
     # Suppress proto registration warnings from shared proto packages
     export GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn

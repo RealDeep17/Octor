@@ -1,4 +1,4 @@
-package discover
+package stashdb
 
 var fallbackStudioIDs = []string{
 	"b62bc449-c3d9-49ff-9a16-8f5b1bfa20b9",

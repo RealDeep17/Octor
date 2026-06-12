@@ -138,9 +138,10 @@ function renderBadge(status, savedLabel) {
     const hasError = status.detail && status.detail.startsWith('Error:');
     if (hasError) {
         const shortName = getShortErrorName(status.detail);
-        const classes = 'badge badge-sm bg-error/10 border-error/30 text-error gap-1.5 font-semibold';
+        const cleanedReason = cleanErrorMessage(status.detail).replace(/"/g, '&quot;');
+        const classes = 'badge badge-sm bg-error/10 border-error/30 text-error gap-1.5 font-semibold cursor-help';
         const icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3.5 h-3.5"><path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" /></svg>';
-        return `<span class="${classes}">${icon} ${shortName}</span>`;
+        return `<span class="${classes}" title="${cleanedReason}">${icon} ${shortName}</span>`;
     }
     const config = BADGE_CONFIG[status.state] || BADGE_CONFIG.idle;
     // For the vaulted state we override the server label ('В Vault'/'Vaulted') with
