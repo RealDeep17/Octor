@@ -62,4 +62,6 @@ services:
       - /mnt/seeder-cache:/mnt/seeder-cache
       - ../Big ARRS/downloads:/downloads
       - ../Big ARRS/config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
