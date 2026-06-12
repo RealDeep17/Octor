@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -42,6 +43,13 @@ func (s *Handler) remove(c *gin.Context) {
 					_ = s.api.PurgeResourceCache(purgeCtx, claims, rID)
 				}
 			}
+		}
+	}
+
+	if s.nats != nil && s.nats.Get() != nil {
+		_ = s.nats.Get().Publish(fmt.Sprintf("user.%s.update", u.ID.String()), []byte(`{"type": "library"}`))
+		if alsoVault {
+			_ = s.nats.Get().Publish(fmt.Sprintf("user.%s.update", u.ID.String()), []byte(`{"type": "vault"}`))
 		}
 	}
 

@@ -44,9 +44,10 @@ type Handler struct {
 	tpdb                *tpdb.Service
 	vault               *vault.Vault
 	posterCacheS3Bucket string
+	nats                *cs.NATS
 }
 
-func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs, cl *http.Client, s3Cl *cs.S3Client, en *enrich.Enricher, admin *admin.Admin, tpdb *tpdb.Service, v *vault.Vault) {
+func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs, cl *http.Client, s3Cl *cs.S3Client, en *enrich.Enricher, admin *admin.Admin, tpdb *tpdb.Service, v *vault.Vault, nats *cs.NATS) {
 	h := &Handler{
 		tb: tm.MustRegisterViews("library/*").
 			WithHelper(helpers.NewStarsHelper()).
@@ -64,6 +65,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 		tpdb:                tpdb,
 		vault:               v,
 		posterCacheS3Bucket: c.String(awsPosterCacheBucket),
+		nats:                nats,
 	}
 	lg := r.Group("/lib")
 	lg.GET("/", h.index)

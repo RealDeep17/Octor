@@ -3,6 +3,7 @@ package vault
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -35,9 +36,19 @@ func (h *Handler) addPledge(c *gin.Context) {
 		return
 	}
 
+	// Create pledge succeeded, so we publish the vault update event
+	if h.nats != nil && h.nats.Get() != nil {
+		_ = h.nats.Get().Publish(fmt.Sprintf("user.%s.update", user.ID.String()), []byte(`{"type": "vault"}`))
+	}
+
 	if err = h.addTorrentToLibrary(c, resourceID, user, apiClaims); err != nil {
 		web.RedirectWithError(c, errors.Wrap(err, "failed to add torrent to library"))
 		return
+	}
+
+	// If we successfully added to library, publish the library update event
+	if h.nats != nil && h.nats.Get() != nil {
+		_ = h.nats.Get().Publish(fmt.Sprintf("user.%s.update", user.ID.String()), []byte(`{"type": "library"}`))
 	}
 
 	// Redirect with success
@@ -73,29 +84,30 @@ func (h *Handler) createPledge(ctx context.Context, resourceID string, user *aut
 				}
 			} else {
 				var selectedBytes int64
+				selMap := make(map[string]bool, len(selectedFiles))
+				for _, sel := range selectedFiles {
+					selMap[sel] = true
+				}
 				for _, file := range list.Items {
-					for _, sel := range selectedFiles {
-						if file.PathStr == sel {
-							selectedBytes += file.Size
-							break
-						}
+					if selMap[file.PathStr] {
+						selectedBytes += file.Size
 					}
 				}
 				requiredVP = float64(selectedBytes) / (1024 * 1024 * 1024)
 			}
 		} else {
-			var err error
-			requiredVP, err = h.vault.GetRequiredVP(ctx, apiClaims, resourceID)
+			reqVP, err := h.vault.GetRequiredVP(ctx, apiClaims, resourceID)
 			if err != nil {
 				return err
 			}
+			requiredVP = reqVP
 		}
 	} else {
-		var err error
-		requiredVP, err = h.vault.GetRequiredVP(ctx, apiClaims, resourceID)
+		reqVP, err := h.vault.GetRequiredVP(ctx, apiClaims, resourceID)
 		if err != nil {
 			return err
 		}
+		requiredVP = reqVP
 	}
 
 	// Get or create resource
@@ -104,22 +116,25 @@ func (h *Handler) createPledge(ctx context.Context, resourceID string, user *aut
 		return err
 	}
 
-	// Update RequiredVP and SelectedFiles if we did selective vaulting
-	if len(selectedFiles) > 0 {
-		db := h.pg.Get()
-		if db != nil {
-			_, err := db.Model((*vaultModels.Resource)(nil)).
-				Context(ctx).
-				Set("required_vp = ?", requiredVP).
-				Set("selected_files = ?", pg.Array(selectedFiles)).
-				Where("resource_id = ?", resourceID).
-				Update()
-			if err != nil {
-				return errors.Wrap(err, "failed to update resource required VP and selected files")
-			}
-			resource.RequiredVP = requiredVP
-			resource.SelectedFiles = selectedFiles
+	// Update RequiredVP and SelectedFiles to match the current selection (entire resource or selective files)
+	db := h.pg.Get()
+	if db != nil {
+		q := db.Model((*vaultModels.Resource)(nil)).
+			Context(ctx).
+			Set("required_vp = ?", requiredVP)
+
+		if len(selectedFiles) > 0 {
+			q = q.Set("selected_files = ?", pg.Array(selectedFiles))
+		} else {
+			q = q.Set("selected_files = NULL")
 		}
+
+		_, err := q.Where("resource_id = ?", resourceID).Update()
+		if err != nil {
+			return errors.Wrap(err, "failed to update resource required VP and selected files")
+		}
+		resource.RequiredVP = requiredVP
+		resource.SelectedFiles = selectedFiles
 	}
 
 	// Create pledge

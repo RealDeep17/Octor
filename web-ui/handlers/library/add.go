@@ -2,6 +2,7 @@ package library
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -26,6 +27,11 @@ func (s *Handler) add(c *gin.Context) {
 		return
 	}
 	_, _ = s.jobs.Enrich(web.NewContext(c), rID)
+
+	if s.nats != nil && s.nats.Get() != nil {
+		_ = s.nats.Get().Publish(fmt.Sprintf("user.%s.update", u.ID.String()), []byte(`{"type": "library"}`))
+	}
+
 	web.RedirectWithSuccessAndMessage(c, "toast.addedToLibrary")
 }
 

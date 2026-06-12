@@ -128,3 +128,75 @@ bindAsync({
     },
 });
 initAsyncView();
+
+// Live collection updates via Server-Sent Events
+let eventSource = null;
+
+function syncEventSource() {
+    if (eventSource) {
+        try {
+            eventSource.close();
+        } catch (err) {
+            console.error("Error closing EventSource:", err);
+        }
+        eventSource = null;
+    }
+
+    const userId = window._userId;
+    if (userId) {
+        const eventsUrl = `/user/events`;
+        eventSource = new EventSource(eventsUrl);
+
+        eventSource.onmessage = (e) => {
+            let msg;
+            try {
+                msg = JSON.parse(e.data);
+            } catch (err) {
+                return;
+            }
+
+            const path = window.location.pathname;
+            // Match /lib or /{lang}/lib (any 2-letter locale prefix, e.g. /ru/lib)
+            const isLibraryPage = /^(\/[a-z]{2})?\/lib(\/|$)/.test(path);
+            const isVaultPage = /^(\/[a-z]{2})?\/vault(\/|$)/.test(path);
+
+            if ((msg.type === 'library' && isLibraryPage) || (msg.type === 'vault' && isVaultPage)) {
+                const main = document.querySelector('main');
+                if (main && typeof main.reload === 'function') {
+                    main.reload();
+                }
+            }
+        };
+
+        eventSource.onerror = (e) => {
+            if (!window._userId || eventSource.readyState === EventSource.CLOSED) {
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+            }
+        };
+    }
+}
+
+// Watch window._userId for changes during async navigation
+let currentUserId = window._userId;
+try {
+    Object.defineProperty(window, '_userId', {
+        get() {
+            return currentUserId;
+        },
+        set(val) {
+            if (currentUserId !== val) {
+                currentUserId = val;
+                syncEventSource();
+            }
+        },
+        configurable: true
+    });
+} catch (e) {
+    console.error("Failed to define property _userId", e);
+}
+
+// Initial synchronization
+syncEventSource();

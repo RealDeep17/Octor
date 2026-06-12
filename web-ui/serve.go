@@ -43,6 +43,7 @@ import (
 	"github.com/webtor-io/web-ui/handlers/tests"
 	ush "github.com/webtor-io/web-ui/handlers/user_subtitle"
 	uvsh "github.com/webtor-io/web-ui/handlers/user_video_status"
+	"github.com/webtor-io/web-ui/handlers/userevent"
 	vh "github.com/webtor-io/web-ui/handlers/vault"
 	wh "github.com/webtor-io/web-ui/handlers/watch_history"
 	"github.com/webtor-io/web-ui/handlers/webdav"
@@ -355,7 +356,7 @@ func serve(c *cli.Context) error {
 
 	// Setting VaultHandler
 	if v != nil {
-		vh.RegisterHandler(r, v, tm, sapi, pg, jobs)
+		vh.RegisterHandler(r, v, tm, sapi, pg, jobs, nats)
 	}
 
 	// Setting AdminHandler
@@ -435,7 +436,7 @@ func serve(c *cli.Context) error {
 	discover_watchlist.RegisterHandler(r, pg, en)
 
 	// Setting Library
-	library.RegisterHandler(c, r, tm, sapi, pg, jobs, cl, s3Cl, en, adminSvc, tpdbSvc, v)
+	library.RegisterHandler(c, r, tm, sapi, pg, jobs, cl, s3Cl, en, adminSvc, tpdbSvc, v, nats)
 	series.RegisterHandler(r, tm, pg, adminSvc)
 
 	// Setting UserSubtitle handler. When AWS_USER_SUBTITLE_BUCKET is not
@@ -479,6 +480,9 @@ func serve(c *cli.Context) error {
 
 	// Setting WebDAV
 	webdav.RegisterHandler(c, r, pg, ats, sapi, jobs, adminSvc)
+
+	// Setting User Events
+	userevent.RegisterHandler(r, nats)
 
 	// Setting Tests
 	tests.RegisterHandler(r, tm)

@@ -162,6 +162,17 @@ func RemoveFromLibrary(ctx context.Context, db *pg.DB, uID uuid.UUID, rID string
 	return nil
 }
 
+func RemoveMultipleFromLibrary(ctx context.Context, db *pg.DB, uID uuid.UUID, rIDs []string) error {
+	_, err := db.Model((*Library)(nil)).
+		Context(ctx).
+		Where("user_id = ? AND resource_id IN (?)", uID, pg.In(rIDs)).
+		Delete()
+	if err != nil {
+		return errors.Wrap(err, "failed to remove multiple from library")
+	}
+	return nil
+}
+
 func UpdateLibraryName(ctx context.Context, db *pg.DB, l *Library) error {
 	_, err := db.Model(l).Context(ctx).WherePK().Column("name").Update()
 	return err

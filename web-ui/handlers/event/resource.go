@@ -3,6 +3,8 @@ package event
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/webtor-io/web-ui/models"
@@ -22,7 +24,11 @@ func (h *Handler) resourceVaulted(msg []byte) error {
 		return nil
 	}
 
-	ctx := context.Background()
+	// Use a bounded timeout so a stalled DB/email server cannot block
+	// the JetStream consumer goroutine indefinitely.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	db := h.pg.Get()
 	if err := vaultModels.UpdateResourceVaulted(ctx, db, m.ResourceID); err != nil {
 		return err
@@ -49,19 +55,25 @@ func (h *Handler) resourceVaulted(msg []byte) error {
 		userIds[p.UserID.String()] = struct{}{}
 	}
 
+	// Notify each pledger independently — a failure for one user must not
+	// prevent notifications for all remaining users.
 	for idStr := range userIds {
 		u := &models.User{}
-		err := db.Model(u).
+		if err := db.Model(u).
 			Context(ctx).
 			Where("user_id = ?", idStr).
-			Select()
-		if err != nil {
-			return err
+			Select(); err != nil {
+			log.WithError(err).WithField("user_id", idStr).Warn("failed to fetch user for vaulted notification")
+			continue
 		}
 		if u.Email != "" {
 			if err := h.ns.SendVaulted(u.Email, r); err != nil {
-				return err
+				log.WithError(err).WithField("email", u.Email).Warn("failed to send vaulted email notification")
+				// do not continue — still send the SSE notification below
 			}
+		}
+		if h.nats != nil && h.nats.Get() != nil {
+			_ = h.nats.Get().Publish(fmt.Sprintf("user.%s.update", idStr), []byte(`{"type": "vault"}`))
 		}
 	}
 

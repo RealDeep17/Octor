@@ -2,6 +2,7 @@ package vault
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -51,6 +52,10 @@ func (h *Handler) removeMultiple(c *gin.Context) {
 			}
 			cancel()
 		}
+	}
+
+	if h.nats != nil && h.nats.Get() != nil {
+		_ = h.nats.Get().Publish(fmt.Sprintf("user.%s.update", u.ID.String()), []byte(`{"type": "vault"}`))
 	}
 
 	web.RedirectWithSuccessAndMessage(c, "toast.removedFromVault")

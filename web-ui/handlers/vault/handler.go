@@ -23,6 +23,7 @@ type Handler struct {
 	pg    *cs.PG
 	jobs  *j.Jobs
 	tb    *template.BuilderWithLayout[*web.Context]
+	nats  *cs.NATS
 }
 
 type PledgeDisplay struct {
@@ -48,7 +49,7 @@ type PledgeListData struct {
 	IsFree                bool
 }
 
-func RegisterHandler(r *gin.Engine, v *vault.Vault, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs) {
+func RegisterHandler(r *gin.Engine, v *vault.Vault, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs, nats *cs.NATS) {
 	h := &Handler{
 		vault: v,
 		api:   api,
@@ -56,6 +57,7 @@ func RegisterHandler(r *gin.Engine, v *vault.Vault, tm *template.Manager[*web.Co
 		jobs:  jobs,
 		tb: tm.MustRegisterViews("vault/*").
 			WithLayout("main"),
+		nats:  nats,
 	}
 	gr := r.Group("/vault")
 	// GET /vault redirects guests to /login?from=vault inside the handler so the

@@ -1,10 +1,12 @@
 package library
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	"github.com/webtor-io/web-ui/models"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/web"
@@ -33,12 +35,21 @@ func (s *Handler) removeMultiple(c *gin.Context) {
 		return
 	}
 
+	var cleanIDs []string
 	for _, rID := range req.ResourceIDs {
 		rID = strings.TrimSpace(rID)
-		if rID == "" {
-			continue
+		if rID != "" {
+			cleanIDs = append(cleanIDs, rID)
 		}
-		_ = models.RemoveFromLibrary(ctx, db, u.ID, rID)
+	}
+	if len(cleanIDs) > 0 {
+		if err := models.RemoveMultipleFromLibrary(ctx, db, u.ID, cleanIDs); err != nil {
+			logrus.WithError(err).Warn("failed to remove multiple from library")
+		}
+	}
+
+	if s.nats != nil && s.nats.Get() != nil {
+		_ = s.nats.Get().Publish(fmt.Sprintf("user.%s.update", u.ID.String()), []byte(`{"type": "library"}`))
 	}
 
 	web.RedirectWithSuccessAndMessage(c, "toast.removedFromLibrary")

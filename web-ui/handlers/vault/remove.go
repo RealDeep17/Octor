@@ -2,6 +2,7 @@ package vault
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,13 @@ func (h *Handler) removePledge(c *gin.Context) {
 		defer cancel()
 		if purgeErr := h.api.PurgeResourceCache(purgeCtx, claims, resourceID); purgeErr != nil {
 			logrus.WithError(purgeErr).WithField("resource_id", resourceID).Warn("failed to purge seeder cache after vault removal")
+		}
+	}
+
+	if h.nats != nil && h.nats.Get() != nil {
+		_ = h.nats.Get().Publish(fmt.Sprintf("user.%s.update", user.ID.String()), []byte(`{"type": "vault"}`))
+		if alsoLibrary {
+			_ = h.nats.Get().Publish(fmt.Sprintf("user.%s.update", user.ID.String()), []byte(`{"type": "library"}`))
 		}
 	}
 
