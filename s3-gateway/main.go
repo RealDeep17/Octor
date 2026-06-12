@@ -16,19 +16,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	cs "github.com/webtor-io/common-services"
 )
 
 func getInfraDataPath(subpath string) string {
-	if root := os.Getenv("OCTOR_ROOT"); root != "" {
-		return filepath.Join(root, "infra-data", subpath)
-	}
-	if root := os.Getenv("PROJECT_ROOT"); root != "" {
-		return filepath.Join(root, "infra-data", subpath)
-	}
-	if _, err := os.Stat("/srv/octor"); err == nil {
-		return filepath.Join("/srv/octor/infra-data", subpath)
-	}
-	return filepath.Join("./infra-data", subpath)
+	return cs.GetInfraDataPath(subpath)
 }
 
 var (
@@ -130,6 +123,11 @@ func main() {
 		log.Printf("Using S3_GATEWAY_TEMP_UPLOADS_DIR from environment: %s", tempUploadsDir)
 	} else {
 		log.Printf("S3_GATEWAY_TEMP_UPLOADS_DIR not set, defaulting to %s", tempUploadsDir)
+	}
+
+	// Wipe any pre-existing files/directories in tempUploadsDir on startup
+	if err := os.RemoveAll(tempUploadsDir); err != nil {
+		log.Printf("Warning: failed to clean up temp uploads directory %s on startup: %v", tempUploadsDir, err)
 	}
 
 	if err := os.MkdirAll(tempUploadsDir, 0777); err != nil {

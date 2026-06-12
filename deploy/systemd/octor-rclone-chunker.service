@@ -11,10 +11,11 @@ Group=__RUN_GROUP__
 EnvironmentFile=__PROJECT_ROOT__/custom.env
 Environment=RCLONE_VFS_CACHE_MODE=off
 ExecStartPre=/usr/bin/mkdir -p ${VAULT_STORAGE_PATH}
-ExecStart=/usr/bin/env RCLONE_VFS_CACHE_MODE=off /usr/bin/rclone --config ${VAULT_RCLONE_CONFIG} mount ALPHA_CHUNKER: ${VAULT_STORAGE_PATH} \
+ExecStart=/usr/bin/env RCLONE_VFS_CACHE_MODE=off /usr/bin/rclone --config ${VAULT_RCLONE_CONFIG} mount ${VAULT_RCLONE_CHUNKER_REMOTE} ${VAULT_STORAGE_PATH} \
     --vfs-cache-mode off \
     --transfers ${RCLONE_TRANSFERS} \
     --drive-use-trash=false \
+    --chunker-chunk-size ${RCLONE_CHUNKER_CHUNK_SIZE} \
     --allow-other \
     --umask 000 --allow-non-empty
 ExecStop=/usr/bin/fusermount -uz ${VAULT_STORAGE_PATH}

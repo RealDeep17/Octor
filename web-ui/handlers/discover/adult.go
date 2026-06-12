@@ -31,16 +31,7 @@ import (
 )
 
 func getInfraDataPath(subpath string) string {
-	if root := os.Getenv("OCTOR_ROOT"); root != "" {
-		return filepath.Join(root, "infra-data", subpath)
-	}
-	if root := os.Getenv("PROJECT_ROOT"); root != "" {
-		return filepath.Join(root, "infra-data", subpath)
-	}
-	if _, err := os.Stat("/srv/octor"); err == nil {
-		return filepath.Join("/srv/octor/infra-data", subpath)
-	}
-	return filepath.Join("./infra-data", subpath)
+	return cs.GetInfraDataPath(subpath)
 }
 
 var CacheDir = getInfraDataPath("cache/adult-posters")

@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -24,6 +24,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	cs "github.com/webtor-io/common-services"
+	_ "modernc.org/sqlite"
 )
 
 type TransmissionService struct {
@@ -69,16 +70,7 @@ const (
 )
 
 func getInfraDataPath(subpath string) string {
-	if root := os.Getenv("OCTOR_ROOT"); root != "" {
-		return filepath.Join(root, "infra-data", subpath)
-	}
-	if root := os.Getenv("PROJECT_ROOT"); root != "" {
-		return filepath.Join(root, "infra-data", subpath)
-	}
-	if _, err := os.Stat("/srv/octor"); err == nil {
-		return filepath.Join("/srv/octor/infra-data", subpath)
-	}
-	return filepath.Join("./infra-data", subpath)
+	return cs.GetInfraDataPath(subpath)
 }
 
 var (
@@ -1418,6 +1410,29 @@ func parseDownloadClientUsernames(out []byte) []string {
 	return usernames
 }
 
+func getArrConfigDir() string {
+	if val := os.Getenv("OCTOR_ARR_CONFIG_DIR"); val != "" {
+		return val
+	}
+	// Try host-based relative location dynamically determined by Octor
+	if projectRoot := os.Getenv("PROJECT_ROOT"); projectRoot != "" {
+		hostPath := filepath.Join(projectRoot, "../Big ARRS/config")
+		if _, err := os.Stat(hostPath); err == nil {
+			return hostPath
+		}
+	}
+	// Fallback to absolute paths
+	for _, p := range []string{
+		"/srv/Big ARRS/config",
+		"/downloads/config", // container fallback
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "/srv/Big ARRS/config"
+}
+
 func getArrEmails() ([]string, []string, []string) {
 	arrEmailsLock.Lock()
 	defer arrEmailsLock.Unlock()
@@ -1430,19 +1445,36 @@ func getArrEmails() ([]string, []string, []string) {
 		if _, err := os.Stat(dbPath); err != nil {
 			return nil
 		}
-		cmd := exec.Command("sqlite3", dbPath, "SELECT Settings FROM DownloadClients WHERE Implementation='Transmission';")
-		out, err := cmd.Output()
+		db, err := sql.Open("sqlite", dbPath)
 		if err != nil {
+			log.Errorf("Failed to open SQLite database %s: %v", dbPath, err)
 			return nil
 		}
-		return parseDownloadClientUsernames(out)
+		defer db.Close()
+
+		rows, err := db.Query("SELECT Settings FROM DownloadClients WHERE Implementation='Transmission';")
+		if err != nil {
+			log.Errorf("Failed to query SQLite database %s: %v", dbPath, err)
+			return nil
+		}
+		defer rows.Close()
+
+		var results []byte
+		for rows.Next() {
+			var settingsStr string
+			if err := rows.Scan(&settingsStr); err == nil {
+				results = append(results, []byte(settingsStr+"\n")...)
+			}
+		}
+		return parseDownloadClientUsernames(results)
 	}
 
-	sonarrEmails = extractUsernames("/srv/Big ARRS/config/sonarr/sonarr.db")
-	radarrEmails = extractUsernames("/srv/Big ARRS/config/radarr/radarr.db")
+	arrConfigDir := getArrConfigDir()
+	sonarrEmails = extractUsernames(filepath.Join(arrConfigDir, "sonarr/sonarr.db"))
+	radarrEmails = extractUsernames(filepath.Join(arrConfigDir, "radarr/radarr.db"))
 	whisparrEmails = nil
 	for _, dbName := range []string{"whisparr3.db", "whisparr2.db", "whisparr.db"} {
-		path := filepath.Join("/srv/Big ARRS/config/whisparr", dbName)
+		path := filepath.Join(arrConfigDir, "whisparr", dbName)
 		if emails := extractUsernames(path); len(emails) > 0 {
 			whisparrEmails = emails
 			break

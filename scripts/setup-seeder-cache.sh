@@ -6,6 +6,10 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/custom.env"
 
+# Determine running user dynamically
+OCTOR_USER=${OCTOR_USER:-$(stat -c '%U' "$PROJECT_ROOT/run.sh" 2>/dev/null || stat -f '%Su' "$PROJECT_ROOT/run.sh" 2>/dev/null || echo "${SUDO_USER:-$USER}")}
+OCTOR_GROUP=${OCTOR_GROUP:-$(id -gn "$OCTOR_USER" 2>/dev/null || echo "$OCTOR_USER")}
+
 # Parse configuration variables from the env file
 RAM_CACHE_ENABLED=$(grep -E '^RAM_CACHE_ENABLED=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' || true)
 RAM_CACHE_SIZE=$(grep -E '^RAM_CACHE_SIZE=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '[:space:]' || true)
@@ -28,7 +32,7 @@ if [ "$RAM_CACHE_ENABLED" != "true" ]; then
     
     # Ensure a clean state for SSD mode by wiping existing cache
     if [ -d "$SSD_DATA_DIR" ]; then
-        if [[ "$SSD_DATA_DIR" == "/" || "$SSD_DATA_DIR" == "/srv" || "$SSD_DATA_DIR" == "/srv/" || "$SSD_DATA_DIR" == "/home" || "$SSD_DATA_DIR" == "/home/" || "$SSD_DATA_DIR" == "/home/ubuntu" || "$SSD_DATA_DIR" == "/home/ubuntu/" ]]; then
+        if [[ "$SSD_DATA_DIR" == "/" || "$SSD_DATA_DIR" == "/srv" || "$SSD_DATA_DIR" == "/srv/" || "$SSD_DATA_DIR" == "/home" || "$SSD_DATA_DIR" == "/home/" || "$SSD_DATA_DIR" == "/home/$OCTOR_USER" || "$SSD_DATA_DIR" == "/home/$OCTOR_USER/" ]]; then
             echo "❌ Error: SSD_DATA_DIR is set to a protected path ($SSD_DATA_DIR). Refusing to wipe."
             exit 1
         fi
@@ -37,7 +41,7 @@ if [ "$RAM_CACHE_ENABLED" != "true" ]; then
     fi
     
     mkdir -p "$SSD_DATA_DIR"
-    chown -R ubuntu:ubuntu "$SSD_DATA_DIR"
+    chown -R "$OCTOR_USER:$OCTOR_GROUP" "$SSD_DATA_DIR"
 
     # Make sure we clean up any active RAM mount if we are switching to SSD
     if mountpoint -q "$DATA_DIR" 2>/dev/null; then
@@ -101,7 +105,7 @@ echo "setup-seeder-cache: mounting $LOOP_DEV at $DATA_DIR with discard..."
 # We explicitly mount with 'discard' (TRIM support) so that hole-punching (FALLOC_FL_PUNCH_HOLE)
 # is instantly passed down through the loop device to free physical blocks in the backing tmpfs.
 mount -o noatime,nodiratime,discard "$LOOP_DEV" "$DATA_DIR"
-chown -R ubuntu:ubuntu "$DATA_DIR"
+chown -R "$OCTOR_USER:$OCTOR_GROUP" "$DATA_DIR"
 
 echo "setup-seeder-cache: RAM ext4 ready at $DATA_DIR (size=$RAM_CACHE_SIZE, discard enabled)"
 

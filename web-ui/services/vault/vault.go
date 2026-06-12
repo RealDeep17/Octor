@@ -2,11 +2,10 @@ package vault
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"net/http"
 	"os/exec"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -100,6 +99,8 @@ type Vault struct {
 	rcloneRemote          string
 	rcloneConfig          string
 	cachedFreeSpaceGB     atomic.Uint64 // stores math.Float64bits(GB); 0 = not yet fetched
+	cachedTotalSpaceGB    atomic.Uint64 // stores math.Float64bits(GB); 0 = not yet fetched
+	cachedUsedSpaceGB     atomic.Uint64 // stores math.Float64bits(GB); 0 = not yet fetched
 }
 
 func New(c *cli.Context, vaultApi *Api, cl *claims.Claims, client *http.Client, pg *cs.PG, restApi *api.Api) *Vault {
@@ -446,17 +447,23 @@ func (s *Vault) getFreeSpaceGB() float64 {
 	return getFreeSpaceGB(s.storagePath)
 }
 
-// runRcloneSpaceRefresher runs in a goroutine, refreshing cachedFreeSpaceGB
+// runRcloneSpaceRefresher runs in a goroutine, refreshing space metrics
 // every 15 minutes by shelling out to `rclone about`.
 func (s *Vault) runRcloneSpaceRefresher() {
 	refresh := func() {
-		gb, err := fetchRcloneFreeSpaceGB(s.rcloneRemote, s.rcloneConfig)
+		info, err := fetchRcloneSpaceInfo(s.rcloneRemote, s.rcloneConfig)
 		if err != nil {
-			log.WithError(err).Warn("vault: rclone free-space fetch failed, keeping previous value")
+			log.WithError(err).Warn("vault: rclone space fetch failed, keeping previous values")
 			return
 		}
-		s.cachedFreeSpaceGB.Store(math.Float64bits(gb))
-		log.WithField("remote", s.rcloneRemote).WithField("free_gb", gb).Info("vault: rclone free space updated")
+		s.cachedFreeSpaceGB.Store(math.Float64bits(info.FreeGB))
+		s.cachedTotalSpaceGB.Store(math.Float64bits(info.TotalGB))
+		s.cachedUsedSpaceGB.Store(math.Float64bits(info.UsedGB))
+		log.WithField("remote", s.rcloneRemote).
+			WithField("free_gb", info.FreeGB).
+			WithField("total_gb", info.TotalGB).
+			WithField("used_gb", info.UsedGB).
+			Info("vault: rclone space updated")
 	}
 	refresh() // immediate first fetch
 	ticker := time.NewTicker(15 * time.Minute)
@@ -466,34 +473,51 @@ func (s *Vault) runRcloneSpaceRefresher() {
 	}
 }
 
-// fetchRcloneFreeSpaceGB shells out to `rclone about` and parses the Free line.
-// Example output line: "Free:   54.969 TiB"
-func fetchRcloneFreeSpaceGB(remote, configPath string) (float64, error) {
+type RcloneSpaceInfo struct {
+	TotalGB float64
+	UsedGB  float64
+	FreeGB  float64
+}
+
+// fetchRcloneSpaceInfo shells out to `rclone about` and parses total, used, and free space.
+func fetchRcloneSpaceInfo(remote, configPath string) (*RcloneSpaceInfo, error) {
 	args := []string{"about", remote, "--json"}
 	if configPath != "" {
 		args = append([]string{"--config", configPath}, args...)
 	}
 	out, err := exec.Command("rclone", args...).Output()
 	if err != nil {
-		return 0, errors.Wrap(err, "rclone about")
+		return nil, errors.Wrap(err, "rclone about")
 	}
-	// Parse JSON: {"free": <bytes>}
-	s := string(out)
-	for _, line := range strings.Split(s, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "\"free\"") {
-			// "free": 60478764261376
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				valStr := strings.Trim(strings.TrimSpace(parts[1]), ",")
-				bytes, err := strconv.ParseInt(valStr, 10, 64)
-				if err == nil && bytes > 0 {
-					return float64(bytes) / (1024 * 1024 * 1024), nil // bytes → base2 GiB
-				}
-			}
-		}
+
+	var info struct {
+		Total int64 `json:"total"`
+		Used  int64 `json:"used"`
+		Free  int64 `json:"free"`
 	}
-	return 0, errors.New("rclone about: could not parse free bytes from JSON output")
+	if err := json.Unmarshal(out, &info); err != nil {
+		return nil, errors.Wrap(err, "unmarshal rclone about json")
+	}
+
+	return &RcloneSpaceInfo{
+		TotalGB: float64(info.Total) / (1024 * 1024 * 1024),
+		UsedGB:  float64(info.Used) / (1024 * 1024 * 1024),
+		FreeGB:  float64(info.Free) / (1024 * 1024 * 1024),
+	}, nil
+}
+
+func (s *Vault) GetTotalSpaceGB() float64 {
+	if bits := s.cachedTotalSpaceGB.Load(); bits != 0 {
+		return math.Float64frombits(bits)
+	}
+	return 0
+}
+
+func (s *Vault) GetUsedSpaceGB() float64 {
+	if bits := s.cachedUsedSpaceGB.Load(); bits != 0 {
+		return math.Float64frombits(bits)
+	}
+	return 0
 }
 
 // CreatePledge creates or updates a pledge for a resource

@@ -9,6 +9,42 @@
     <h1 class="text-[clamp(1.6rem,4vw,2.2rem)] font-extrabold tracking-tight leading-tight mb-1">Vault</h1>
     <p class="hidden sm:block text-sm text-o-sub leading-relaxed mb-5">Review every user's saved vault resources.</p>
 
+    {{ if .Data.Stats }}
+    <div class="grid grid-cols-3 gap-3 mb-4">
+      <div class="bg-base-300/50 border border-o-line rounded-xl p-3 flex flex-col justify-center">
+        <div class="flex justify-between items-end mb-2">
+          <div>
+            <span class="text-base font-bold text-w-text tabular-nums">{{ formatVP4 .Data.Stats.TotalVaultedGB }}</span>
+            <span class="text-[10px] text-o-muted font-bold uppercase tracking-widest ml-1">Used</span>
+          </div>
+          <div class="text-right">
+            {{ if .Data.Stats.TotalGDriveGB }}
+              <span class="text-xs font-semibold text-o-sub tabular-nums">{{ formatVP4 .Data.Stats.TotalGDriveGB }}</span>
+            {{ else }}
+              <span class="text-xs font-semibold text-o-sub">∞</span>
+            {{ end }}
+            <span class="text-[10px] text-o-muted font-bold uppercase tracking-widest ml-1">Total</span>
+          </div>
+        </div>
+        <div class="w-full bg-base-200 rounded-full h-1.5 overflow-hidden border border-o-line/20">
+          {{ if .Data.Stats.TotalGDriveGB }}
+            <div class="h-full bg-gradient-to-r from-o-primary to-o-primaryL transition-all duration-1000 ease-out" style="width: {{ printf "%.2f" (multiply (div .Data.Stats.TotalVaultedGB .Data.Stats.TotalGDriveGB) 100.0) }}%"></div>
+          {{ else }}
+            <div class="h-full bg-gradient-to-r from-o-primary to-o-primaryL" style="width:5%"></div>
+          {{ end }}
+        </div>
+      </div>
+      <div class="bg-base-300/50 border border-o-line rounded-xl p-3 flex flex-col items-center justify-center text-center">
+        <span class="text-base font-bold text-green-400">{{ .Data.Stats.SavedCount }}</span>
+        <span class="text-[10px] text-o-muted mt-0.5 font-bold tracking-widest uppercase">Saved</span>
+      </div>
+      <div class="bg-base-300/50 border border-o-line rounded-xl p-3 flex flex-col items-center justify-center text-center">
+        <span class="text-base font-bold {{ if gt .Data.Stats.ProcessingCount 0 }}text-o-cyan{{ else }}text-o-muted{{ end }}">{{ .Data.Stats.ProcessingCount }}</span>
+        <span class="text-[10px] text-o-muted mt-0.5 font-bold tracking-widest uppercase">Processing</span>
+      </div>
+    </div>
+    {{ end }}
+
     <div class="sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-2.5 mb-3 bg-w-bg/90 backdrop-blur-lg border-b border-o-line/30">
       <div class="flex flex-col gap-2.5">
         <div class="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -119,7 +155,7 @@
                   {{ end }}
                   <div class="flex items-center gap-2 mt-0.5 text-[11px] text-o-muted">
                     {{ if .User }}<span class="text-o-primaryL font-medium">{{ .User.Email }}</span><span>·</span>{{ end }}
-                    <span class="tabular-nums">{{ printf "%.2f" .Amount }} GB</span>
+                    <span class="tabular-nums">{{ formatVP .Amount }}</span>
                     <span>·</span>
                     <span>{{ timeAgoLang $.Lang .CreatedAt }}</span>
                     <span class="flex items-center gap-2" data-vault-stats-line>
@@ -230,7 +266,7 @@
                   {{ end }}
                   <div class="flex items-center gap-2 mt-0.5 text-[11px] text-o-muted">
                     {{ if .User }}<span class="text-o-primaryL font-medium">{{ .User.Email }}</span><span>·</span>{{ end }}
-                    <span class="tabular-nums">{{ printf "%.2f" .Amount }} GB</span>
+                    <span class="tabular-nums">{{ formatVP .Amount }}</span>
                     <span>·</span>
                     <span>{{ timeAgoLang $.Lang .CreatedAt }}</span>
                     {{ if .ShowProgress }}
@@ -338,7 +374,7 @@
                   {{ end }}
                   <div class="flex items-center gap-2 mt-0.5 text-[11px] text-o-muted">
                     {{ if .User }}<span class="text-o-primaryL font-medium">{{ .User.Email }}</span><span>·</span>{{ end }}
-                    <span class="tabular-nums">{{ printf "%.2f" .Amount }} GB</span>
+                    <span class="tabular-nums">{{ formatVP .Amount }}</span>
                     <span>·</span>
                     <span>{{ timeAgoLang $.Lang .CreatedAt }}</span>
                   </div>

@@ -22,9 +22,14 @@ fi
 export $(grep -v '^#' "$ENV_FILE" | xargs)
 
 # Check if octor-monolith is running
-if ! sudo docker ps --format '{{.Names}}' | grep -q 'octor-monolith'; then
-    echo "❌ Error: octor-monolith container is not active!"
-    echo "Please start the containers first: ./octor-setup.sh or docker compose up -d"
+CONTAINER_RUNNING=false
+if sudo docker ps --format '{{.Names}}' | grep -q 'octor-monolith'; then
+    CONTAINER_RUNNING=true
+fi
+
+if [ "$CONTAINER_RUNNING" = "false" ] && [ ! -f "$PROJECT_ROOT/bin/recover_db" ]; then
+    echo "❌ Error: Could not find active container (octor-monolith) or host binary ($PROJECT_ROOT/bin/recover_db)!"
+    echo "Please start the monolith container or build the host binary: make build"
     exit 1
 fi
 
@@ -33,12 +38,20 @@ DRY_RUN=${DRY_RUN:-y}
 
 if [[ "$DRY_RUN" =~ ^[yY]$ ]]; then
     echo "Running in DRY-RUN mode..."
-    sudo docker exec -it octor-monolith /app/bin/recover_db --dry-run=true
+    if [ "$CONTAINER_RUNNING" = "true" ]; then
+        sudo docker exec -it octor-monolith /app/bin/recover_db --dry-run=true
+    else
+        "$PROJECT_ROOT/bin/recover_db" --dry-run=true
+    fi
 else
     echo "⚠️  WARNING: Running in LIVE mode. This will modify the database."
     read -p "Type 'RECOVER' to confirm: " CONFIRM
     if [ "$CONFIRM" = "RECOVER" ]; then
-        sudo docker exec -it octor-monolith /app/bin/recover_db --dry-run=false
+        if [ "$CONTAINER_RUNNING" = "true" ]; then
+            sudo docker exec -it octor-monolith /app/bin/recover_db --dry-run=false
+        else
+            "$PROJECT_ROOT/bin/recover_db" --dry-run=false
+        fi
     else
         echo "Aborted."
     fi

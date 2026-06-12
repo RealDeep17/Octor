@@ -185,7 +185,69 @@ func (s *Helper) BitsForHumans3(b int64) string {
 
 func (s *Helper) FormatVP(vp float64) string {
 	bytes := int64(vp * 1024 * 1024 * 1024)
-	return h.Bytes(uint64(bytes))
+	return s.BitsForHumans3(bytes)
+}
+
+func (s *Helper) FormatVP4(vp float64) string {
+	bytes := int64(vp * 1024 * 1024 * 1024)
+	return s.BitsForHumans4(bytes)
+}
+
+func (s *Helper) BitsForHumans4(b int64) string {
+	const (
+		KB = 1024
+		MB = 1024 * KB
+		GB = 1024 * MB
+		TB = 1024 * GB
+	)
+	fb := float64(b)
+	if b < KB {
+		return fmt.Sprintf("%d B", b)
+	} else if b < MB {
+		val := fb / KB
+		if val >= 1000 {
+			return fmt.Sprintf("%.0f KB", val)
+		} else if val >= 100 {
+			return fmt.Sprintf("%.1f KB", val)
+		} else if val >= 10 {
+			return fmt.Sprintf("%.2f KB", val)
+		} else {
+			return fmt.Sprintf("%.3f KB", val)
+		}
+	} else if b < GB {
+		val := fb / MB
+		if val >= 1000 {
+			return fmt.Sprintf("%.0f MB", val)
+		} else if val >= 100 {
+			return fmt.Sprintf("%.1f MB", val)
+		} else if val >= 10 {
+			return fmt.Sprintf("%.2f MB", val)
+		} else {
+			return fmt.Sprintf("%.3f MB", val)
+		}
+	} else if b < TB {
+		val := fb / GB
+		if val >= 1000 {
+			return fmt.Sprintf("%.0f GB", val)
+		} else if val >= 100 {
+			return fmt.Sprintf("%.1f GB", val)
+		} else if val >= 10 {
+			return fmt.Sprintf("%.2f GB", val)
+		} else {
+			return fmt.Sprintf("%.3f GB", val)
+		}
+	} else {
+		val := fb / TB
+		if val >= 1000 {
+			return fmt.Sprintf("%.0f TB", val)
+		} else if val >= 100 {
+			return fmt.Sprintf("%.1f TB", val)
+		} else if val >= 10 {
+			return fmt.Sprintf("%.2f TB", val)
+		} else {
+			return fmt.Sprintf("%.3f TB", val)
+		}
+	}
 }
 
 func (s *Helper) FormatVPBytes(vp float64) int64 {

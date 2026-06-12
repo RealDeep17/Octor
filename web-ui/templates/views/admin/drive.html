@@ -3,12 +3,24 @@
 <section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
   <div class="max-w-[960px] mx-auto">
     <div class="hidden sm:inline-flex badge badge-lg bg-o-cyan/10 border-o-cyan/30 text-o-cyan gap-2 px-4 py-3 mb-5 text-xs font-semibold tracking-widest uppercase">
-      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 012 v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2m16 0h-2M4 13h2m7 4h.01"/></svg>
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
       Admin Panel
     </div>
 
-    <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-2 sm:mb-4">Drive</h1>
-    <p class="hidden sm:block text-[1.05rem] text-o-sub leading-relaxed mb-8">Browse raw file chunks and storage structures on the S3 union mount.</p>
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-[clamp(2rem,4vw,2.8rem)] font-extrabold tracking-tight leading-tight mb-2">Drive</h1>
+        <p class="hidden sm:block text-[1.05rem] text-o-sub leading-relaxed">Browse raw file chunks and storage structures on the S3 union mount.</p>
+      </div>
+      {{ if .Data.RcloneTotal }}
+      <div class="text-right shrink-0 pb-1">
+        <div class="text-[10px] text-o-muted font-bold uppercase tracking-widest mb-1.5">Storage Capacity</div>
+        <div class="text-lg font-black text-w-text tabular-nums bg-base-300/50 border border-o-line px-3 py-1.5 rounded-xl">
+          {{ bitsForHumans4 .Data.RcloneUsed }} <span class="text-o-muted/40 font-medium">/</span> {{ bitsForHumans4 .Data.RcloneTotal }}
+        </div>
+      </div>
+      {{ end }}
+    </div>
 
     <div class="sticky top-[72px] z-10 -mx-3 sm:-mx-6 px-3 sm:px-6 py-3 mb-6 bg-w-bg/90 backdrop-blur-lg border-b border-o-line/30">
         <div class="flex flex-col gap-3">

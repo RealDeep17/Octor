@@ -119,11 +119,19 @@ type LibraryData struct {
 	AdultCount   int
 }
 
+type AdminVaultStats struct {
+	TotalVaultedGB  float64
+	TotalGDriveGB   float64
+	SavedCount      int
+	ProcessingCount int
+}
+
 type VaultData struct {
 	Args         *shared.IndexArgs
 	Users        []UserOption
 	SelectedUser string
 	Pledges      []AdminPledgeDisplay
+	Stats        AdminVaultStats
 }
 
 func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, v *vault.Vault, en *enrich.Enricher, admin *adminsvc.Admin, sapi *api.Api) {
@@ -184,6 +192,8 @@ type DriveData struct {
 	EscapedParentPath string
 	Items             []DriveItem
 	Breadcrumbs       []DriveBreadcrumb
+	RcloneUsed        int64
+	RcloneTotal       int64
 }
 
 func (i DriveItem) IsPlayable() bool {
@@ -271,12 +281,20 @@ func (h *Handler) driveIndex(c *gin.Context) {
 		}
 	}
 
+	var rcloneUsedBytes, rcloneTotalBytes int64
+	if h.vault != nil {
+		rcloneUsedBytes = int64(h.vault.GetUsedSpaceGB() * 1024 * 1024 * 1024)
+		rcloneTotalBytes = int64(h.vault.GetTotalSpaceGB() * 1024 * 1024 * 1024)
+	}
+
 	h.tb.Build("admin/drive").HTML(http.StatusOK, web.NewContext(c).WithData(&DriveData{
 		Path:              path,
 		ParentPath:        parent,
 		EscapedParentPath: escapePath(parent),
 		Items:             items,
 		Breadcrumbs:       bc,
+		RcloneUsed:        rcloneUsedBytes,
+		RcloneTotal:       rcloneTotalBytes,
 	}))
 }
 
@@ -1360,6 +1378,47 @@ func (h *Handler) vaultIndex(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
+	var stats AdminVaultStats
+	if userID != nil {
+		var dbStats struct {
+			TotalVaultedGB  float64 `pg:"total_vaulted_gb"`
+			SavedCount      int     `pg:"saved_count"`
+			ProcessingCount int     `pg:"processing_count"`
+		}
+		_, _ = db.QueryOneContext(ctx, &dbStats, `
+			SELECT 
+				COALESCE(SUM(r.required_vp), 0) as total_vaulted_gb,
+				COUNT(CASE WHEN r.vaulted = true AND r.expired = false THEN 1 END) as saved_count,
+				COUNT(CASE WHEN r.vaulted = false AND r.expired = false THEN 1 END) as processing_count
+			FROM vault.pledge p
+			JOIN vault.resource r ON p.resource_id = r.resource_id
+			WHERE p.user_id = ?
+		`, *userID)
+		stats.TotalVaultedGB = dbStats.TotalVaultedGB
+		stats.SavedCount = dbStats.SavedCount
+		stats.ProcessingCount = dbStats.ProcessingCount
+	} else {
+		var dbStats struct {
+			TotalVaultedGB  float64 `pg:"total_vaulted_gb"`
+			SavedCount      int     `pg:"saved_count"`
+			ProcessingCount int     `pg:"processing_count"`
+		}
+		_, _ = db.QueryOneContext(ctx, &dbStats, `
+			SELECT 
+				COALESCE(SUM(required_vp), 0) as total_vaulted_gb,
+				COUNT(CASE WHEN vaulted = true AND expired = false THEN 1 END) as saved_count,
+				COUNT(CASE WHEN vaulted = false AND expired = false THEN 1 END) as processing_count
+			FROM vault.resource
+		`)
+		stats.TotalVaultedGB = dbStats.TotalVaultedGB
+		stats.SavedCount = dbStats.SavedCount
+		stats.ProcessingCount = dbStats.ProcessingCount
+	}
+
+	if h.vault != nil {
+		stats.TotalGDriveGB = h.vault.GetTotalSpaceGB()
+	}
+
 	h.tb.Build("admin/vault").HTML(http.StatusOK, web.NewContext(c).WithData(&VaultData{
 		Args: &shared.IndexArgs{
 			Query: q,
@@ -1367,6 +1426,7 @@ func (h *Handler) vaultIndex(c *gin.Context) {
 		Users:        users,
 		SelectedUser: selected,
 		Pledges:      enrichedPledges,
+		Stats:        stats,
 	}))
 }
 

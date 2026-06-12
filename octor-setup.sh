@@ -19,7 +19,7 @@ echo "Working Directory: $PROJECT_ROOT"
 if [[ ! -f "$ENV_FILE" ]]; then
     if [[ -f "$PROJECT_ROOT/example.env" ]]; then
         echo "Creating custom.env from example.env template..."
-        cp "$PROJECT_ROOT/example.env" "$ENV_FILE"
+        sed "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" "$PROJECT_ROOT/example.env" > "$ENV_FILE"
     else
         echo "❌ Error: custom.env or example.env not found!"
         exit 1
@@ -34,28 +34,31 @@ export $(grep -v '^#' "$ENV_FILE" | xargs)
 # ------------------------------------------------------------------------------
 echo "--- Step 1: Host System Optimizations ---"
 
-# Prompt BBR
-read -p "Enable Google BBR TCP congestion control? (y/n) [y]: " CONFIRM_BBR
-CONFIRM_BBR=${CONFIRM_BBR:-y}
-if [[ "$CONFIRM_BBR" =~ ^[yY]$ ]]; then
-    echo "Configuring Google BBR..."
-    if ! sysctl net.ipv4.tcp_congestion_control | grep -q "bbr"; then
-        sudo bash -c 'echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf'
-        sudo bash -c 'echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf'
-        sudo sysctl -p
-        echo "✓ BBR congestion control enabled successfully."
-    else
-        echo "✓ BBR congestion control is already active."
+if [ "$(uname -s)" != "Linux" ]; then
+    echo "⚠️  System optimizations (BBR, TCP buffers, swap) are Linux-only and not supported on $(uname -s). Skipping..."
+else
+    # Prompt BBR
+    read -p "Enable Google BBR TCP congestion control? (y/n) [y]: " CONFIRM_BBR
+    CONFIRM_BBR=${CONFIRM_BBR:-y}
+    if [[ "$CONFIRM_BBR" =~ ^[yY]$ ]]; then
+        echo "Configuring Google BBR..."
+        if ! sysctl net.ipv4.tcp_congestion_control | grep -q "bbr"; then
+            sudo bash -c 'echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf'
+            sudo bash -c 'echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf'
+            sudo sysctl -p
+            echo "✓ BBR congestion control enabled successfully."
+        else
+            echo "✓ BBR congestion control is already active."
+        fi
     fi
-fi
 
-# Prompt TCP Buffers
-read -p "Configure optimized TCP buffers and file limits? (y/n) [y]: " CONFIRM_TCP
-CONFIRM_TCP=${CONFIRM_TCP:-y}
-if [[ "$CONFIRM_TCP" =~ ^[yY]$ ]]; then
-    echo "Tuning TCP buffers and open files limit..."
-    if ! grep -q "net.core.rmem_max" /etc/sysctl.conf; then
-        sudo bash -c 'cat >> /etc/sysctl.conf << EOF
+    # Prompt TCP Buffers
+    read -p "Configure optimized TCP buffers and file limits? (y/n) [y]: " CONFIRM_TCP
+    CONFIRM_TCP=${CONFIRM_TCP:-y}
+    if [[ "$CONFIRM_TCP" =~ ^[yY]$ ]]; then
+        echo "Tuning TCP buffers and open files limit..."
+        if ! grep -q "net.core.rmem_max" /etc/sysctl.conf; then
+            sudo bash -c 'cat >> /etc/sysctl.conf << EOF
 # Octor custom network tuning
 net.core.rmem_max=67108864
 net.core.wmem_max=67108864
@@ -63,29 +66,30 @@ net.ipv4.tcp_rmem=4096 87380 67108864
 net.ipv4.tcp_wmem=4096 65536 67108864
 fs.file-max=2097152
 EOF'
-        sudo sysctl -p
-        echo "✓ Network socket buffers optimized successfully."
-    else
-        echo "✓ Network socket buffers are already optimized."
+            sudo sysctl -p
+            echo "✓ Network socket buffers optimized successfully."
+        else
+            echo "✓ Network socket buffers are already optimized."
+        fi
     fi
-fi
 
-# Prompt Swap
-read -p "Create/Extend a swap file? (y/n) [n]: " CONFIRM_SWAP
-CONFIRM_SWAP=${CONFIRM_SWAP:-n}
-if [[ "$CONFIRM_SWAP" =~ ^[yY]$ ]]; then
-    read -p "Enter swap size in GB [4]: " SWAP_SIZE
-    SWAP_SIZE=${SWAP_SIZE:-4}
-    if [ ! -f /swapfile ]; then
-        echo "Creating a ${SWAP_SIZE}GB swap file..."
-        sudo fallocate -l "${SWAP_SIZE}G" /swapfile
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
-        sudo bash -c 'echo "/swapfile swap swap defaults 0 0" >> /etc/fstab'
-        echo "✓ Swap file created successfully."
-    else
-        echo "✓ Swap file already exists."
+    # Prompt Swap
+    read -p "Create/Extend a swap file? (y/n) [n]: " CONFIRM_SWAP
+    CONFIRM_SWAP=${CONFIRM_SWAP:-n}
+    if [[ "$CONFIRM_SWAP" =~ ^[yY]$ ]]; then
+        read -p "Enter swap size in GB [4]: " SWAP_SIZE
+        SWAP_SIZE=${SWAP_SIZE:-4}
+        if [ ! -f /swapfile ]; then
+            echo "Creating a ${SWAP_SIZE}GB swap file..."
+            sudo fallocate -l "${SWAP_SIZE}G" /swapfile
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+            sudo bash -c 'echo "/swapfile swap swap defaults 0 0" >> /etc/fstab'
+            echo "✓ Swap file created successfully."
+        else
+            echo "✓ Swap file already exists."
+        fi
     fi
 fi
 
@@ -98,21 +102,36 @@ for cmd in "${RUNTIMES[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
         echo "⚠️  Missing required runtime: $cmd"
         echo "Attempting to install $cmd automatically..."
-        if [ "$cmd" = "rclone" ]; then
-            sudo apt-get install -y unzip && curl https://rclone.org/install.sh | sudo bash
-        elif [ "$cmd" = "docker" ]; then
-            sudo apt-get install -y docker.io docker-buildx && sudo usermod -aG docker "$USER"
+        if command -v apt-get >/dev/null 2>&1; then
+            if [ "$cmd" = "rclone" ]; then
+                sudo apt-get install -y unzip && curl https://rclone.org/install.sh | sudo bash
+            elif [ "$cmd" = "docker" ]; then
+                sudo apt-get install -y docker.io docker-buildx && sudo usermod -aG docker "$USER"
+            else
+                sudo apt-get install -y "$cmd"
+            fi
+        elif [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+            if [ "$cmd" = "docker" ]; then
+                echo "Please install Docker Desktop for macOS: https://www.docker.com/products/docker-desktop"
+                exit 1
+            else
+                brew install "$cmd"
+            fi
         else
-            sudo apt-get install -y "$cmd"
+            echo "❌ Error: Cannot install $cmd automatically. Package manager (apt-get or brew) not found."
+            echo "Please install $cmd manually before proceeding."
+            exit 1
         fi
     fi
     echo "✓ runtime check passed: $cmd"
 done
 
 # Ensure docker daemon is active
-if ! sudo systemctl is-active docker >/dev/null 2>&1; then
-    echo "Starting Docker service..."
-    sudo systemctl start docker
+if command -v systemctl >/dev/null 2>&1; then
+    if ! sudo systemctl is-active docker >/dev/null 2>&1; then
+        echo "Starting Docker service..."
+        sudo systemctl start docker
+    fi
 fi
 
 # ------------------------------------------------------------------------------
@@ -234,7 +253,7 @@ sudo docker exec -i octor-monolith /bin/bash -c "/app/bin/create_nats_stream" ||
 # ------------------------------------------------------------------------------
 echo "--- Step 5: Configuring Host Nginx & Let's Encrypt SSL ---"
 
-NGINX_TEMPLATE="$PROJECT_ROOT/octor.nginx"
+NGINX_TEMPLATE="$PROJECT_ROOT/deploy/nginx/octor.nginx"
 NGINX_CONF="/etc/nginx/sites-available/octor"
 NGINX_LINK="/etc/nginx/sites-enabled/octor"
 
@@ -286,10 +305,21 @@ if [ ! -f "$REAL_CERT_DIR/fullchain.pem" ]; then
     if [[ "$RUN_CERTBOT" =~ ^[yY]$ ]]; then
         if ! command -v certbot >/dev/null 2>&1; then
             echo "Installing certbot..."
-            sudo apt-get install -y certbot python3-certbot-nginx
+            if command -v apt-get >/dev/null 2>&1; then
+                sudo apt-get install -y certbot python3-certbot-nginx
+            elif [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+                brew install certbot
+            else
+                echo "❌ Error: Cannot install certbot automatically. Please install it manually."
+                exit 1
+            fi
         fi
-        echo "Running Certbot for $DOMAIN..."
-        sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "shudeepan@gmail.com" || echo "⚠️  Certbot SSL verification failed. Using self-signed cert for now."
+        if [ -z "${LETSENCRYPT_EMAIL:-}" ]; then
+            read -p "Enter Let's Encrypt notification email [admin@$DOMAIN]: " USER_EMAIL
+            LETSENCRYPT_EMAIL=${USER_EMAIL:-admin@$DOMAIN}
+        fi
+        echo "Running Certbot for $DOMAIN with email $LETSENCRYPT_EMAIL..."
+        sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$LETSENCRYPT_EMAIL" || echo "⚠️  Certbot SSL verification failed. Using self-signed cert for now."
     fi
 fi
 

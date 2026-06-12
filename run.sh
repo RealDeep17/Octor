@@ -35,6 +35,46 @@ run_sudo() {
     sudo "$@"
 }
 
+run_sed_in_place() {
+    local expr="$1"
+    local file="$2"
+    if sed --version >/dev/null 2>&1; then
+        run_sudo sed -i "$expr" "$file"
+    else
+        run_sudo sed -i "" "$expr" "$file"
+    fi
+}
+
+get_cpu_usage() {
+    if [ "$(uname -s)" = "Darwin" ]; then
+        top -l 1 | awk '/CPU usage/ {split($7, a, "%"); print 100 - a[1]}'
+    else
+        top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}'
+    fi
+}
+
+get_ram_usage() {
+    if [ "$(uname -s)" = "Darwin" ]; then
+        local page_size
+        page_size=$(vm_stat | grep "page size of" | awk '{print $8}' | tr -d '.')
+        page_size=${page_size:-16384}
+        local active
+        active=$(vm_stat | grep "Pages active:" | awk '{print $3}' | tr -d '.')
+        local speculative
+        speculative=$(vm_stat | grep "Pages speculative:" | awk '{print $3}' | tr -d '.')
+        local wired
+        wired=$(vm_stat | grep "Pages wired down:" | awk '{print $4}' | tr -d '.')
+        local compressed
+        compressed=$(vm_stat | grep "Pages occupied by compressor:" | awk '{print $5}' | tr -d '.')
+        compressed=${compressed:-0}
+        local used_pages=$((active + speculative + wired + compressed))
+        local used_mb=$((used_pages * page_size / 1024 / 1024))
+        echo "$used_mb"
+    else
+        free -m | awk '/Mem:/ {print $3}'
+    fi
+}
+
 # ------------------------------------------------------------------------------
 # HELPERS: Service & System Management
 # ------------------------------------------------------------------------------
@@ -203,20 +243,32 @@ backup_env() {
 cmd_mode() {
     # If no arguments provided, show menu and accept interactive input with flags
     if [[ $# -eq 0 ]]; then
-        echo "===================================================="
-        echo "   OCTOR PERFORMANCE MODE SELECTOR"
-        echo "===================================================="
-        echo "RAM Modes:  1) sp-perf-ram  2) sp-norm-ram  3) sp-eco-ram"
-        echo "            4) pp-perf-ram  5) pp-norm-ram"
-        echo "SSD Modes:  6) sp-perf-ssd  7) sp-norm-ssd  8) sp-eco-ssd"
-        echo "            9) pp-perf-ssd 10) pp-norm-ssd"
-        echo "----------------------------------------------------"
+        echo "========================================================================="
+        echo "                      OCTOR PERFORMANCE MODE SELECTOR"
+        echo "========================================================================="
+        echo "  ⚠️  Note: 1-4: Sequential upload (Single Part). Small storage friendly."
+        echo "            5-6: Parallel upload (Single Part). Requires cache space > largest file."
+        echo "            7-10: Parallel upload (Parallel Part). Nested mount. Splits files."
+        echo "-------------------------------------------------------------------------"
+        echo "Manual Override Mode:"
+        echo "  0) custom              [Preserve and apply manual edits in custom.env]"
+        echo "SSD Single Part (VFS Cache Off)   [Low RAM, sequential upload, safe single files]:"
+        echo "  1) sp-perf-ssd         2) sp-eco-ssd"
+        echo "RAM Single Part (VFS Cache Off)   [Saves SSD life, sequential upload, safe single files]:"
+        echo "  3) sp-perf-ram         4) sp-eco-ram"
+        echo "SSD Single Part (VFS Cache Write)  [Parallel upload. Requires local cache > largest file]:"
+        echo "  5) sp-write-perf-ssd   6) sp-write-eco-ssd"
+        echo "RAM Parallel Part (VFS Chunker)    [Parallel upload, nested mount, split files (incompatible)]:"
+        echo "  7) pp-perf-ram         8) pp-eco-ram"
+        echo "SSD Parallel Part (VFS Chunker)    [Parallel upload, nested mount, split files (incompatible)]:"
+        echo "  9) pp-perf-ssd        10) pp-eco-ssd"
+        echo "-------------------------------------------------------------------------"
         echo "Optional Flags (can be combined):"
         echo "  f = Force kill ghosts    d = Rebuild Docker"
         echo "  r = Clear Rclone cache   s = Sync Systemd"
         echo "  b = Run in Bench Mode    n = Restart Nginx"
         echo "  c = Compile Binaries"
-        echo "===================================================="
+        echo "========================================================================="
         read -p "Select option and flags (e.g. '1 f r d n c'): " INPUT || exit 1
         # Split input into positional parameters
         set -- $INPUT
@@ -235,16 +287,17 @@ cmd_mode() {
     # 1. Determine Mode
     if [[ "$MODE_ARG" =~ ^[0-9]+$ ]]; then
         case "$MODE_ARG" in
-            1) MODE="sp-perf-ram" ;;
-            2) MODE="sp-norm-ram" ;;
-            3) MODE="sp-eco-ram" ;;
-            4) MODE="pp-perf-ram" ;;
-            5) MODE="pp-norm-ram" ;;
-            6) MODE="sp-perf-ssd" ;;
-            7) MODE="sp-norm-ssd" ;;
-            8) MODE="sp-eco-ssd" ;;
+            0) MODE="custom" ;;
+            1) MODE="sp-perf-ssd" ;;
+            2) MODE="sp-eco-ssd" ;;
+            3) MODE="sp-perf-ram" ;;
+            4) MODE="sp-eco-ram" ;;
+            5) MODE="sp-write-perf-ssd" ;;
+            6) MODE="sp-write-eco-ssd" ;;
+            7) MODE="pp-perf-ram" ;;
+            8) MODE="pp-eco-ram" ;;
             9) MODE="pp-perf-ssd" ;;
-            10) MODE="pp-norm-ssd" ;;
+            10) MODE="pp-eco-ssd" ;;
             *) echo "❌ Invalid selection: $MODE_ARG"; exit 1 ;;
         esac
         shift || true
@@ -291,16 +344,45 @@ cmd_mode() {
     local RCLONE_XFERS=2
 
     case "$MODE" in
-        pp-perf-ram|perf|ram-perf|chunker-vfs-ram|ram|ram-chunker) MODE_NAME="chunker-vfs-ram"; RAM_CACHE_ENABLED=true; BUDGET="2000M"; VFS_LIMIT="3G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount"; USE_CHUNKER=true; POLL_INTERVAL="1s"; CHUNK_SIZE="256M"; CONCURRENCY=4; RCLONE_BUFFER="64M"; RCLONE_DRIVE_CHUNK="128M"; RCLONE_XFERS=4 ;;
-        pp-norm-ram) MODE_NAME="chunker-vfs-ram"; RAM_CACHE_ENABLED=true; BUDGET="1500M"; VFS_LIMIT="2G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount"; USE_CHUNKER=true; POLL_INTERVAL="1s"; CHUNK_SIZE="256M"; CONCURRENCY=4; RCLONE_BUFFER="32M"; RCLONE_DRIVE_CHUNK="64M"; RCLONE_XFERS=4 ;;
+        # Custom/Manual Mode (read existing config from ENV file)
+        custom|manual)
+            MODE_NAME=$(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "non-chunker-vfs-ssd")
+            RAM_CACHE_ENABLED=$(grep '^RAM_CACHE_ENABLED=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "false")
+            BUDGET=$(grep '^PER_TORRENT_CACHE_BUDGET=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "2000M")
+            VFS_LIMIT=$(grep '^RCLONE_VFS_CACHE_MAX_SIZE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "off")
+            VFS_CACHE_MODE=$(grep '^RCLONE_VFS_CACHE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "off")
+            STORAGE_PATH=$(grep '^VAULT_STORAGE_PATH=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "$PROJECT_ROOT/infra-data/drive-mount-vfs")
+            USE_CHUNKER=false
+            if [[ "$MODE_NAME" =~ ^chunker-vfs- ]]; then
+                USE_CHUNKER=true
+            fi
+            POLL_INTERVAL=$(grep '^RCLONE_VFS_CACHE_POLL_INTERVAL=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "1h")
+            CHUNK_SIZE=""
+            CONCURRENCY=$(grep '^AWS_UPLOAD_CONCURRENCY=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "1")
+            RCLONE_BUFFER=$(grep '^RCLONE_BUFFER_SIZE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "64M")
+            RCLONE_DRIVE_CHUNK=$(grep '^RCLONE_DRIVE_CHUNK_SIZE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "128M")
+            RCLONE_XFERS=$(grep '^RCLONE_TRANSFERS=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "2")
+            ;;
+
+        # RAM Modes (VFS Cache Off)
         sp-perf-ram|steady|ram-steady|non-chunker-vfs-ram|ram-vfs) MODE_NAME="non-chunker-vfs-ram"; RAM_CACHE_ENABLED=true; BUDGET="2000M"; VFS_LIMIT="off"; VFS_CACHE_MODE="off"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=1; RCLONE_BUFFER="128M"; RCLONE_DRIVE_CHUNK="256M"; RCLONE_XFERS=2 ;;
-        sp-norm-ram) MODE_NAME="non-chunker-vfs-ram"; RAM_CACHE_ENABLED=true; BUDGET="1500M"; VFS_LIMIT="off"; VFS_CACHE_MODE="off"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=1; RCLONE_BUFFER="64M"; RCLONE_DRIVE_CHUNK="128M"; RCLONE_XFERS=2 ;;
-        sp-eco-ram|pp-eco-ram|eco|ram-eco|eco-ram) MODE_NAME="non-chunker-vfs-ram"; RAM_CACHE_ENABLED=true; BUDGET="1000M"; VFS_LIMIT="off"; VFS_CACHE_MODE="off"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=1; RCLONE_BUFFER="32M"; RCLONE_DRIVE_CHUNK="64M"; RCLONE_XFERS=2 ;;
-        pp-perf-ssd|ssd-perf|chunker-vfs-ssd|ssd|ssd-chunker) MODE_NAME="chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="2000M"; VFS_LIMIT="8G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount"; USE_CHUNKER=true; POLL_INTERVAL="10s"; CHUNK_SIZE="1G"; CONCURRENCY=4; RCLONE_BUFFER="64M"; RCLONE_DRIVE_CHUNK="128M"; RCLONE_XFERS=4 ;;
-        pp-norm-ssd) MODE_NAME="chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="1500M"; VFS_LIMIT="4G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount"; USE_CHUNKER=true; POLL_INTERVAL="10s"; CHUNK_SIZE="512M"; CONCURRENCY=4; RCLONE_BUFFER="32M"; RCLONE_DRIVE_CHUNK="64M"; RCLONE_XFERS=4 ;;
-        sp-perf-ssd|ssd-steady|non-chunker-vfs-ssd|ssd-vfs) MODE_NAME="non-chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="2000M"; VFS_LIMIT="off"; VFS_CACHE_MODE="off"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=1; RCLONE_BUFFER="128M"; RCLONE_DRIVE_CHUNK="256M"; RCLONE_XFERS=2 ;;
-        sp-norm-ssd) MODE_NAME="non-chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="1500M"; VFS_LIMIT="off"; VFS_CACHE_MODE="off"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=1; RCLONE_BUFFER="64M"; RCLONE_DRIVE_CHUNK="128M"; RCLONE_XFERS=2 ;;
-        sp-eco-ssd|pp-eco-ssd|ssd-eco) MODE_NAME="non-chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="1000M"; VFS_LIMIT="off"; VFS_CACHE_MODE="off"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=1; RCLONE_BUFFER="32M"; RCLONE_DRIVE_CHUNK="64M"; RCLONE_XFERS=2 ;;
+        sp-eco-ram|eco|ram-eco|eco-ram) MODE_NAME="non-chunker-vfs-ram"; RAM_CACHE_ENABLED=true; BUDGET="1000M"; VFS_LIMIT="off"; VFS_CACHE_MODE="off"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=1; RCLONE_BUFFER="32M"; RCLONE_DRIVE_CHUNK="64M"; RCLONE_XFERS=2 ;;
+
+        # RAM Modes (VFS Chunker - writes)
+        pp-perf-ram|perf|ram-perf|chunker-vfs-ram|ram|ram-chunker) MODE_NAME="chunker-vfs-ram"; RAM_CACHE_ENABLED=true; BUDGET="2000M"; VFS_LIMIT="3G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount"; USE_CHUNKER=true; POLL_INTERVAL="1s"; CHUNK_SIZE="256M"; CONCURRENCY=2; RCLONE_BUFFER="64M"; RCLONE_DRIVE_CHUNK="128M"; RCLONE_XFERS=4 ;;
+        pp-eco-ram) MODE_NAME="chunker-vfs-ram"; RAM_CACHE_ENABLED=true; BUDGET="1000M"; VFS_LIMIT="2G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount"; USE_CHUNKER=true; POLL_INTERVAL="1s"; CHUNK_SIZE="256M"; CONCURRENCY=2; RCLONE_BUFFER="32M"; RCLONE_DRIVE_CHUNK="64M"; RCLONE_XFERS=4 ;;
+
+        # SSD Modes (VFS Cache Off)
+        sp-perf-ssd|ssd-steady|non-chunker-vfs-ssd|ssd-vfs) MODE_NAME="non-chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="6000M"; VFS_LIMIT="off"; VFS_CACHE_MODE="off"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=1; RCLONE_BUFFER="128M"; RCLONE_DRIVE_CHUNK="256M"; RCLONE_XFERS=2 ;;
+        sp-eco-ssd|ssd-eco) MODE_NAME="non-chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="3000M"; VFS_LIMIT="off"; VFS_CACHE_MODE="off"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=1; RCLONE_BUFFER="32M"; RCLONE_DRIVE_CHUNK="64M"; RCLONE_XFERS=2 ;;
+
+        # SSD Modes (VFS Cache Write - no per-torrent cache budget, i.e., 0)
+        sp-write-perf-ssd) MODE_NAME="non-chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="0"; VFS_LIMIT="100G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="10s"; CHUNK_SIZE=""; CONCURRENCY=4; RCLONE_BUFFER="128M"; RCLONE_DRIVE_CHUNK="256M"; RCLONE_XFERS=4 ;;
+        sp-write-eco-ssd) MODE_NAME="non-chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="0"; VFS_LIMIT="50G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount-vfs"; USE_CHUNKER=false; POLL_INTERVAL="1h"; CHUNK_SIZE=""; CONCURRENCY=2; RCLONE_BUFFER="64M"; RCLONE_DRIVE_CHUNK="128M"; RCLONE_XFERS=2 ;;
+
+        # SSD Modes (VFS Chunker - writes)
+        pp-perf-ssd|ssd-perf|chunker-vfs-ssd|ssd|ssd-chunker) MODE_NAME="chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="2000M"; VFS_LIMIT="8G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount"; USE_CHUNKER=true; POLL_INTERVAL="10s"; CHUNK_SIZE="1G"; CONCURRENCY=2; RCLONE_BUFFER="64M"; RCLONE_DRIVE_CHUNK="128M"; RCLONE_XFERS=4 ;;
+        pp-eco-ssd) MODE_NAME="chunker-vfs-ssd"; RAM_CACHE_ENABLED=false; BUDGET="1000M"; VFS_LIMIT="4G"; VFS_CACHE_MODE="writes"; STORAGE_PATH="$PROJECT_ROOT/infra-data/drive-mount"; USE_CHUNKER=true; POLL_INTERVAL="10s"; CHUNK_SIZE="512M"; CONCURRENCY=2; RCLONE_BUFFER="32M"; RCLONE_DRIVE_CHUNK="64M"; RCLONE_XFERS=4 ;;
         *) echo "❌ Invalid mode: $MODE"; exit 1 ;;
     esac
 
@@ -469,18 +551,23 @@ cmd_mode() {
 
     backup_env
     echo "=== UPDATING ENV FOR MODE: $MODE ==="
-    run_sudo sed -i "s|^RAM_CACHE_ENABLED=.*|RAM_CACHE_ENABLED=$RAM_CACHE_ENABLED|" "$ENV_FILE"
-    run_sudo sed -i "s|^PER_TORRENT_CACHE_BUDGET=.*|PER_TORRENT_CACHE_BUDGET=$BUDGET|" "$ENV_FILE"
-    run_sudo sed -i "s|^RCLONE_VFS_CACHE_MAX_SIZE=.*|RCLONE_VFS_CACHE_MAX_SIZE=$VFS_LIMIT|" "$ENV_FILE"
-    run_sudo sed -i "s|^RCLONE_VFS_CACHE_POLL_INTERVAL=.*|RCLONE_VFS_CACHE_POLL_INTERVAL=$POLL_INTERVAL|" "$ENV_FILE"
-    run_sudo sed -i "s|^RCLONE_VFS_CACHE_MODE=.*|RCLONE_VFS_CACHE_MODE=$VFS_CACHE_MODE|" "$ENV_FILE"
-    run_sudo sed -i "s|^VAULT_STORAGE_PATH=.*|VAULT_STORAGE_PATH=$STORAGE_PATH|" "$ENV_FILE"
-    run_sudo sed -i "s|^S3_GATEWAY_STORAGE_DIR=.*|S3_GATEWAY_STORAGE_DIR=$STORAGE_PATH|" "$ENV_FILE"
-    run_sudo sed -i "s|^OCTOR_PERFORMANCE_MODE=.*|OCTOR_PERFORMANCE_MODE=$MODE_NAME|" "$ENV_FILE"
-    run_sudo sed -i "s|^AWS_UPLOAD_CONCURRENCY=.*|AWS_UPLOAD_CONCURRENCY=$CONCURRENCY|" "$ENV_FILE"
-    run_sudo sed -i "s|^RCLONE_BUFFER_SIZE=.*|RCLONE_BUFFER_SIZE=$RCLONE_BUFFER|" "$ENV_FILE"
-    run_sudo sed -i "s|^RCLONE_DRIVE_CHUNK_SIZE=.*|RCLONE_DRIVE_CHUNK_SIZE=$RCLONE_DRIVE_CHUNK|" "$ENV_FILE"
-    run_sudo sed -i "s|^RCLONE_TRANSFERS=.*|RCLONE_TRANSFERS=$RCLONE_XFERS|" "$ENV_FILE"
+    if [[ "$MODE" != "custom" && "$MODE" != "manual" ]]; then
+        run_sed_in_place "s|^RAM_CACHE_ENABLED=.*|RAM_CACHE_ENABLED=$RAM_CACHE_ENABLED|" "$ENV_FILE"
+        run_sed_in_place "s|^PER_TORRENT_CACHE_BUDGET=.*|PER_TORRENT_CACHE_BUDGET=$BUDGET|" "$ENV_FILE"
+        run_sed_in_place "s|^RCLONE_VFS_CACHE_MAX_SIZE=.*|RCLONE_VFS_CACHE_MAX_SIZE=$VFS_LIMIT|" "$ENV_FILE"
+        run_sed_in_place "s|^RCLONE_VFS_CACHE_POLL_INTERVAL=.*|RCLONE_VFS_CACHE_POLL_INTERVAL=$POLL_INTERVAL|" "$ENV_FILE"
+        run_sed_in_place "s|^RCLONE_VFS_CACHE_MODE=.*|RCLONE_VFS_CACHE_MODE=$VFS_CACHE_MODE|" "$ENV_FILE"
+        run_sed_in_place "s|^VAULT_STORAGE_PATH=.*|VAULT_STORAGE_PATH=$STORAGE_PATH|" "$ENV_FILE"
+        run_sed_in_place "s|^S3_GATEWAY_STORAGE_DIR=.*|S3_GATEWAY_STORAGE_DIR=$STORAGE_PATH|" "$ENV_FILE"
+        run_sed_in_place "s|^OCTOR_PERFORMANCE_MODE=.*|OCTOR_PERFORMANCE_MODE=$MODE_NAME|" "$ENV_FILE"
+        run_sed_in_place "s|^AWS_UPLOAD_CONCURRENCY=.*|AWS_UPLOAD_CONCURRENCY=$CONCURRENCY|" "$ENV_FILE"
+        run_sed_in_place "s|^RCLONE_BUFFER_SIZE=.*|RCLONE_BUFFER_SIZE=$RCLONE_BUFFER|" "$ENV_FILE"
+        run_sed_in_place "s|^RCLONE_DRIVE_CHUNK_SIZE=.*|RCLONE_DRIVE_CHUNK_SIZE=$RCLONE_DRIVE_CHUNK|" "$ENV_FILE"
+        run_sed_in_place "s|^RCLONE_CHUNKER_CHUNK_SIZE=.*|RCLONE_CHUNKER_CHUNK_SIZE=$CHUNK_SIZE|" "$ENV_FILE"
+        run_sed_in_place "s|^RCLONE_TRANSFERS=.*|RCLONE_TRANSFERS=$RCLONE_XFERS|" "$ENV_FILE"
+    else
+        echo "ℹ️ Custom Mode: Preserving manually edited values in $ENV_FILE."
+    fi
 
     if [ "$CLEAN_RCLONE" = "true" ]; then
         echo "=== CLEARING RCLONE CACHE ==="
@@ -494,9 +581,7 @@ cmd_mode() {
     run_sudo systemctl start octor-seeder-cache
     wait_for_service "octor-seeder-cache" 60
 
-    if [ "$USE_CHUNKER" = "true" ]; then
-        sed -i "s/chunk_size = .*/chunk_size = ${CHUNK_SIZE}/g" "$RCLONE_CONFIG"
-    fi
+
 
     run_sudo systemctl daemon-reload
     echo "=== STARTING STORAGE LAYER ==="
@@ -581,7 +666,7 @@ cmd_benchmark() {
         echo "🧲 Custom Magnet Detected: $RESOURCE_ID"
     fi
 
-    MODES_LIST=("sp-perf-ram" "sp-norm-ram" "sp-eco-ram" "pp-perf-ram" "pp-norm-ram" "sp-perf-ssd" "sp-norm-ssd" "sp-eco-ssd" "pp-perf-ssd" "pp-norm-ssd")
+    MODES_LIST=("sp-perf-ssd" "sp-eco-ssd" "sp-perf-ram" "sp-eco-ram" "sp-write-perf-ssd" "sp-write-eco-ssd" "pp-perf-ram" "pp-eco-ram" "pp-perf-ssd" "pp-eco-ssd")
     
     local ACTIVE_MODES=()
     if [[ "$TARGET" == "all" || "$TARGET" == "bench-all" ]]; then
@@ -599,7 +684,10 @@ cmd_benchmark() {
 
     # Detect SSD for I/O tracking
     local DEV_PATH=$(df "$PROJECT_ROOT" | tail -n 1 | awk '{print $1}')
-    local DISK_NAME=$(lsblk -no pkname "$DEV_PATH" | tr -d '\r' | head -n 1)
+    local DISK_NAME=""
+    if [ "$(uname -s)" != "Darwin" ] && command -v lsblk >/dev/null 2>&1; then
+        DISK_NAME=$(lsblk -no pkname "$DEV_PATH" 2>/dev/null | tr -d '\r' | head -n 1)
+    fi
     [ -z "$DISK_NAME" ] && DISK_NAME=$(basename "$DEV_PATH")
     local STAT_FILE="/sys/class/block/${DISK_NAME}/stat"
 
@@ -671,8 +759,8 @@ cmd_benchmark() {
             local inst_speed=$(echo "scale=2; ($cur_s - $last_s) / 1048576 / $elapsed" | bc)
             
             # 2. CPU/RAM
-            local cpu=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
-            local ram=$(free -m | awk '/Mem:/ {print $3}')
+            local cpu=$(get_cpu_usage)
+            local ram=$(get_ram_usage)
             
             # 3. SSD I/O
             local cur_r=0; local cur_w=0; local ssd_inst=0
@@ -805,7 +893,10 @@ cmd_benchmark_multi() {
 
     local DEV_PATH DISK_NAME STAT_FILE
     DEV_PATH=$(df "$PROJECT_ROOT" | tail -n 1 | awk '{print $1}')
-    DISK_NAME=$(lsblk -no pkname "$DEV_PATH" 2>/dev/null | tr -d '\r' | head -n 1)
+    DISK_NAME=""
+    if [ "$(uname -s)" != "Darwin" ] && command -v lsblk >/dev/null 2>&1; then
+        DISK_NAME=$(lsblk -no pkname "$DEV_PATH" 2>/dev/null | tr -d '\r' | head -n 1)
+    fi
     [ -z "$DISK_NAME" ] && DISK_NAME=$(basename "$DEV_PATH")
     STAT_FILE="/sys/class/block/${DISK_NAME}/stat"
 
@@ -912,8 +1003,8 @@ cmd_benchmark_multi() {
 
         local inst_speed cpu ram ssd_inst cur_r=0 cur_w=0
         inst_speed=$(echo "scale=2; ($agg_stored-$last_agg)/1048576/$elapsed" | bc)
-        cpu=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
-        ram=$(free -m | awk '/Mem:/ {print $3}')
+        cpu=$(get_cpu_usage)
+        ram=$(get_ram_usage)
         ssd_inst=0
         if [ -f "$STAT_FILE" ]; then
             read -r _ _ cur_r _ _ _ cur_w _ < "$STAT_FILE"
@@ -1211,7 +1302,7 @@ cmd_status() {
     echo "Services: $(systemctl list-units "octor-*" --state=active --no-legend 2>/dev/null | wc -l) active"
     echo "Containers: $(docker ps --format '{{.Names}}' 2>/dev/null | grep octor | wc -l) running"
     echo "Disk: $(df -h "$PROJECT_ROOT" | tail -1 | awk '{print $5}') usage"
-    echo "RAM: $(free -m | awk '/Mem:/ {print $3}')MB used"
+    echo "RAM: $(get_ram_usage)MB used"
 }
 
 # ------------------------------------------------------------------------------
@@ -1330,7 +1421,7 @@ cmd_factory_reset() {
     (cd "$PROJECT_ROOT" && run_sudo docker compose --ansi never down -v --remove-orphans || true)
     
     # Step 3. Retrieve configuration paths
-    local CURRENT_MODE=$(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "non-chunker-vfs-ram")
+    local CURRENT_MODE=$(grep '^OCTOR_PERFORMANCE_MODE=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "non-chunker-vfs-ssd")
     local BADGER_PATH=$(grep '^BADGER_PATH=' "$ENV_FILE" | cut -d= -f2- | tr -d '\r' | xargs || echo "./badger-data")
     [[ "$BADGER_PATH" != /* ]] && BADGER_PATH="$PROJECT_ROOT/$BADGER_PATH"
     

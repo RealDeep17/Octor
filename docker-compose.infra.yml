@@ -54,8 +54,12 @@ services:
       - S3_GATEWAY_STORAGE_DIR=/app/infra-data/drive-mount-vfs
       - SSD_DATA_DIR=/mnt/seeder-cache
       - DATA_DIR=/mnt/seeder-cache
+      - PG_HOST=octor-postgres
+      - PG_PORT=5432
+      - OCTOR_ARR_CONFIG_DIR=/config
     volumes:
       - ./infra-data:/app/infra-data
       - /mnt/seeder-cache:/mnt/seeder-cache
       - ../Big ARRS/downloads:/downloads
+      - ../Big ARRS/config:/config
     restart: unless-stopped

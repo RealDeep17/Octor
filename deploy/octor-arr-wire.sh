@@ -8,9 +8,19 @@
 set -euo pipefail
 
 # --- Configuration & Paths ---
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$DEPLOY_DIR/.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/custom.env"
 ARR_DIR="$(cd "$PROJECT_ROOT/.." && pwd)/Big ARRS"
+
+# In-place sed editing compatibility helper for GNU vs. BSD sed
+sed_inline() {
+    if sed --version >/dev/null 2>&1; then
+        sed -i "$@"
+    else
+        sed -i "" "$@"
+    fi
+}
 
 echo "=== OCTOR *ARR WIRING & INDEXER BOOTSTRAPPING ==="
 
@@ -48,7 +58,7 @@ update_xml_urlbase() {
     local base_path="$2"
     if [ -f "$xml_file" ]; then
         echo "Setting URL Base to '$base_path' in $(basename $(dirname "$xml_file"))..."
-        sed -i "s|<UrlBase>.*</UrlBase>|<UrlBase>$base_path</UrlBase>|g" "$xml_file"
+        sed_inline "s|<UrlBase>.*</UrlBase>|<UrlBase>$base_path</UrlBase>|g" "$xml_file"
     fi
 }
 
@@ -113,16 +123,16 @@ WHISPARR_KEY=$(parse_api_key "$ARR_DIR/config/whisparr/config.xml" "Whisparr") |
 # Update custom.env with the parsed API keys
 echo "Updating custom.env with active API keys..."
 if [ -n "$PROWLARR_KEY" ]; then
-    sed -i "s|^PROWLARR_API_KEY=.*|PROWLARR_API_KEY=$PROWLARR_KEY|" "$ENV_FILE"
+    sed_inline "s|^PROWLARR_API_KEY=.*|PROWLARR_API_KEY=$PROWLARR_KEY|" "$ENV_FILE"
 fi
 if [ -n "$RADARR_KEY" ]; then
-    sed -i "s|^RADARR_API_KEY=.*|RADARR_API_KEY=$RADARR_KEY|" "$ENV_FILE"
+    sed_inline "s|^RADARR_API_KEY=.*|RADARR_API_KEY=$RADARR_KEY|" "$ENV_FILE"
 fi
 if [ -n "$SONARR_KEY" ]; then
-    sed -i "s|^SONARR_API_KEY=.*|SONARR_API_KEY=$SONARR_KEY|" "$ENV_FILE"
+    sed_inline "s|^SONARR_API_KEY=.*|SONARR_API_KEY=$SONARR_KEY|" "$ENV_FILE"
 fi
 if [ -n "$WHISPARR_KEY" ]; then
-    sed -i "s|^WHISPARR_API_KEY=.*|WHISPARR_API_KEY=$WHISPARR_KEY|" "$ENV_FILE"
+    sed_inline "s|^WHISPARR_API_KEY=.*|WHISPARR_API_KEY=$WHISPARR_KEY|" "$ENV_FILE"
 fi
 
 # Reload environment

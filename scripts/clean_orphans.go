@@ -52,7 +52,9 @@ func main() {
 		loadEnv(filepath.Join(execDir, "custom.env"))
 		loadEnv(filepath.Join(execDir, "../custom.env"))
 	}
-	loadEnv("/home/ubuntu/octor/custom.env")
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		loadEnv(filepath.Join(homeDir, "octor/custom.env"))
+	}
 
 	log.Println(strings.Repeat("=", 60))
 	log.Printf("Starting Octor Storage Garbage Collection (Go Version)")

@@ -138,7 +138,7 @@
                   <div class="flex-1 min-w-0">
                     <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" class="vault-name-link text-sm font-medium text-base-content hover:text-o-primaryL transition-colors block truncate" data-async-target="main">{{ .Resource.Name }}</a>
                     <div class="flex items-center gap-2 mt-0.5 text-[11px] text-o-muted">
-                      <span class="tabular-nums">{{ printf "%.2f" .Amount }} GB</span>
+                      <span class="tabular-nums">{{ formatVP .Amount }}</span>
                       <span>·</span>
                       <span>{{ timeAgoLang $.Lang .CreatedAt }}</span>
                       <span class="flex items-center gap-2" data-vault-stats-line>
@@ -243,7 +243,7 @@
                   <div class="flex-1 min-w-0">
                     <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" class="vault-name-link text-sm font-medium text-base-content hover:text-o-primaryL transition-colors block truncate" data-async-target="main">{{ .Resource.Name }}</a>
                     <div class="flex items-center gap-2 mt-0.5 text-[11px] text-o-muted">
-                      <span class="tabular-nums">{{ printf "%.2f" .Amount }} GB</span>
+                      <span class="tabular-nums">{{ formatVP .Amount }}</span>
                       <span>·</span>
                       <span>{{ timeAgoLang $.Lang .CreatedAt }}</span>
                       {{ if .ShowProgress }}
@@ -338,7 +338,7 @@
                   <div class="flex-1 min-w-0">
                     <a href="{{ langPath $.Lang (printf "/%s" .ResourceID) }}" class="vault-name-link text-sm font-medium text-base-content hover:text-o-primaryL transition-colors block truncate" data-async-target="main">{{ .Resource.Name }}</a>
                     <div class="flex items-center gap-2 mt-0.5 text-[11px] text-o-muted">
-                      <span class="tabular-nums">{{ printf "%.2f" .Amount }} GB</span>
+                      <span class="tabular-nums">{{ formatVP .Amount }}</span>
                       <span>·</span>
                       <span>{{ timeAgoLang $.Lang .CreatedAt }}</span>
                     </div>
