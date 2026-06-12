@@ -30,24 +30,35 @@ WORKDIR /app
 COPY . .
 RUN cd web-ui && npm install && npm run build
 
+# --- Stage 2b: Python Builder ---
+FROM ubuntu:24.04 AS python-builder
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY sidecar/requirements.txt .
+RUN python3 -m venv venv && \
+    venv/bin/pip install --no-cache-dir -r requirements.txt
+
 # --- Stage 3: Final Production Image ---
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install core runtime dependencies (build-essential removed to reduce size)
-RUN apt-get update && apt-get install -y \
+# Install core runtime dependencies (build-essential, pip, venv removed to reduce size, and --no-install-recommends added)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     ffmpeg \
     supervisor \
     python3 \
-    python3-pip \
-    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js v24.x
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
-    apt-get install -y nodejs && \
+    apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # Setup application directories
@@ -67,16 +78,15 @@ COPY --from=node-builder /app/web-ui/assets/dist/ web-ui/assets/dist/
 COPY --from=node-builder /app/web-ui/migrations/ web-ui/migrations/
 COPY --from=node-builder /app/ai-proxy/ ai-proxy/
 
+# Copy Python virtual environment from Python Builder stage
+COPY --from=python-builder /app/venv/ sidecar/venv/
+
 # Copy python sidecar code and other microservices configuration/assets
 COPY sidecar/ sidecar/
 COPY torrent-http-proxy/ torrent-http-proxy/
 COPY abuse-store/migrations/ abuse-store/migrations/
 COPY url-store/migrations/ url-store/migrations/
 COPY vault/migrations/ vault/migrations/
-
-# Build Python Sidecar Virtual Environment
-RUN python3 -m venv sidecar/venv && \
-    sidecar/venv/bin/pip install --no-cache-dir -r sidecar/requirements.txt
 
 # Copy Supervisor configuration
 COPY deploy/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
