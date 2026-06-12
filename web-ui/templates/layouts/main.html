@@ -216,7 +216,7 @@
                 const form = e.target;
                 if (!form) return;
                 const action = form.getAttribute('action') || '';
-                const isRemoveForm = action.indexOf('/remove') !== -1 || action.indexOf('/delete') !== -1;
+                const isRemoveForm = (action.indexOf('/remove') !== -1 || action.indexOf('/delete') !== -1) && action.indexOf('/watch/') === -1;
                 if (isRemoveForm && form.dataset.confirmed !== 'true') {
                     e.preventDefault();
                     e.stopImmediatePropagation();

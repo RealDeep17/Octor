@@ -4,25 +4,9 @@ This document tracks upcoming architectural cleanups, migrations, and performanc
 
 ## 🚀 Priority Refactoring
 
-### 1. Refactor Discover Handler (`adult.go`)
-Deconstruct the massive [adult.go](file:///Users/deepanshukumar/Downloads/Octor/web-ui/handlers/discover/adult.go) file under the `discover` package into modular, testable, and maintainable files:
-
-- [ ] **`routes.go` (Route Registration & Middleware):**
-  - Register adult endpoints, route groups, and auth checks.
-- [ ] **`stashdb.go` (StashDB Client & Query Orchestrator):**
-  - GraphQL clients, dynamic studio resolver job (`resolveStudiosJob`), and scene search query formatting.
-- [ ] **`javguru.go` (Jav.guru WP-JSON Client):**
-  - HTML parsing, REST API requests, and JAV-specific studio normalization (`getJavStudioName`, `cleanOriginalImageURL`).
-- [ ] **`posters.go` (Poster Management & Local Image Processing):**
-  - Poster caching, resizing, downscaling (`handlePoster`), and catalog warmer/pruning disk jobs.
-- [ ] **`directsearch.go` (Direct Search Stream Proxy & Torrent Provider):**
-  - Stream proxy logic (`handleDirectSearchProxy`), torrent stream mappings, and Prowlarr indexer queries.
-
----
-
 ## ⚡ Runtime Migrations & Optimizations
 
-### 2. Rewrite Python Sidecar in Go
+### 1. Rewrite Python Sidecar in Go
 Port the Python-based REST API service (`sidecar/main.py`) to a Go microservice (using `gin-gonic/gin` or standard `net/http`):
 
 - [ ] **Size & Runtime Optimization:**
