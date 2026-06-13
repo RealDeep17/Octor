@@ -410,5 +410,23 @@
     }
   }, 1500);
 </script>
+{{ else }}
+<script>
+  (function() {
+    const interval = setInterval(function() {
+      // Keep checking if the user is still on the admin status page.
+      // If the user navigates away, pathname changes, so we clear the interval.
+      if (!/\/admin\/status(\/|$)/.test(window.location.pathname)) {
+        clearInterval(interval);
+        return;
+      }
+      
+      const main = document.querySelector('main');
+      if (main && typeof main.reload === 'function') {
+        main.reload({ noScroll: true });
+      }
+    }, 3000);
+  })();
+</script>
 {{ end }}
 {{ end }}

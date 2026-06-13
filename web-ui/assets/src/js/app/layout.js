@@ -156,14 +156,14 @@ function syncEventSource() {
             }
 
             const path = window.location.pathname;
-            // Match /lib or /{lang}/lib (any 2-letter locale prefix, e.g. /ru/lib)
-            const isLibraryPage = /^(\/[a-z]{2})?\/lib(\/|$)/.test(path);
-            const isVaultPage = /^(\/[a-z]{2})?\/vault(\/|$)/.test(path);
+            // Match /lib, /vault, /admin/library, /admin/vault (and localized versions like /ru/lib)
+            const isLibraryPage = /^(\/[a-z]{2})?(\/lib|\/admin\/library)(\/|$)/.test(path);
+            const isVaultPage = /^(\/[a-z]{2})?(\/vault|\/admin\/vault)(\/|$)/.test(path);
 
-            if ((msg.type === 'library' && isLibraryPage) || (msg.type === 'vault' && isVaultPage)) {
+            if ((isLibraryPage || isVaultPage) && (msg.type === 'library' || msg.type === 'vault')) {
                 const main = document.querySelector('main');
                 if (main && typeof main.reload === 'function') {
-                    main.reload();
+                    main.reload({ noScroll: true });
                 }
             }
         };

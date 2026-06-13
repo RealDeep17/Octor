@@ -118,9 +118,9 @@ async function async(selector, params = {}, scope = null) {
     }
     const els = scope.querySelectorAll(selector);
     for (const el of els) {
-        el.reload = function() {
+        el.reload = function(options) {
             let {url, fetchParams} = params.fetchParams.call(el);
-            return asyncFetch.call(el, url, el, fetchParams, params);
+            return asyncFetch.call(el, url, el, fetchParams, params, options);
         }
         // In case if reload was already invoked
         if (el.reloadResolve) {
