@@ -231,7 +231,7 @@ stop_all_octor() {
 
 kill_ghosts() {
     echo "⚠️  Hunting ghost processes and zombie mounts..."
-    GHOST_NAMES=("rest-api" "web-ui" "vault" "abuse-store" "claims-provider" "torrent-store" "url-store" "video-info" "torrent-archiver" "srt2vtt" "content-transcoder" "magnet2torrent" "torrent-web-seeder" "content-prober" "torrent-http-proxy" "torrent-web-seeder-cleaner" "s3-gateway" "sidecar")
+    GHOST_NAMES=("rest-api" "web-ui" "vault" "abuse-store" "claims-provider" "torrent-store" "url-store" "video-info" "torrent-archiver" "srt2vtt" "content-transcoder" "magnet2torrent" "torrent-web-seeder" "content-prober" "torrent-http-proxy" "torrent-web-seeder-cleaner" "s3-gateway" "sidecar" "ai-proxy")
     # Use exact name matching instead of greedy command-line matching (-f) to prevent accidental system kills
     for name in "${GHOST_NAMES[@]}"; do run_sudo pkill -9 "^${name}$" 2>/dev/null || true; done
     run_sudo pkill -9 "^rclone$" 2>/dev/null || true
@@ -1463,7 +1463,7 @@ RestartSec=3"
     SERVICES[octor-ai-proxy]="$COMMON_HEADER
 Description=Octor AI Proxy
 WorkingDirectory=$PROJECT_ROOT
-ExecStart=/usr/bin/node ai-proxy/proxy.js
+ExecStart=$BIN_DIR/ai-proxy
 
 [Install]
 WantedBy=multi-user.target"

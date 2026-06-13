@@ -4,6 +4,8 @@ infra-data/
 node_modules/
 web-ui/node_modules/
 sidecar/venv/
+sidecar/test/
+sidecar/.deprecated/
 *.log
 *.env
 custom.env

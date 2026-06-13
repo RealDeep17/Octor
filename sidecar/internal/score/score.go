@@ -25,6 +25,8 @@ var (
 	rxBareYear      = regexp.MustCompile(`^(19|20)\d{2}$`)
 	// Trailer/preview indicator keywords in scene titles
 	trailerKeywords = []string{"trailer", "preview", "teaser", "promo"}
+	// Compilation/best-of indicator keywords in scene titles
+	compilationKeywords = []string{"compilation", "best of", "best of ", "collection", "greatest hits", "cumpilation", "cumshot compilation"}
 )
 
 func cleanAlphanumeric(s string) string {
@@ -256,6 +258,21 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 		}
 	}
 
+	// 3.3 For generic platforms (OnlyFans etc.), try to match creator name from scene.Site
+	// e.g. scene.Site = "OnlyFans: Madiiitay" → extract "madiiitay" and check in raw filename.
+	if isPlatform && !perfMatch && scene.Site != "" {
+		parts := rxColonOrHyphen.Split(scene.Site, -1)
+		if len(parts) >= 2 {
+			creatorPart := strings.TrimSpace(stripParentheses(parts[1]))
+			creatorClean := cleanAlphanumeric(unidecode.Unidecode(creatorPart))
+			rawClean := cleanAlphanumeric(unidecode.Unidecode(parsed.Raw))
+			if len(creatorClean) >= 4 && strings.Contains(rawClean, creatorClean) {
+				// Creator name found in torrent filename — treat as a strong contextual match
+				score += 80
+			}
+		}
+	}
+
 	// 3.5 Creator/Performer match validation for generic platforms
 	if isPlatform && !perfMatch {
 		hasCreatorInFilename := false
@@ -288,16 +305,29 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 				diffDays := int(math.Abs(pDate.Sub(sDate).Hours() / 24.0))
 				if diffDays <= 1 {
 					score += 100
+					// Double-confirm bonus: date AND performer both match
+					if perfMatch {
+						score += 50
+					}
 				} else if diffDays <= 2 {
 					score += 50
+					if perfMatch {
+						score += 25
+					}
 				} else if diffDays <= 7 {
 					score += 20
 				} else {
+					// Date diverges more than 7 days — apply penalty scaled by context.
+					// For series (same site+perf, date diverged): apply a stronger penalty
+					// to prevent the wrong series part from winning.
 					if perfMatch && siteMatched {
 						if isOnlyPerformer {
-							score -= 15
+							score -= 20
 						} else {
-							score -= 50
+							// Stronger penalty for series-part disambiguation:
+							// e.g. Brazzers Part 1 vs Part 2 — date off by 1 day
+							// but here date is off by >7 days, so this is likely wrong part
+							score -= 70
 						}
 					} else {
 						tScore := fuzzy.Score(parsed.Name, scene.Title)
@@ -311,12 +341,15 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 			} else {
 				if parsed.Date == scene.Date[:sDateLen] {
 					score += 100
+					if perfMatch {
+						score += 50
+					}
 				} else {
 					if perfMatch && siteMatched {
 						if isOnlyPerformer {
-							score -= 15
+							score -= 20
 						} else {
-							score -= 50
+							score -= 70
 						}
 					} else {
 						tScore := fuzzy.Score(parsed.Name, scene.Title)
@@ -383,6 +416,27 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 		if sceneIsTrailer && !torrentHasTrailer {
 			// Scene is a trailer but torrent is not — penalise
 			score -= 120.0
+		}
+
+		// 5d. Compilation/best-of scoring: penalise compilation scenes when torrent is not.
+		// This prevents year-end compilations from outranking individual episodes.
+		sceneIsCompilation := false
+		for _, kw := range compilationKeywords {
+			if strings.Contains(sceneTitleLower, kw) {
+				sceneIsCompilation = true
+				break
+			}
+		}
+		torrentHasCompilation := false
+		for _, kw := range compilationKeywords {
+			if strings.Contains(rawTorrentLower, kw) {
+				torrentHasCompilation = true
+				break
+			}
+		}
+		if sceneIsCompilation && !torrentHasCompilation {
+			// Scene is a compilation but torrent filename doesn't indicate one — penalise
+			score -= 150.0
 		}
 	}
 
@@ -585,6 +639,14 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 			} else if len(qWordsFiltered) > 0 && (float64(len(sharedWords))/float64(len(qWordsFiltered))) >= 0.6 {
 				hasLegitimateMatch = true
 			} else if hasDurationMatch {
+				hasLegitimateMatch = true
+			} else if perfMatch && siteMatched {
+				// When both performer AND site match, this is already a very strong signal.
+				// The -500 penalty would wrongly drop a correct match simply because the
+				// scene title uses different wording than the torrent filename.
+				hasLegitimateMatch = true
+			} else if isOnlyPerformer && perfMatch {
+				// Query name is purely performer-based; title word overlap is meaningless.
 				hasLegitimateMatch = true
 			}
 

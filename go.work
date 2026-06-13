@@ -2,16 +2,21 @@ go 1.26.3
 
 use (
 	./abuse-store
+	./ai-proxy
 	./claims-provider
+	./clean_orphans
 	./common-services
 	./content-prober
 	./content-transcoder
+	./create_nats_stream
 	./external-proxy
 	./image-transformer
 	./lazymap
 	./magnet2torrent
+	./recover_db
 	./rest-api
 	./s3-gateway
+	./sidecar
 	./srt2vtt
 	./torrent-archiver
 	./torrent-http-proxy
@@ -23,7 +28,6 @@ use (
 	./video-info
 	./video-thumbnails-generator
 	./web-ui
-	./sidecar
 )
 
 replace github.com/anacrolix/torrent => github.com/webtor-io/torrent v0.0.0-20260503123952-6864bc1a2649

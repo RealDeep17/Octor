@@ -1,6 +1,6 @@
 # AI Proxy
 
-A lightweight Node.js proxy that translates Anthropic SDK calls to Google Gemini. This allows services (like `web-ui`) to use the Anthropic SDK while actually communicating with Google's Gemini models.
+A lightweight Go proxy that translates Anthropic SDK calls to Google Gemini. This allows services (like `web-ui`) to use the Anthropic SDK while actually communicating with Google's Gemini models.
 
 ## 🚀 Key Features
 
@@ -32,7 +32,9 @@ sudo systemctl status octor-ai-proxy
 ### Manual Run
 ```sh
 export GEMINI_API_KEY="your-key"
-node ai-proxy/proxy.js
+go run ai-proxy/main.go
+# or run the compiled binary:
+./bin/ai-proxy
 ```
 
 ## 📐 API

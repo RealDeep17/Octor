@@ -654,8 +654,10 @@ func main() {
 	var goCmd *exec.Cmd
 	if _, err := os.Stat("/app/sidecar_bin"); err == nil {
 		goCmd = exec.Command("/app/sidecar_bin")
-	} else if _, err := os.Stat("sidecar/test/sidecar"); err == nil {
-		goCmd = exec.Command("sidecar/test/sidecar")
+	} else if _, err := os.Stat("bin/sidecar"); err == nil {
+		goCmd = exec.Command("bin/sidecar")
+	} else if _, err := os.Stat("bin/sidecar_go_only_bin"); err == nil {
+		goCmd = exec.Command("bin/sidecar_go_only_bin")
 	} else {
 		goCmd = exec.Command("go", "run", "sidecar/main.go")
 	}

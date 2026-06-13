@@ -4,6 +4,14 @@
 
 # --- Stage 1: Go Builder ---
 FROM golang:1.26.4-bookworm AS go-builder
+RUN apt-get update && apt-get install -y --no-install-recommends xz-utils curl && \
+    curl -L -o upx.tar.xz https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-amd64_linux.tar.xz && \
+    tar -xJf upx.tar.xz && \
+    mv upx-4.2.4-amd64_linux/upx /usr/local/bin/upx && \
+    rm -rf upx.tar.xz upx-4.2.4-amd64_linux && \
+    apt-get purge -y xz-utils curl && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Copy workspace configuration and module files first to cache dependencies
@@ -31,6 +39,10 @@ COPY video-info/go.mod video-info/go.sum ./video-info/
 COPY video-thumbnails-generator/go.mod video-thumbnails-generator/go.sum ./video-thumbnails-generator/
 COPY web-ui/go.mod web-ui/go.sum ./web-ui/
 COPY sidecar/go.mod sidecar/go.sum ./sidecar/
+COPY ai-proxy/go.mod ./ai-proxy/
+COPY create_nats_stream/go.mod ./create_nats_stream/
+COPY recover_db/go.mod ./recover_db/
+COPY clean_orphans/go.mod ./clean_orphans/
 
 # Download and cache Go dependencies
 RUN go work sync && go mod download
@@ -38,23 +50,13 @@ RUN go work sync && go mod download
 # Copy the rest of the Go source files
 COPY . .
 
-# Build all Go services
 RUN mkdir -p /app/bin && \
-    SERVICES="rest-api web-ui vault abuse-store claims-provider torrent-store url-store video-info torrent-archiver srt2vtt content-transcoder magnet2torrent torrent-web-seeder content-prober torrent-http-proxy torrent-web-seeder-cleaner s3-gateway sidecar" && \
+    go run scripts/build_unified.go && \
+    upx -1 /app/bin/octor && \
+    SERVICES="rest-api web-ui vault abuse-store claims-provider torrent-store url-store video-info torrent-archiver srt2vtt content-transcoder magnet2torrent torrent-web-seeder content-prober torrent-http-proxy torrent-web-seeder-cleaner s3-gateway sidecar ai-proxy create_nats_stream recover_db clean_orphans" && \
     for svc in $SERVICES; do \
-        echo "Building $svc..."; \
-        if [ -d "$svc/server" ]; then \
-            cd "$svc/server" && go build -ldflags="-s -w" -o /app/bin/$svc . && cd /app || exit 1; \
-        else \
-            cd "$svc" && go build -ldflags="-s -w" -o /app/bin/$svc . && cd /app || exit 1; \
-        fi; \
-    done && \
-    echo "Building create_nats_stream..." && \
-    go build -ldflags="-s -w" -o /app/bin/create_nats_stream scripts/create_nats_stream.go && \
-    echo "Building recover_db..." && \
-    go build -ldflags="-s -w" -o /app/bin/recover_db scripts/recover_db.go && \
-    echo "Building clean_orphans..." && \
-    go build -ldflags="-s -w" -o /app/bin/clean_orphans scripts/clean_orphans.go
+        ln -sf octor /app/bin/$svc; \
+    done
 
 
 # --- Stage 2: Web UI & Node Builder ---
@@ -74,27 +76,25 @@ RUN cd web-ui && npm run build
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Copy static FFmpeg and FFprobe binaries
+COPY --from=mwader/static-ffmpeg:latest /ffmpeg /usr/bin/ffmpeg
+COPY --from=mwader/static-ffmpeg:latest /ffprobe /usr/bin/ffprobe
+
 # Install core runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    ffmpeg \
     supervisor \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js v24.x
-RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    rm -rf /var/lib/apt/lists/*
 
 # Setup application directories
 WORKDIR /app
-RUN mkdir -p bin sidecar ai-proxy web-ui/templates web-ui/locales web-ui/pub web-ui/assets/dist web-ui/migrations infra-data/badger /mnt/seeder-cache && \
+RUN mkdir -p bin sidecar web-ui/templates web-ui/locales web-ui/pub web-ui/assets/dist web-ui/migrations infra-data/badger /mnt/seeder-cache && \
     ln -s /app /srv/octor
 
 # Copy runtime assets and application files (excluding source code and raw dev files)
 COPY sidecar/ sidecar/
-COPY ai-proxy/ ai-proxy/
 COPY web-ui/templates/ web-ui/templates/
 COPY web-ui/locales/ web-ui/locales/
 COPY web-ui/pub/ web-ui/pub/

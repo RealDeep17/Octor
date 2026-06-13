@@ -14,7 +14,7 @@ endif
 DEPLOY_HOST := $(shell grep -s '^DEPLOY_HOST=' $(CUSTOM_ENV) | cut -d= -f2- | tr -d '\r')
 DEPLOY_PATH := $(shell grep -s '^DEPLOY_PATH=' $(CUSTOM_ENV) | cut -d= -f2- | tr -d '\r' || echo "/home/ubuntu/octor")
 
-SERVICES := rest-api web-ui vault abuse-store claims-provider torrent-store url-store video-info torrent-archiver srt2vtt content-transcoder magnet2torrent torrent-web-seeder content-prober torrent-http-proxy torrent-web-seeder-cleaner s3-gateway sidecar
+SERVICES := rest-api web-ui vault abuse-store claims-provider torrent-store url-store video-info torrent-archiver srt2vtt content-transcoder magnet2torrent torrent-web-seeder content-prober torrent-http-proxy torrent-web-seeder-cleaner s3-gateway sidecar ai-proxy create_nats_stream recover_db clean_orphans
 
 all: build
 
@@ -22,19 +22,13 @@ build: build-go build-web-ui
 
 build-go:
 	@mkdir -p $(BIN_DIR)
+	@echo "🔨 Building unified dispatcher binary..."
+	@go run scripts/build_unified.go || exit 1
 	@for svc in $(SERVICES); do \
-		echo "🔨 Building Go service: $$svc..."; \
-		if [ -d "$$svc/server" ]; then \
-			(cd "$$svc/server" && go build -o $(BIN_DIR)/$$svc .) || exit 1; \
-		else \
-			(cd "$$svc" && go build -o $(BIN_DIR)/$$svc .) || exit 1; \
-		fi; \
+		echo "🔗 Linking $$svc to octor..."; \
+		ln -sf octor $(BIN_DIR)/$$svc || exit 1; \
 	done
-	@echo "🔨 Building helper scripts..."
-	@go build -o $(BIN_DIR)/create_nats_stream scripts/create_nats_stream.go || exit 1
-	@go build -o $(BIN_DIR)/recover_db scripts/recover_db.go || exit 1
-	@go build -o $(BIN_DIR)/clean_orphans scripts/clean_orphans.go || exit 1
-	@echo "✅ All Go services and helper scripts built successfully in $(BIN_DIR)"
+	@echo "✅ All Go services and helper scripts built successfully in $(BIN_DIR) as unified binaries"
 
 build-web-ui:
 	@echo "📦 Setting up Web UI node_modules and building assets..."
