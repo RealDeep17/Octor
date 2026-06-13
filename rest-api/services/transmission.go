@@ -10,6 +10,7 @@ import (
 	"hash/fnv"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -551,16 +552,6 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 			break
 		}
 
-		// Import the torrent into Octor
-		res, err := s.rm.Get(g.Request.Context(), payload)
-		if err != nil {
-			log.WithError(err).Errorf("Failed to add resource to Octor")
-			result = err.Error()
-			break
-		}
-
-		s.torrentsLock.Lock()
-		existing, exists := s.trackedTorrent[res.ID]
 		wEmails, rEmails, sEmails := getArrEmails()
 		var addedBy string
 		if isWhisparrRequest(g, wEmails) {
@@ -569,70 +560,163 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 			addedBy = "arr"
 		}
 
-		if exists {
-			// Preserve existing file selection state on re-add, updating if new selection provided
-			existing.Name = res.Name
-			existing.TotalSize = res.Size
-			if len(wanted) > 0 {
-				existing.WantedFiles = wanted
-			}
-			if len(unwanted) > 0 {
-				existing.UnwantedFiles = unwanted
-			}
-			if addedBy != "" {
-				existing.AddedBy = addedBy
-			}
-			s.trackedTorrent[res.ID] = existing
-		} else {
-			tracked := TrackedTorrent{
-				InfoHash:      res.ID,
-				Name:          res.Name,
-				AddedAt:       time.Now(),
-				TotalSize:     res.Size,
-				WantedFiles:   wanted,
-				UnwantedFiles: unwanted,
-				AddedBy:       addedBy,
-			}
-			s.trackedTorrent[res.ID] = tracked
+		// Fast path: magnet URI — extract hash immediately without blocking on DHT.
+		// Whisparr times out (~30s) waiting for torrent-add; rm.Get() on cold magnets
+		// blocks 100s+, so Whisparr never records the DownloadId and marks the client
+		// unavailable. We register now and do rm.Get() in the background.
+		var fastHash, fastName string
+		if filename != "" && strings.HasPrefix(filename, "magnet:") {
+			fastHash, fastName = extractMagnetHash(filename)
 		}
-		s.torrentsLock.Unlock()
 
-		_ = s.saveTorrents()
-
-		if !exists {
-			// Octor-Native Library Ingestion
-			if len(targetEmails) > 0 && s.db != nil {
-				go s.HandleLibraryIngest(context.Background(), res, targetEmails)
-			}
-
-			// Auto-vault: fire-and-forget, non-blocking
-			if s.autoVaultEnabled() {
-				// Defer vault trigger by 30s to allow torrent-set (files-wanted)
-				// from the *arr app to arrive before we start vaulting.
-				// However, if we already received file selection in torrent-add,
-				// we can trigger it much sooner (e.g. 2s) to speed up.
-				delay := 30 * time.Second
-				if len(wanted) > 0 || len(unwanted) > 0 {
-					delay = 2 * time.Second
-					log.Infof("auto-vault: torrent-add already has file selection. Deferring trigger by 2s for %s", res.ID)
+		if fastHash != "" {
+			s.torrentsLock.Lock()
+			existing, exists := s.trackedTorrent[fastHash]
+			if exists {
+				if fastName != "" {
+					existing.Name = fastName
 				}
-				s.deferredAutoVault(res.ID, delay)
+				if len(wanted) > 0 {
+					existing.WantedFiles = wanted
+				}
+				if len(unwanted) > 0 {
+					existing.UnwantedFiles = unwanted
+				}
+				if addedBy != "" {
+					existing.AddedBy = addedBy
+				}
+				s.trackedTorrent[fastHash] = existing
+			} else {
+				s.trackedTorrent[fastHash] = TrackedTorrent{
+					InfoHash:      fastHash,
+					Name:          fastName,
+					AddedAt:       time.Now(),
+					TotalSize:     0,
+					WantedFiles:   wanted,
+					UnwantedFiles: unwanted,
+					AddedBy:       addedBy,
+				}
 			}
-		} else if s.autoVaultEnabled() && (len(wanted) > 0 || len(unwanted) > 0) {
-			// Duplicate torrent-add can still carry a revised file selection from an ARR client.
-			s.deferredAutoVault(res.ID, 2*time.Second)
-		}
+			s.torrentsLock.Unlock()
+			_ = s.saveTorrents()
 
-		addedTorrent := map[string]interface{}{
-			"id":         stringToIntID(res.ID),
-			"name":       res.Name,
-			"hashString": res.ID,
-		}
+			addedTorrent := map[string]interface{}{
+				"id":         stringToIntID(fastHash),
+				"name":       fastName,
+				"hashString": fastHash,
+			}
+			if exists {
+				respArgs["torrent-duplicate"] = addedTorrent
+			} else {
+				respArgs["torrent-added"] = addedTorrent
+			}
 
-		if exists {
-			respArgs["torrent-duplicate"] = addedTorrent
+			// Background goroutine: full rm.Get() to populate real name/size,
+			// then trigger library ingest + auto-vault.
+			capturedExists := exists
+			capturedPayload := payload
+			capturedWanted := wanted
+			capturedUnwanted := unwanted
+			capturedTargetEmails := targetEmails
+			capturedFastHash := fastHash
+			go func() {
+				log.Infof("torrent-add fast-path: resolving %s in background", capturedFastHash)
+				res, err := s.rm.Get(context.Background(), capturedPayload)
+				if err != nil {
+					log.WithError(err).Warnf("torrent-add fast-path: rm.Get() failed for %s", capturedFastHash)
+					return
+				}
+				s.torrentsLock.Lock()
+				if t, ok := s.trackedTorrent[res.ID]; ok {
+					t.Name = res.Name
+					t.TotalSize = res.Size
+					s.trackedTorrent[res.ID] = t
+				}
+				s.torrentsLock.Unlock()
+				_ = s.saveTorrents()
+				if !capturedExists {
+					if len(capturedTargetEmails) > 0 && s.db != nil {
+						s.HandleLibraryIngest(context.Background(), res, capturedTargetEmails)
+					}
+					if s.autoVaultEnabled() {
+						delay := 30 * time.Second
+						if len(capturedWanted) > 0 || len(capturedUnwanted) > 0 {
+							delay = 2 * time.Second
+							log.Infof("auto-vault fast-path: file selection present, deferring 2s for %s", res.ID)
+						}
+						s.deferredAutoVault(res.ID, delay)
+					}
+				} else if s.autoVaultEnabled() && (len(capturedWanted) > 0 || len(capturedUnwanted) > 0) {
+					s.deferredAutoVault(res.ID, 2*time.Second)
+				}
+			}()
+
 		} else {
-			respArgs["torrent-added"] = addedTorrent
+			// Slow path: .torrent metainfo blob, or magnet with no parseable hash.
+			res, err := s.rm.Get(g.Request.Context(), payload)
+			if err != nil {
+				log.WithError(err).Errorf("Failed to add resource to Octor")
+				result = err.Error()
+				break
+			}
+
+			s.torrentsLock.Lock()
+			existing, exists := s.trackedTorrent[res.ID]
+			if exists {
+				// Preserve existing file selection state on re-add, updating if new selection provided
+				existing.Name = res.Name
+				existing.TotalSize = res.Size
+				if len(wanted) > 0 {
+					existing.WantedFiles = wanted
+				}
+				if len(unwanted) > 0 {
+					existing.UnwantedFiles = unwanted
+				}
+				if addedBy != "" {
+					existing.AddedBy = addedBy
+				}
+				s.trackedTorrent[res.ID] = existing
+			} else {
+				s.trackedTorrent[res.ID] = TrackedTorrent{
+					InfoHash:      res.ID,
+					Name:          res.Name,
+					AddedAt:       time.Now(),
+					TotalSize:     res.Size,
+					WantedFiles:   wanted,
+					UnwantedFiles: unwanted,
+					AddedBy:       addedBy,
+				}
+			}
+			s.torrentsLock.Unlock()
+			_ = s.saveTorrents()
+
+			if !exists {
+				if len(targetEmails) > 0 && s.db != nil {
+					go s.HandleLibraryIngest(context.Background(), res, targetEmails)
+				}
+				if s.autoVaultEnabled() {
+					delay := 30 * time.Second
+					if len(wanted) > 0 || len(unwanted) > 0 {
+						delay = 2 * time.Second
+						log.Infof("auto-vault: torrent-add already has file selection. Deferring trigger by 2s for %s", res.ID)
+					}
+					s.deferredAutoVault(res.ID, delay)
+				}
+			} else if s.autoVaultEnabled() && (len(wanted) > 0 || len(unwanted) > 0) {
+				// Duplicate torrent-add can still carry a revised file selection from an ARR client.
+				s.deferredAutoVault(res.ID, 2*time.Second)
+			}
+
+			addedTorrent := map[string]interface{}{
+				"id":         stringToIntID(res.ID),
+				"name":       res.Name,
+				"hashString": res.ID,
+			}
+			if exists {
+				respArgs["torrent-duplicate"] = addedTorrent
+			} else {
+				respArgs["torrent-added"] = addedTorrent
+			}
 		}
 
 	case "torrent-get":
@@ -1545,4 +1629,30 @@ func (s *TransmissionService) isWhisparrTorrent(ctx context.Context, infoHash st
 		return exists
 	}
 	return false
+}
+
+// extractMagnetHash parses a magnet URI and returns the info-hash and display name
+// without any DHT or network calls. Supports 40-char hex and 32-char base32 hashes.
+func extractMagnetHash(magnet string) (hash, name string) {
+	u, err := url.Parse(magnet)
+	if err != nil {
+		return
+	}
+	q := u.Query()
+	for _, xt := range q["xt"] {
+		lower := strings.ToLower(xt)
+		if strings.HasPrefix(lower, "urn:btih:") {
+			h := xt[9:]
+			if len(h) == 40 || len(h) == 32 {
+				hash = strings.ToLower(h)
+				break
+			}
+		}
+	}
+	if dn := q.Get("dn"); dn != "" {
+		name = dn
+	} else if hash != "" {
+		name = hash
+	}
+	return
 }

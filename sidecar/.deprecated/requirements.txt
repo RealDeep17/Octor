@@ -1,0 +1,6 @@
+fastapi==0.136.1
+uvicorn==0.47.0
+requests==2.34.2
+rapidfuzz==3.14.5
+Unidecode==1.4.0
+python-multipart==0.0.28
