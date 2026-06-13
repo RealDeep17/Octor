@@ -231,7 +231,7 @@ stop_all_octor() {
 
 kill_ghosts() {
     echo "⚠️  Hunting ghost processes and zombie mounts..."
-    GHOST_NAMES=("rest-api" "web-ui" "vault" "abuse-store" "claims-provider" "torrent-store" "url-store" "video-info" "torrent-archiver" "srt2vtt" "content-transcoder" "magnet2torrent" "torrent-web-seeder" "content-prober" "torrent-http-proxy" "torrent-web-seeder-cleaner" "s3-gateway")
+    GHOST_NAMES=("rest-api" "web-ui" "vault" "abuse-store" "claims-provider" "torrent-store" "url-store" "video-info" "torrent-archiver" "srt2vtt" "content-transcoder" "magnet2torrent" "torrent-web-seeder" "content-prober" "torrent-http-proxy" "torrent-web-seeder-cleaner" "s3-gateway" "sidecar")
     # Use exact name matching instead of greedy command-line matching (-f) to prevent accidental system kills
     for name in "${GHOST_NAMES[@]}"; do run_sudo pkill -9 "^${name}$" 2>/dev/null || true; done
     run_sudo pkill -9 "^rclone$" 2>/dev/null || true
@@ -1471,7 +1471,7 @@ WantedBy=multi-user.target"
     SERVICES[octor-sidecar]="$COMMON_HEADER
 Description=Octor Sidecar
 WorkingDirectory=$PROJECT_ROOT/sidecar
-ExecStart=$PROJECT_ROOT/sidecar/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=$BIN_DIR/sidecar
 
 [Install]
 WantedBy=multi-user.target"

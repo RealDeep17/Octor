@@ -14,11 +14,11 @@ endif
 DEPLOY_HOST := $(shell grep -s '^DEPLOY_HOST=' $(CUSTOM_ENV) | cut -d= -f2- | tr -d '\r')
 DEPLOY_PATH := $(shell grep -s '^DEPLOY_PATH=' $(CUSTOM_ENV) | cut -d= -f2- | tr -d '\r' || echo "/home/ubuntu/octor")
 
-SERVICES := rest-api web-ui vault abuse-store claims-provider torrent-store url-store video-info torrent-archiver srt2vtt content-transcoder magnet2torrent torrent-web-seeder content-prober torrent-http-proxy torrent-web-seeder-cleaner s3-gateway
+SERVICES := rest-api web-ui vault abuse-store claims-provider torrent-store url-store video-info torrent-archiver srt2vtt content-transcoder magnet2torrent torrent-web-seeder content-prober torrent-http-proxy torrent-web-seeder-cleaner s3-gateway sidecar
 
 all: build
 
-build: build-go build-web-ui build-sidecar
+build: build-go build-web-ui
 
 build-go:
 	@mkdir -p $(BIN_DIR)
@@ -41,12 +41,8 @@ build-web-ui:
 	@cd web-ui && npm install && npm run build
 	@echo "✅ Web UI assets built successfully"
 
-build-sidecar: sidecar/venv/bin/activate
-
-sidecar/venv/bin/activate: sidecar/requirements.txt
-	@echo "🐍 Setting up Python sidecar virtualenv..."
-	@cd sidecar && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
-	@echo "✅ Python sidecar setup successfully"
+build-sidecar:
+	@echo "🚀 Go rewrite of sidecar is now built automatically via build-go"
 
 systemd:
 	@echo "Synchronizing systemd service files..."

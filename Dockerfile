@@ -30,6 +30,7 @@ COPY vault/go.mod vault/go.sum ./vault/
 COPY video-info/go.mod video-info/go.sum ./video-info/
 COPY video-thumbnails-generator/go.mod video-thumbnails-generator/go.sum ./video-thumbnails-generator/
 COPY web-ui/go.mod web-ui/go.sum ./web-ui/
+COPY sidecar/go.mod sidecar/go.sum ./sidecar/
 
 # Download and cache Go dependencies
 RUN go work sync && go mod download
@@ -39,7 +40,7 @@ COPY . .
 
 # Build all Go services
 RUN mkdir -p /app/bin && \
-    SERVICES="rest-api web-ui vault abuse-store claims-provider torrent-store url-store video-info torrent-archiver srt2vtt content-transcoder magnet2torrent torrent-web-seeder content-prober torrent-http-proxy torrent-web-seeder-cleaner s3-gateway" && \
+    SERVICES="rest-api web-ui vault abuse-store claims-provider torrent-store url-store video-info torrent-archiver srt2vtt content-transcoder magnet2torrent torrent-web-seeder content-prober torrent-http-proxy torrent-web-seeder-cleaner s3-gateway sidecar" && \
     for svc in $SERVICES; do \
         echo "Building $svc..."; \
         if [ -d "$svc/server" ]; then \
@@ -69,20 +70,6 @@ COPY web-ui/ ./web-ui/
 RUN cd web-ui && npm run build
 
 
-# --- Stage 2b: Python Builder ---
-FROM ubuntu:24.04 AS python-builder
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-venv \
-    && rm -rf /var/lib/apt/lists/*
-WORKDIR /app/sidecar
-COPY sidecar/requirements.txt .
-RUN python3 -m venv venv && \
-    venv/bin/pip install --no-cache-dir -r requirements.txt
-
-
 # --- Stage 3: Final Production Image ---
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
@@ -93,7 +80,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
     supervisor \
-    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js v24.x
@@ -103,7 +89,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
 
 # Setup application directories
 WORKDIR /app
-RUN mkdir -p bin sidecar/venv ai-proxy web-ui/templates web-ui/locales web-ui/pub web-ui/assets/dist web-ui/migrations infra-data/badger /mnt/seeder-cache && \
+RUN mkdir -p bin sidecar ai-proxy web-ui/templates web-ui/locales web-ui/pub web-ui/assets/dist web-ui/migrations infra-data/badger /mnt/seeder-cache && \
     ln -s /app /srv/octor
 
 # Copy runtime assets and application files (excluding source code and raw dev files)
@@ -125,9 +111,6 @@ COPY --from=go-builder /app/bin/ bin/
 
 # Copy compiled Web UI assets from Node builder stage
 COPY --from=node-builder /app/web-ui/assets/dist/ web-ui/assets/dist/
-
-# Copy Python virtual environment from Python Builder stage
-COPY --from=python-builder /app/sidecar/venv/ sidecar/venv/
 
 # Copy Supervisor configuration
 COPY deploy/supervisord.conf /etc/supervisor/conf.d/supervisord.conf

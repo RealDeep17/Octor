@@ -63,6 +63,26 @@ Enrichment is managed by `web-ui`. It uses a multi-tier fallback system:
 3.  **Kinopoisk**: Tertiary source for Russian content.
 4.  **AI Resolver**: Last-resort identification using Claude (Anthropic).
 
+
+## 🔞 Metadata Enrichment & Parity Testing
+
+NSFW Metadata Enrichment is managed by `web-ui` and resolved using Go/Python sidecar proxies targeting TPDB/StashDB APIs. To test parity and accuracy between Go and Python sidecars, a comparison suite is available under `sidecar/test/` including the cached comparison script [compare.go](file:///Users/deepanshukumar/Downloads/Octor/sidecar/test/compare.go) and the live comparison script [compare_live.go](file:///Users/deepanshukumar/Downloads/Octor/sidecar/test/compare_live.go).
+
+### Active Testsheets & Reports (Adult Content)
+The following testsheets and reports are used for validation and incremental parity refinement:
+*   **Baseline Adult Titles**: [testsheet691-adult.json](file:///Users/deepanshukumar/Downloads/Octor/sidecar/test/testsheet691-adult.json) (691 adult titles testsheet).
+*   **Mismatches Baseline**: [testsheet447-mismatches.json](file:///Users/deepanshukumar/Downloads/Octor/sidecar/test/testsheet447-mismatches.json) (447 mismatch titles evaluated from the baseline run).
+*   **Active Parity Delta**: [testsheet275-alpha1.json](file:///Users/deepanshukumar/Downloads/Octor/sidecar/test/testsheet275-alpha1.json) (275 remaining parities/mismatches/non-enriched titles for active refinement).
+*   **Latest Comparison Results**: [compare_live_results.md](file:///Users/deepanshukumar/Downloads/Octor/sidecar/test/compare_live_results.md) (detailed categorization of mismatches, subcategorized with direct source DB links).
+*   **Latest Raw Comparison Log**: [compare_live_output.log](file:///Users/deepanshukumar/Downloads/Octor/sidecar/test/compare_live_output.log) (raw execution logs).
+*   **Parity Handover Summary**: [handover.md](file:///Users/deepanshukumar/Downloads/Octor/sidecar/test/handover.md) (current execution statistics, context summary, and next steps).
+
+### Parity Refinement & Testing Rules
+When refining the Go sidecar behavior:
+1.  **Incremental Testsheets**: After each refinement or set of refinements, generate a new testsheet JSON in the `sidecar/test/` directory containing only the remaining non-parities. These must follow the naming convention `testsheet+$totalnum+testname.json` (e.g. [testsheet275-alpha1.json](file:///Users/deepanshukumar/Downloads/Octor/sidecar/test/testsheet275-alpha1.json)).
+2.  **Exclude Perfect Matches**: Running subsequent comparison tests should exclude previously verified perfect matches (the list of titles will decrease over time as parity is achieved).
+3.  **Exclude Non-Enriched**: Ignore titles that neither side could enrich (`NEITHER_ENRICHED`), as they are typically junk/poorly named files and not useful for parity tracing.
+
 ## 🔵 Admin Dashboard & Universal WebDAV Integration
 
 The `WebDav-Web-UI_Universal_Viewing-Admin` branch extends Octor with user-scoped administration controls and universal WebDAV client integrations.

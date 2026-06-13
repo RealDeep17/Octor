@@ -23,6 +23,7 @@ use (
 	./video-info
 	./video-thumbnails-generator
 	./web-ui
+	./sidecar
 )
 
 replace github.com/anacrolix/torrent => github.com/webtor-io/torrent v0.0.0-20260503123952-6864bc1a2649

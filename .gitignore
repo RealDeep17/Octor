@@ -47,7 +47,10 @@ badger_data/ badger-data/
 
 # Scratch and disposable files
 /scratch/
-
+/sidecar/test/cache/
+/sidecar/test/*.log
+/sidecar/test/compare_live_results.md
+/sidecar/sidecar_backup_*.tar.gz
 # Compiled binaries
 /caddy-custom
 
