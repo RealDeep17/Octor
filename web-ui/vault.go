@@ -132,13 +132,13 @@ func initializeReaper(c *cli.Context) (*reaper, error) {
 	// Setting DB
 	pg := cs.NewPG(c)
 
-	// Setting Migrations
-	m := cs.NewPGMigration(pg)
-	err := m.Run()
-	if err != nil {
-		pg.Close()
-		return nil, errors.Wrap(err, "failed to run migrations")
-	}
+	// Setting Migrations (migrations are handled by the main serve command; skipping here to avoid conflicts)
+	// m := cs.NewPGMigration(pg)
+	// err := m.Run()
+	// if err != nil {
+	// 	pg.Close()
+	// 	return nil, errors.Wrap(err, "failed to run migrations")
+	// }
 
 	db := pg.Get()
 	if db == nil {
@@ -191,7 +191,9 @@ func initializeReaper(c *cli.Context) (*reaper, error) {
 
 func (r *reaper) Close() {
 	r.pg.Close()
-	r.cpCl.Close()
+	if r.cpCl != nil {
+		r.cpCl.Close()
+	}
 }
 
 func (r *reaper) run(ctx context.Context) {

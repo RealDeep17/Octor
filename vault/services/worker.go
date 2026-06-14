@@ -1331,6 +1331,14 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	if err != nil && !errors.Is(err, pg.ErrNoRows) {
 		return nil, errors.Wrap(err, "failed to select file by hash")
 	}
+	if err == nil {
+		if f.TotalSize != item.Size && item.Size > 0 {
+			f.TotalSize = item.Size
+			if _, dbErr := db.Model(f).Context(ctx).Column("total_size").WherePK().Update(); dbErr != nil {
+				return nil, errors.Wrap(dbErr, "failed to update total_size for existing file")
+			}
+		}
+	}
 	s3Cl := s.s3.Get()
 	if s3Cl == nil {
 		log.Warn("S3 client is nil, skipping S3 check (using local storage mode)")

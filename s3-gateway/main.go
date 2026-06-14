@@ -470,12 +470,8 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 
 		if checkParallelMode() {
 			u.mu.Lock()
-			if r.ContentLength > 0 {
-				if partNum == 1 {
-					u.partSize = r.ContentLength
-				} else if u.partSize == uploadPartSize && r.ContentLength > 5*1024*1024 {
-					u.partSize = r.ContentLength
-				}
+			if r.ContentLength > 0 && partNum == 1 {
+				u.partSize = r.ContentLength
 			}
 			partSizeToUse := u.partSize
 			u.mu.Unlock()
