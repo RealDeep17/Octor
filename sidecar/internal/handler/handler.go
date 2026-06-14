@@ -173,6 +173,8 @@ func (h *Handler) Metadata(c *gin.Context) {
 			cache.Cache.Add(cacheKey, &omdbResp)
 			c.JSON(http.StatusOK, omdbResp)
 			return
+		} else if res != nil {
+			log.Warnf("Best match %q scored %.1f — below threshold 100, discarding", res.Title, score)
 		}
 	}
 

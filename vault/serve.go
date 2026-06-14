@@ -84,11 +84,6 @@ func serve(c *cli.Context) (err error) {
 	// Setting S3Client
 	s3c := cs.NewS3Client(c, cl)
 
-	// Setting Web
-	web := services.NewWeb(c, pg, s3c)
-	svcs = append(svcs, web)
-	defer web.Close()
-
 	// Setting Octor Rest API
 	api := services.NewApi(c, cl)
 
@@ -102,6 +97,11 @@ func serve(c *cli.Context) (err error) {
 	worker := services.NewWorker(c, pg, s3c, api, nt)
 	svcs = append(svcs, worker)
 	defer worker.Close()
+
+	// Setting Web
+	web := services.NewWeb(c, pg, s3c, worker)
+	svcs = append(svcs, web)
+	defer web.Close()
 
 	// Setting EventHandler
 	events := services.NewEventHandler(pg, nt)

@@ -81,5 +81,6 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	lg.POST("/add", h.add)
 	lg.POST("/remove", h.remove)
 	lg.POST("/remove-multiple", h.removeMultiple)
+	lg.POST("/enrich-multiple", h.enrichMultiple)
 	lg.POST("/:id/enrich", h.enrichResource)
 }

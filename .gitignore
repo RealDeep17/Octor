@@ -44,6 +44,8 @@ badger_data/ badger-data/
 !/CHANGELOG.md
 !/DEVELOPMENT.md
 !/TODO.md
+!/vault_diagnostics_report.md
+
 
 # Scratch and disposable files
 /scratch/

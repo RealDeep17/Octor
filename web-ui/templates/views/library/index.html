@@ -62,6 +62,29 @@
             <span class="text-sm font-semibold text-w-text"><span id="library-selected-count">0</span> Selected</span>
         </div>
         <div class="flex items-center gap-2">
+            <form method="post" action="{{ langPath $.Lang "/lib/enrich-multiple" }}" id="library-bulk-enrich-form" onsubmit="return window.submitLibraryBulk('library-bulk-enrich-form')" data-async-target="main" data-async-no-scroll="true">
+                <button type="submit" class="btn btn-xs btn-outline border-green-500/50 text-green-400 hover:bg-green-500/10 hover:border-green-500" title="Enrich Selected">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+                    Refresh
+                </button>
+            </form>
+            <form method="post" action="{{ langPath $.Lang "/library/toggle-multiple" }}" id="library-bulk-toggle-form" onsubmit="return window.submitLibraryBulk('library-bulk-toggle-form')" data-async-target="main" data-async-no-scroll="true">
+                <button type="submit" class="btn btn-xs btn-outline border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10 hover:border-yellow-500" title="Toggle Watched Selected">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mr-1">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                    </svg>
+                    Watched
+                </button>
+            </form>
+            <form method="post" action="{{ langPath $.Lang "/library/layout-multiple" }}" id="library-bulk-layout-form" onsubmit="return window.submitLibraryBulk('library-bulk-layout-form')" data-async-target="main" data-async-no-scroll="true">
+                <button type="submit" class="btn btn-xs btn-outline border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 hover:border-cyan-500" title="Toggle Layout Selected">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mr-1">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                    </svg>
+                    Layout
+                </button>
+            </form>
             <form method="post" action="{{ langPath $.Lang "/lib/remove-multiple" }}" id="library-bulk-remove-form" onsubmit="return window.submitLibraryBulk('library-bulk-remove-form')" data-async-target="main" data-async-no-scroll="true">
                 <button type="submit" class="btn btn-xs btn-outline border-error/50 text-error hover:bg-error/10 hover:border-error" title="Delete Selected">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
@@ -97,121 +120,7 @@
 </section>
 
 <script>
-window.toggleLibraryMode = function() {
-    const prefix = 'library';
-    const btnId = 'library-toggle-select';
-    const barId = 'library-bulk-actions';
-    const stateKey = '_' + prefix + 'SelectModeActive';
-    
-    window[stateKey] = !window[stateKey];
-    const active = window[stateKey];
-    
-    const btn = document.getElementById(btnId);
-    const bar = document.getElementById(barId);
-    const wraps = document.querySelectorAll('.' + prefix + '-item-cb-wrap');
-    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
-    
-    if (btn) {
-        btn.textContent = active ? 'Done' : 'Select';
-        btn.classList.toggle('bg-o-purple/15', active && prefix === 'library');
-        btn.classList.toggle('text-o-purpleL', active && prefix === 'library');
-        btn.classList.toggle('border-o-purple/30', active && prefix === 'library');
-        btn.classList.toggle('bg-o-primary/15', active && prefix === 'vault');
-        btn.classList.toggle('text-o-primaryL', active && prefix === 'vault');
-        btn.classList.toggle('border-o-primary/30', active && prefix === 'vault');
-        btn.classList.toggle('text-o-sub', !active);
-        btn.classList.toggle('border-o-line', !active);
-    }
-    
-    if (active) {
-        bar?.classList.remove('hidden');
-        wraps.forEach(el => el.classList.remove('hidden'));
-        requestAnimationFrame(() => bar?.setAttribute('data-active', 'true'));
-    } else {
-        bar?.removeAttribute('data-active');
-        wraps.forEach(el => el.classList.add('hidden'));
-        cbs.forEach(cb => cb.checked = false);
-        document.querySelectorAll('.library-folder-cb').forEach(cb => {
-            cb.checked = false;
-            cb.indeterminate = false;
-        });
-        if (window.updateLibraryBulkBar) window.updateLibraryBulkBar();
-        setTimeout(() => { if (!window[stateKey]) bar?.classList.add('hidden'); }, 300);
-    }
-};
-
-window.updateLibraryBulkBar = function() {
-    const prefix = 'library';
-    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
-    const allCb = document.getElementById(prefix + '-select-all');
-    const countEl = document.getElementById(prefix + '-selected-count');
-    const retryForm = document.getElementById(prefix + '-bulk-retry-form');
-    
-    let count = 0;
-    let canRetry = 0;
-    cbs.forEach(cb => {
-        if (cb.checked) {
-            count++;
-            if (cb.dataset.canRetry === 'true') canRetry++;
-        }
-    });
-    
-    if (countEl) countEl.textContent = count;
-    if (allCb) {
-        allCb.checked = count > 0 && count === cbs.length;
-        allCb.indeterminate = count > 0 && count < cbs.length;
-    }
-    if (retryForm) {
-        if (canRetry > 0) retryForm.classList.remove('hidden');
-        else retryForm.classList.add('hidden');
-    }
-};
-
-window.submitLibraryBulk = function(formId) {
-    const prefix = 'library';
-    const form = document.getElementById(formId);
-    const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
-    if (!form) return;
-    
-    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
-    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
-    
-    cbs.forEach(cb => {
-        if (cb.checked) {
-            const r = document.createElement('input');
-            r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
-            form.appendChild(r);
-            if (cb.dataset.userId) {
-                const u = document.createElement('input');
-                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
-                form.appendChild(u);
-            }
-        }
-    });
-    window['toggle' + 'Library' + 'Mode']();
-    return true;
-};
-
-(function() {
-    const prefix = 'library';
-    if (window['_' + prefix + 'GlobalInit']) return;
-    window['_' + prefix + 'GlobalInit'] = true;
-    
-    document.addEventListener('change', (e) => {
-        if (e.target.classList.contains(prefix + '-item-cb')) window['update' + 'Library' + 'BulkBar']();
-        if (e.target.id === prefix + '-select-all') {
-            document.querySelectorAll('.' + prefix + '-item-cb, .library-folder-cb').forEach(cb => {
-                cb.checked = e.target.checked;
-                cb.indeterminate = false;
-            });
-            window['update' + 'Library' + 'BulkBar']();
-        }
-    });
-})();
-</script>
-{{ end }}
-
-<script>
+window._librarySelectModeActive = false;
 window.toggleLibraryMode = function() {
     const prefix = 'library';
     const btnId = 'library-toggle-select';
@@ -285,11 +194,6 @@ window.updateLibraryBulkBar = function() {
 window.submitLibraryBulk = function(formId) {
     const form = document.getElementById(formId);
     if (!form) return false;
-    
-    if (form.dataset.confirmed === 'true') {
-        delete form.dataset.confirmed;
-        return true;
-    }
 
     const prefix = 'library';
     const cbs = document.querySelectorAll('.' + prefix + '-item-cb');
@@ -297,6 +201,53 @@ window.submitLibraryBulk = function(formId) {
     cbs.forEach(cb => { if (cb.checked) count++; });
     if (count === 0) return false;
 
+    if (formId === 'library-bulk-enrich-form') {
+        form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+        form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
+        cbs.forEach(cb => {
+            if (cb.checked) {
+                const r = document.createElement('input');
+                r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
+                form.appendChild(r);
+                if (cb.dataset.userId) {
+                    const u = document.createElement('input');
+                    u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
+                    form.appendChild(u);
+                }
+            }
+        });
+        if (window.toggleLibraryMode) window.toggleLibraryMode();
+        return true;
+    }
+
+    if (formId === 'library-bulk-toggle-form' || formId === 'library-bulk-layout-form') {
+        form.querySelectorAll('input[name="video_ids[]"]').forEach(el => el.remove());
+        form.querySelectorAll('input[name="video_types[]"]').forEach(el => el.remove());
+        form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
+        cbs.forEach(cb => {
+            if (cb.checked && cb.dataset.videoId && cb.dataset.videoType) {
+                const v = document.createElement('input');
+                v.type = 'hidden'; v.name = 'video_ids[]'; v.value = cb.dataset.videoId;
+                form.appendChild(v);
+                const t = document.createElement('input');
+                t.type = 'hidden'; t.name = 'video_types[]'; t.value = cb.dataset.videoType;
+                form.appendChild(t);
+                if (cb.dataset.userId) {
+                    const u = document.createElement('input');
+                    u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
+                    form.appendChild(u);
+                }
+            }
+        });
+        if (window.toggleLibraryMode) window.toggleLibraryMode();
+        return true;
+    }
+    
+    if (form.dataset.confirmed === 'true') {
+        delete form.dataset.confirmed;
+        return true;
+    }
+    
     window.handleConfirmRemove(form, 'library');
     return false;
 };
@@ -316,5 +267,42 @@ window.submitLibraryBulk = function(formId) {
             window['update' + 'Library' + 'BulkBar']();
         }
     });
+
+    // Intercept clicks on card elements in select mode to toggle checkbox and prevent navigation
+    document.addEventListener('click', (e) => {
+        if (window._librarySelectModeActive) {
+            // Direct checkbox clicks should propagate down so browser handles toggle natively
+            if (e.target.classList.contains('library-item-cb') || e.target.classList.contains('library-folder-cb')) {
+                return;
+            }
+            
+            // Checkbox wrapper click
+            if (e.target.closest('.library-item-cb-wrap')) {
+                e.preventDefault();
+                e.stopPropagation();
+                const item = e.target.closest('.library-item, .admin-library-item');
+                const cb = item ? item.querySelector('.library-item-cb, .library-folder-cb') : null;
+                if (cb) {
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                return;
+            }
+
+            // Card click anywhere else
+            const item = e.target.closest('.library-item, .admin-library-item');
+            if (item) {
+                e.preventDefault();
+                e.stopPropagation();
+                const cb = item.querySelector('.library-item-cb, .library-folder-cb');
+                if (cb) {
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                return;
+            }
+        }
+    }, true);
 })();
 </script>
+{{ end }}

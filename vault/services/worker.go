@@ -120,6 +120,7 @@ type Worker struct {
 	maxConcurrentJobs int
 	humanReadable     bool
 	wg                sync.WaitGroup
+	wakeup            chan struct{}
 }
 
 const (
@@ -204,9 +205,22 @@ func NewWorker(c *cli.Context, pgc *cs.PG, s3 *cs.S3Client, api *Api, nt *cs.NAT
 		workerBase:        host,
 		verifyIntegrity:   c.BoolT(verifyIntegrityFlag),
 		maxConcurrentJobs: c.Int(maxConcurrentJobsFlag),
+		wakeup:            make(chan struct{}, 100),
 	}
 	log.WithField("max_concurrent_jobs", w.maxConcurrentJobs).Info("Worker configured")
 	return w
+}
+
+func (s *Worker) Wakeup() {
+	if s == nil || s.wakeup == nil {
+		return
+	}
+	for i := 0; i < s.nwrks; i++ {
+		select {
+		case s.wakeup <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // Serve starts nwrks independent claim loops. Each goroutine has its own
@@ -280,6 +294,7 @@ func (s *Worker) claimLoop(workerID string) {
 			case <-s.ctx.Done():
 				return
 			case <-time.After(claimIdleSleep):
+			case <-s.wakeup:
 			}
 			continue
 		}
@@ -345,6 +360,7 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 		  %s
 		  %s
 		ORDER BY
+		  priority DESC,
 		  CASE
 		    WHEN status IN (%d, %d) THEN 0
 		    WHEN status IN (%d, %d) THEN 1
@@ -367,6 +383,7 @@ func (s *Worker) tryClaim(ctx context.Context, db *pg.DB, workerID string) (*Res
 		UPDATE resource
 		SET claim_expires_at = now() + interval '%d seconds',
 		    claimed_by = ?,
+		    priority = 0,
 		    status = CASE
 		      WHEN status IN (%d, %d, %d) THEN %d
 		      WHEN status IN (%d, %d, %d) THEN %d

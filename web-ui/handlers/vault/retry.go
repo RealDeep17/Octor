@@ -55,10 +55,10 @@ func (h *Handler) processRetry(ctx context.Context, resourceID string, user *aut
 		return errors.New("unauthorized: pledge not found for this resource")
 	}
 
-	// Trigger PutResource to reset status/error in the vault API client
-	_, err = h.vault.PutResource(ctx, resourceID)
+	// Trigger RefreshResource to prioritize and retry the resource in vault API
+	_, err = h.vault.RefreshResource(ctx, resourceID)
 	if err != nil {
-		return errors.Wrap(err, "failed to queue resource retry in vault api")
+		return errors.Wrap(err, "failed to retry resource in vault api")
 	}
 
 	return nil

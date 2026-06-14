@@ -55,7 +55,7 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 		cli.DurationFlag{
 			Name:   VaultResourceTransferTimeoutPeriodFlag,
 			Usage:  "period after which resource is removed and transfer attempts are stopped",
-			Value:  7 * 24 * time.Hour,
+			Value:  48 * time.Hour,
 			EnvVar: "VAULT_RESOURCE_TRANSFER_TIMEOUT_PERIOD",
 		},
 		cli.StringFlag{
@@ -1086,6 +1086,15 @@ func (s *Vault) PutResource(ctx context.Context, resourceID string) (*Resource, 
 	}
 	return s.vaultApi.PutResource(ctx, resourceID, selectedFiles)
 }
+
+// RefreshResource triggers a refresh/retry/prioritization of a resource in the vault API
+func (s *Vault) RefreshResource(ctx context.Context, resourceID string) (*Resource, error) {
+	if s.vaultApi == nil {
+		return nil, errors.New("vault API is not configured")
+	}
+	return s.vaultApi.RefreshResource(ctx, resourceID)
+}
+
 
 // pointsEqual compares two *float64 values, treating nil as distinct from any number
 func pointsEqual(a, b *float64) bool {

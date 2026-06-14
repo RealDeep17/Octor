@@ -1,6 +1,6 @@
 {{ define "title" }}Admin Vault{{ end }}
 {{ define "main" }}
-<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6">
+<section class="min-h-screen pt-24 sm:pt-[120px] pb-20 px-3 sm:px-6" data-async-view="vault/progress">
   <div class="max-w-[960px] mx-auto">
     <div class="hidden sm:inline-flex badge badge-lg bg-o-primary/10 border-o-primary/30 text-o-primaryL gap-2 px-4 py-3 mb-4 text-xs font-semibold tracking-widest uppercase">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
@@ -67,6 +67,16 @@
             <option value="all">All status</option>
             <option value="vaulting">Vaulting</option>
             <option value="vaulted">Vaulted</option>
+            <option value="errors">Errors</option>
+            <option value="notinlib">Not in Library</option>
+          </select>
+          <select id="vault-sort-select" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full sm:w-44 shrink-0">
+            <option value="date_desc">Newest first</option>
+            <option value="date_asc">Oldest first</option>
+            <option value="size_desc">Size: Large to Small</option>
+            <option value="size_asc">Size: Small to Large</option>
+            <option value="downloaded_desc">Downloaded: Large to Small</option>
+            <option value="downloaded_asc">Downloaded: Small to Large</option>
           </select>
           <select name="user" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-full sm:w-64" onchange="this.form.requestSubmit()">
             {{ range .Data.Users }}
@@ -128,6 +138,11 @@
               data-vault-status="vaulting"
               data-vault-progress
               data-vault-saved-label="{{ if and .Resource (gt (len .Resource.SelectedFiles) 0) }}{{ t $.Lang "vault.dashboard.vaultedSelective" }}{{ else }}{{ t $.Lang "vault.dashboard.vaulted" }}{{ end }}"
+              data-vault-error="{{ if and .WorkerStatus .WorkerStatus.Error }}true{{ else }}false{{ end }}"
+              data-vault-in-library="{{ if .InLibrary }}true{{ else }}false{{ end }}"
+              data-vault-size="{{ .Amount }}"
+              data-vault-created="{{ .CreatedAt.Unix }}"
+              data-vault-downloaded="{{ if .WorkerStatus }}{{ multiply .Amount (div .WorkerStatus.GetProgress 100.0) }}{{ else }}0{{ end }}"
             >
               {{/* Progress fill — the whole card background IS the progress bar */}}
               <div class="absolute inset-0 pointer-events-none" data-vault-progress-bar-wrap>
@@ -181,7 +196,7 @@
                     {{ end }}
                   </span>
 
-                  <form method="post" action="{{ langPath $.Lang "/admin/vault/retry" }}" class="inline hidden" data-vault-retry-form data-async-target="main">
+                  <form method="post" action="{{ langPath $.Lang "/admin/vault/retry" }}" class="inline" data-vault-retry-form data-async-target="main">
                     <input type="hidden" name="user_id" value="{{ .UserID }}" />
                     <input type="hidden" name="resource_id" value="{{ .ResourceID }}" />
                     <button type="submit" class="p-1 text-o-muted hover:text-o-cyan opacity-0 group-hover:opacity-100 transition-opacity" title="Retry">
@@ -231,6 +246,11 @@
                 data-vault-progress
                 data-vault-saved-label="{{ if and .Resource (gt (len .Resource.SelectedFiles) 0) }}{{ t $.Lang "vault.dashboard.vaultedSelective" }}{{ else }}{{ t $.Lang "vault.dashboard.vaulted" }}{{ end }}"
               {{ end }}
+              data-vault-error="{{ if and .WorkerStatus .WorkerStatus.Error }}true{{ else }}false{{ end }}"
+              data-vault-in-library="{{ if .InLibrary }}true{{ else }}false{{ end }}"
+              data-vault-size="{{ .Amount }}"
+              data-vault-created="{{ .CreatedAt.Unix }}"
+              data-vault-downloaded="{{ if and .ShowProgress .WorkerStatus }}{{ multiply .Amount (div .WorkerStatus.GetProgress 100.0) }}{{ else }}0{{ end }}"
             >
               {{/* Progress fill — the whole card background IS the progress bar */}}
               {{ if .ShowProgress }}
@@ -307,7 +327,7 @@
                   {{ end }}
 
                   {{ if .ShowProgress }}
-                  <form method="post" action="{{ langPath $.Lang "/admin/vault/retry" }}" class="inline hidden" data-vault-retry-form data-async-target="main">
+                  <form method="post" action="{{ langPath $.Lang "/admin/vault/retry" }}" class="inline" data-vault-retry-form data-async-target="main">
                     <input type="hidden" name="user_id" value="{{ .UserID }}" />
                     <input type="hidden" name="resource_id" value="{{ .ResourceID }}" />
                     <button type="submit" class="p-1 text-o-muted hover:text-o-cyan opacity-0 group-hover:opacity-100 transition-opacity" title="Retry">
@@ -352,6 +372,11 @@
               class="vault-item group relative rounded-xl border border-o-line/50 overflow-hidden transition-all duration-150"
               data-resource-id="{{ .ResourceID }}"
               data-vault-status="vaulted"
+              data-vault-error="{{ if and .WorkerStatus .WorkerStatus.Error }}true{{ else }}false{{ end }}"
+              data-vault-in-library="{{ if .InLibrary }}true{{ else }}false{{ end }}"
+              data-vault-size="{{ .Amount }}"
+              data-vault-created="{{ .CreatedAt.Unix }}"
+              data-vault-downloaded="{{ .Amount }}"
             >
               <div class="relative flex items-center gap-3 px-3 py-2.5">
                 <div class="vault-item-cb-wrap shrink-0 hidden">
@@ -386,6 +411,8 @@
                     {{ if gt (len .Resource.SelectedFiles) 0 }}Selective{{ else }}Saved{{ end }}
                   </span>
 
+
+
                   <form method="post" action="{{ langPath $.Lang "/admin/vault/remove" }}" data-async-target="main" data-async-no-scroll="true" class="inline" onsubmit="return window.handleConfirmRemove(this, 'vault')">
                     <input type="hidden" name="user_id" value="{{ .UserID }}" />
                     <input type="hidden" name="resource_id" value="{{ .ResourceID }}" />
@@ -404,6 +431,7 @@
     {{ "vault/progress.js" | asset }}
 
     <script>
+    window._vaultSelectModeActive = false;
     window.toggleVaultMode = function() {
         var prefix = 'vault';
         var btnId = 'vault-toggle-select';
@@ -529,15 +557,45 @@
         var form = document.getElementById(formId);
         if (!form) return false;
 
-        if (form.dataset.confirmed === 'true') {
-            delete form.dataset.confirmed;
-            return true;
-        }
-
         var cbs = document.querySelectorAll('.vault-item-cb');
         var count = 0;
         cbs.forEach(function(cb) { if (cb.checked) count++; });
         if (count === 0) return false;
+
+        if (formId === 'vault-bulk-retry-form') {
+            // Clear previous dynamically added resource_ids and user_ids
+            form.querySelectorAll('input[name="resource_ids[]"]').forEach(function(el) { el.remove(); });
+            form.querySelectorAll('input[name="user_ids[]"]').forEach(function(el) { el.remove(); });
+
+            cbs.forEach(function(cb) {
+                if (cb.checked) {
+                    if (formId === 'vault-bulk-retry-form' && cb.dataset.canRetry !== 'true') return;
+
+                    var rInput = document.createElement('input');
+                    rInput.type = 'hidden';
+                    rInput.name = 'resource_ids[]';
+                    rInput.value = cb.dataset.resourceId;
+                    form.appendChild(rInput);
+
+                    var uInput = document.createElement('input');
+                    uInput.type = 'hidden';
+                    uInput.name = 'user_ids[]';
+                    uInput.value = cb.dataset.userId;
+                    form.appendChild(uInput);
+                }
+            });
+
+            // Trigger layout selection toggle off
+            if (typeof window.toggleVaultMode === 'function') {
+                window.toggleVaultMode();
+            }
+            return true; // Submit immediately!
+        }
+
+        if (form.dataset.confirmed === 'true') {
+            delete form.dataset.confirmed;
+            return true;
+        }
 
         window.handleConfirmRemove(form, 'vault');
         return false;
@@ -573,33 +631,13 @@
         });
     })();
 
-    (function() {
-        var searchInput = document.querySelector('#vault-search-form input[name="q"]');
-        var emptyMsg = document.getElementById('vault-search-empty');
-        if (searchInput) {
-            searchInput.addEventListener('input', function() {
-                var q = searchInput.value.toLowerCase().trim();
-                var visible = 0;
-                document.querySelectorAll('.vault-item').forEach(function(row) {
-                    var link = row.querySelector('.vault-name-link');
-                    var name = link ? link.textContent.toLowerCase() : '';
-                    var show = !q || name.includes(q);
-                    row.style.display = show ? '' : 'none';
-                    if (show) visible++;
-                });
-                if (window.updateVaultBracketCounts) window.updateVaultBracketCounts();
-                if (window.updateVaultBulkBar) window.updateVaultBulkBar();
-                if (emptyMsg) emptyMsg.classList.toggle('hidden', visible > 0 || !q);
-            });
-        }
 
+    if (window.updateVaultBracketCounts) window.updateVaultBracketCounts();
+    if (window.updateVaultBulkBar) window.updateVaultBulkBar();
+    setTimeout(function() {
         if (window.updateVaultBracketCounts) window.updateVaultBracketCounts();
         if (window.updateVaultBulkBar) window.updateVaultBulkBar();
-        setTimeout(function() {
-            if (window.updateVaultBracketCounts) window.updateVaultBracketCounts();
-            if (window.updateVaultBulkBar) window.updateVaultBulkBar();
-        }, 50);
-    })();
+    }, 50);
     </script>
 
     {{ else }}

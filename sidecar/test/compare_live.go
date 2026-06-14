@@ -41,11 +41,11 @@ func main() {
 	fmt.Println("Starting Python sidecar on port 8093 (live)...")
 	var pyCmd *exec.Cmd
 	if _, err := os.Stat("sidecar/venv/bin/uvicorn"); err == nil {
-		pyCmd = exec.Command("./venv/bin/uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8093")
-		pyCmd.Dir = "sidecar"
+		pyCmd = exec.Command("../venv/bin/uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8093")
+		pyCmd.Dir = "sidecar/.deprecated"
 	} else {
 		pyCmd = exec.Command("uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8093")
-		pyCmd.Dir = "sidecar"
+		pyCmd.Dir = "sidecar/.deprecated"
 	}
 	pyCmd.Env = append(os.Environ(),
 		"PORT=8093",
@@ -69,12 +69,11 @@ func main() {
 		pyCmd.Process.Kill()
 	}()
 
-	// Start Go sidecar on port 8095 targeting live APIs
-	fmt.Println("Starting Go sidecar on port 8095 (live)...")
+	// Start Go sidecar on port 8097 targeting live APIs
+	fmt.Println("Starting Go sidecar on port 8097 (live)...")
 	goCmd := exec.Command("go", "run", "sidecar/main.go")
 	goCmd.Env = append(os.Environ(),
-		"PORT=8095",
-		"OMDB_API_PORT=8095",
+		"PORT=8097",
 		"THEPORNDB_API_KEY=4MODCdLTeVcKDx28wTWiW86sF2IRqlnmVe0XVkGG55696daf",
 		"STASHDB_API_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiIwMTlkZmZkYS0yZGVmLTdlN2UtYWQ4Zi0yN2FkZjc1MDI1NmYiLCJzdWIiOiJBUElLZXkiLCJpYXQiOjE3NzgxMTM5ODF9.GgudiUnFvNXpQic158c3QtheEkYY2rTLtEu5PuYn2xY",
 		"TPDB_BASE=https://api.theporndb.net",
@@ -106,7 +105,7 @@ func main() {
 	resp.Body.Close()
 
 	// Verify Go sidecar
-	resp, err = client.Get("http://localhost:8095/settings")
+	resp, err = client.Get("http://localhost:8097/settings")
 	if err != nil {
 		fmt.Printf("ERROR: Go sidecar is not reachable: %v\n", err)
 		return
@@ -143,7 +142,7 @@ func main() {
 			defer func() { <-sem }()
 
 			pyURL := fmt.Sprintf("http://localhost:8093/?t=%s&porn=true", url.QueryEscape(t))
-			goURL := fmt.Sprintf("http://localhost:8095/?t=%s&porn=true", url.QueryEscape(t))
+			goURL := fmt.Sprintf("http://localhost:8097/?t=%s&porn=true", url.QueryEscape(t))
 
 			pyReq, _ := http.NewRequest("GET", pyURL, nil)
 			pyResp, pyErr := client.Do(pyReq)

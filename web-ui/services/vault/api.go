@@ -216,6 +216,22 @@ func (s *Api) DeleteResource(ctx context.Context, resourceID string) (*Resource,
 	return resource, nil
 }
 
+// RefreshResource triggers a refresh/retry/prioritization of a resource in the Vault
+func (s *Api) RefreshResource(ctx context.Context, resourceID string) (*Resource, error) {
+	u := fmt.Sprintf("%s/resource/%s/refresh", s.url, resourceID)
+	resource := &Resource{}
+	found, err := s.doRequest(ctx, u, "POST", nil, resource)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to refresh resource")
+	}
+	s.resourcesCache.Drop(resourceID)
+	if !found {
+		return nil, nil
+	}
+	return resource, nil
+}
+
+
 // GetProgress returns the storage progress as a percentage (0-100)
 func (r *Resource) GetProgress() float64 {
 	if r.TotalSize == 0 {

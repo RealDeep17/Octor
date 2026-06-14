@@ -46,6 +46,8 @@ func RegisterHandler(r *gin.Engine, svc *uvs.Service) {
 	// User status filter — client sends visible IMDB ids, server returns
 	// watched + rating state for each. Drives discover badges.
 	gr.POST("/status", h.filterUserStatus)
+	gr.POST("/toggle-multiple", h.toggleMultiple)
+	gr.POST("/layout-multiple", h.layoutMultiple)
 }
 
 // --- User status filter ---
@@ -409,3 +411,124 @@ func (h *Handler) setSeriesPosterLayout(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
+
+func (h *Handler) toggleMultiple(c *gin.Context) {
+	user := auth.GetUserFromContext(c)
+	if user == nil || !user.HasAuth() {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		VideoIDs   []string `form:"video_ids[]"`
+		VideoTypes []string `form:"video_types[]"`
+	}
+
+	if err := c.ShouldBind(&req); err != nil {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	var cleanIDs []string
+	var cleanTypes []string
+	for i, vid := range req.VideoIDs {
+		if i < len(req.VideoTypes) && vid != "" && req.VideoTypes[i] != "" {
+			cleanIDs = append(cleanIDs, vid)
+			cleanTypes = append(cleanTypes, req.VideoTypes[i])
+		}
+	}
+
+	if len(cleanIDs) > 0 {
+		statusMap, err := h.svc.FilterUserStatus(ctx, user.ID, cleanIDs)
+		if err != nil {
+			_ = c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		for i, vid := range cleanIDs {
+			vtype := cleanTypes[i]
+			isWatched := false
+			if st, ok := statusMap[vid]; ok {
+				isWatched = st.Watched
+			}
+
+			if isWatched {
+				if vtype == "movie" || vtype == "adult" {
+					_ = h.svc.UnmarkMovie(ctx, user.ID, vid)
+				} else if vtype == "series" {
+					_ = h.svc.UnmarkSeries(ctx, user.ID, vid)
+				}
+			} else {
+				if vtype == "movie" || vtype == "adult" {
+					_ = h.svc.MarkMovieWatched(ctx, user.ID, vid, models.UserVideoSourceManual)
+				} else if vtype == "series" {
+					_ = h.svc.MarkSeriesWatched(ctx, user.ID, vid, models.UserVideoSourceManual)
+				}
+			}
+		}
+	}
+
+	web.RedirectWithSuccessAndMessage(c, "toast.settingsSaved")
+}
+
+func (h *Handler) layoutMultiple(c *gin.Context) {
+	user := auth.GetUserFromContext(c)
+	if user == nil || !user.HasAuth() {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		VideoIDs   []string `form:"video_ids[]"`
+		VideoTypes []string `form:"video_types[]"`
+	}
+
+	if err := c.ShouldBind(&req); err != nil {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	var cleanIDs []string
+	var cleanTypes []string
+	for i, vid := range req.VideoIDs {
+		if i < len(req.VideoTypes) && vid != "" && req.VideoTypes[i] != "" {
+			cleanIDs = append(cleanIDs, vid)
+			cleanTypes = append(cleanTypes, req.VideoTypes[i])
+		}
+	}
+
+	if len(cleanIDs) > 0 {
+		statusMap, err := h.svc.FilterUserStatus(ctx, user.ID, cleanIDs)
+		if err != nil {
+			_ = c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		for i, vid := range cleanIDs {
+			vtype := cleanTypes[i]
+			currentLayout := "vertical"
+			if st, ok := statusMap[vid]; ok && st.Layout != "" {
+				currentLayout = st.Layout
+			}
+
+			newLayout := "horizontal"
+			if currentLayout == "horizontal" {
+				newLayout = "vertical"
+			}
+
+			if vtype == "movie" || vtype == "adult" {
+				_ = h.svc.SetMoviePosterLayout(ctx, user.ID, vid, newLayout)
+			} else if vtype == "series" {
+				_ = h.svc.SetSeriesPosterLayout(ctx, user.ID, vid, newLayout)
+			}
+		}
+	}
+
+	web.RedirectWithSuccessAndMessage(c, "toast.settingsSaved")
+}
+
+

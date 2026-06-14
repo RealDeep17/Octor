@@ -692,3 +692,11 @@
   content: '✕';
   color: var(--o-primary-l);
 }
+
+/* Hide rating, watched, layout toggle, and action capsule when library selection checkboxes are visible */
+.w-card-frame:has(.library-item-cb-wrap:not(.hidden)) .w-card-badge,
+.w-card-frame:has(.library-item-cb-wrap:not(.hidden)) .w-card-badge-ghost,
+.w-card-frame:has(.library-item-cb-wrap:not(.hidden)) div.bottom-2.right-2 {
+  display: none !important;
+}
+

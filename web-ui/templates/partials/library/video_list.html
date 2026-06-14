@@ -4,7 +4,7 @@
      and docs/uikit.html section 7 "Video Card". */}}
 <div class="dynamic-grid grid-flow-row-dense gap-4">
     {{ range $.Data }}
-    <a href="{{ langPath $.Ctx.Lang (. | getCardHref) }}" data-async-target="main" class="library-item group flex [&:has(input:checked)]:col-span-2"
+    <a href="{{ langPath $.Ctx.Lang (. | getCardHref) }}" data-async-target="main" class="library-item group flex [&:has(.layout-toggle-checkbox:checked)]:col-span-2"
        data-adult-type="{{ if . | isAdultJAV }}jav{{ else }}porn{{ end }}"
        data-series-type="{{ if . | isSeriesAnime }}anime{{ else }}tv{{ end }}">
         <div class="w-card-frame {{ if . | getUserWatched }}is-watched{{ end }} w-full">
@@ -115,8 +115,8 @@
                 </form>
                 {{ end }}
                 
-              <div class="absolute top-2 right-2 z-10 hidden library-item-cb-wrap">
-                  <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md shadow-md" data-resource-id="{{ . | getResourceID }}" />
+              <div class="absolute top-2 right-2 z-10 hidden library-item-cb-wrap" onclick="event.stopPropagation()">
+                  <input type="checkbox" class="library-item-cb checkbox checkbox-sm checkbox-primary rounded-md shadow-md" data-resource-id="{{ . | getResourceID }}" data-video-type="{{ . | getVideoType }}" data-video-id="{{ . | getVideoID }}" />
               </div>
               {{/* Layout toggle (bottom-left) */}}
                 {{ if and (. | hasPoster) (. | hasPosterHorizontal) }}

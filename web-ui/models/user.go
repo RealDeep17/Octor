@@ -21,6 +21,7 @@ type User struct {
 	Tier         string
 	Skin         string    `pg:"skin"`
 	GridDensity  string    `pg:"grid_density"`
+	VaultAutoDeleteUnseeded bool `pg:"vault_auto_delete_unseeded"`
 }
 
 // GetOrCreateUser finds or creates a user by email.
@@ -43,6 +44,7 @@ func GetOrCreateUser(ctx context.Context, db *pg.DB, email string) (*User, bool,
 
 	// Create new user
 	user.Email = email
+	user.VaultAutoDeleteUnseeded = true
 	_, err = db.Model(user).
 		Context(ctx).
 		Insert()
@@ -83,6 +85,14 @@ func UpdateUserSkin(ctx context.Context, db *pg.DB, userID uuid.UUID, skin strin
 func UpdateUserGridDensity(ctx context.Context, db *pg.DB, userID uuid.UUID, density string) error {
 	_, err := db.Model((*User)(nil)).
 		Set("grid_density = ?", density).
+		Where("user_id = ?", userID).
+		Update()
+	return err
+}
+
+func UpdateUserVaultAutoDeleteUnseeded(ctx context.Context, db *pg.DB, userID uuid.UUID, enabled bool) error {
+	_, err := db.Model((*User)(nil)).
+		Set("vault_auto_delete_unseeded = ?", enabled).
 		Where("user_id = ?", userID).
 		Update()
 	return err

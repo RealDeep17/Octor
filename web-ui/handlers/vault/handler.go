@@ -37,6 +37,7 @@ type PledgeDisplay struct {
 	ExpiresIn    time.Duration    // time until resource is removed (for unfunded pledges)
 	ShowProgress bool             // funded but not yet vaulted — wire up live progress SSE
 	WorkerStatus *vault.Resource // live progress status from vault service
+	InLibrary    bool
 }
 
 type PledgeListData struct {

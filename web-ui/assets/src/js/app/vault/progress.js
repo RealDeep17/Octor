@@ -174,6 +174,8 @@ function attachRow(row) {
         } catch (err) {
             return;
         }
+        const hasError = !!(status.detail && status.detail.startsWith('Error:'));
+        row.setAttribute('data-vault-error', hasError ? 'true' : 'false');
         applyRowFill(row, status);
         if (badge) badge.innerHTML = renderBadge(status, savedLabel);
 
@@ -229,14 +231,39 @@ function attachRow(row) {
             progressBar.style.width = `${status.progress}%`;
         }
 
+        // Update data-vault-downloaded for client-side sorting
+        const totalSize = parseFloat(row.getAttribute('data-vault-size')) || 0;
+        const progress = status.progress || 0;
+        const downloadedSize = (progress / 100.0) * totalSize;
+        row.setAttribute('data-vault-downloaded', downloadedSize.toFixed(0));
+
         if (status.state === 'vaulted') {
             settleVaultedIcon(row);
             if (statsLine) statsLine.classList.add('hidden');
             const progressBarWrap = row.querySelector('[data-vault-progress-bar-wrap]');
             if (progressBarWrap) progressBarWrap.classList.add('hidden');
             if (retryForm) retryForm.classList.add('hidden');
+
+            // Move row to bracket-vaulted container if needed
+            const vaultedBracket = document.getElementById('bracket-vaulted');
+            if (vaultedBracket) {
+                const targetContainer = vaultedBracket.querySelector('summary').nextElementSibling;
+                if (targetContainer && row.parentElement !== targetContainer) {
+                    targetContainer.appendChild(row);
+                    row.setAttribute('data-vault-status', 'vaulted');
+                    // update status icon class to green
+                    const iconContainer = row.querySelector('[data-vault-progress-icon]');
+                    if (iconContainer) {
+                        iconContainer.className = 'w-7 h-7 rounded-lg bg-green-500/15 flex items-center justify-center';
+                        iconContainer.innerHTML = '<svg class="w-3.5 h-3.5 text-green-400" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353 8.493-12.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd"/></svg>';
+                    }
+                }
+            }
+
             source.close();
         }
+
+        row.dispatchEvent(new CustomEvent('vault-progress-updated', { bubbles: true }));
     };
     return source;
 }
@@ -263,16 +290,25 @@ function formatETA(seconds) {
 
 av(async function () {
     const root = this;
+    console.log("[progress.js] init starting. root =", root);
 
-    // Bind interactive client-side search filtering
-    const searchInput = root.querySelector('#vault-search-form input[name="q"]');
-    const statusSelect = root.querySelector('#vault-status-filter');
-    const items = root.querySelectorAll('.vault-item');
-    const emptyState = root.querySelector('#vault-search-empty');
+    // Bind interactive client-side search filtering with robust fallback
+    const searchInput = root.querySelector('#vault-search-form input[name="q"]') || document.querySelector('#vault-search-form input[name="q"]');
+    const statusSelect = root.querySelector('#vault-status-filter') || document.querySelector('#vault-status-filter');
+    const items = root.querySelectorAll('.vault-item').length ? root.querySelectorAll('.vault-item') : document.querySelectorAll('.vault-item');
+    const emptyState = root.querySelector('#vault-search-empty') || document.querySelector('#vault-search-empty');
+
+    console.log("[progress.js] queried elements:", {
+        searchInput: !!searchInput,
+        statusSelect: !!statusSelect,
+        itemsCount: items.length,
+        emptyState: !!emptyState
+    });
 
     const filterItems = () => {
         const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
         const status = statusSelect ? statusSelect.value : 'all';
+        console.log("[progress.js] filtering items. query =", query, "status =", status);
         let visibleCount = 0;
 
         items.forEach((item) => {
@@ -281,7 +317,16 @@ av(async function () {
             const matchesQuery = !query || titleText.includes(query);
 
             const rowStatus = item.getAttribute('data-vault-status') || 'vaulting';
-            const matchesStatus = status === 'all' || rowStatus === status;
+            let matchesStatus = false;
+            if (status === 'all') {
+                matchesStatus = true;
+            } else if (status === 'errors') {
+                matchesStatus = item.getAttribute('data-vault-error') === 'true';
+            } else if (status === 'notinlib') {
+                matchesStatus = item.getAttribute('data-vault-in-library') === 'false';
+            } else {
+                matchesStatus = rowStatus === status;
+            }
 
             if (matchesQuery && matchesStatus) {
                 item.classList.remove('hidden');
@@ -298,7 +343,58 @@ av(async function () {
                 emptyState.classList.add('hidden');
             }
         }
+        if (window.updateVaultBracketCounts) window.updateVaultBracketCounts();
+        if (window.updateVaultBulkBar) window.updateVaultBulkBar();
     };
+
+    const sortItems = () => {
+        const sortBy = sortSelect ? sortSelect.value : 'date_desc';
+        console.log("[progress.js] sorting items by", sortBy);
+
+        const brackets = root.querySelectorAll('.vault-bracket').length ? root.querySelectorAll('.vault-bracket') : document.querySelectorAll('.vault-bracket');
+        brackets.forEach((bracket) => {
+            const summary = bracket.querySelector('summary');
+            if (!summary) return;
+            const container = summary.nextElementSibling;
+            if (!container) return;
+
+            const itemsInBracket = Array.from(container.querySelectorAll('.vault-item'));
+            if (itemsInBracket.length <= 1) return;
+
+            itemsInBracket.sort((a, b) => {
+                let valA, valB;
+                if (sortBy.startsWith('size')) {
+                    valA = parseFloat(a.getAttribute('data-vault-size')) || 0;
+                    valB = parseFloat(b.getAttribute('data-vault-size')) || 0;
+                } else if (sortBy.startsWith('downloaded')) {
+                    valA = parseFloat(a.getAttribute('data-vault-downloaded')) || 0;
+                    valB = parseFloat(b.getAttribute('data-vault-downloaded')) || 0;
+                } else { // date_desc or date_asc
+                    valA = parseInt(a.getAttribute('data-vault-created')) || 0;
+                    valB = parseInt(b.getAttribute('data-vault-created')) || 0;
+                }
+
+                if (sortBy.endsWith('_desc')) {
+                    return valB - valA;
+                } else {
+                    return valA - valB;
+                }
+            });
+
+            // Re-append sorted elements in order
+            itemsInBracket.forEach((item) => {
+                container.appendChild(item);
+            });
+        });
+    };
+
+    root.addEventListener('vault-progress-updated', () => {
+        filterItems();
+        const sortBy = sortSelect ? sortSelect.value : 'date_desc';
+        if (sortBy.startsWith('downloaded')) {
+            sortItems();
+        }
+    });
 
     if (searchInput) {
         searchInput.addEventListener('input', filterItems);
@@ -313,8 +409,16 @@ av(async function () {
         statusSelect.addEventListener('change', filterItems);
     }
 
-    // Trigger filter immediately on load
+    const sortSelect = root.querySelector('#vault-sort-select') || document.querySelector('#vault-sort-select');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', () => {
+            sortItems();
+        });
+    }
+
+    // Trigger filter and sort immediately on load
     filterItems();
+    sortItems();
 
     const rows = root.querySelectorAll('[data-vault-progress]');
     if (!rows.length) return;

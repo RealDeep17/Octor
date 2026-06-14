@@ -20,6 +20,7 @@
         <option value="" {{ if eq (printf "%s" .Watched) "" }}selected{{ end }}>{{ t $.Ctx.Lang "library.filterAll" }}</option>
         <option value="unwatched" {{ if eq (printf "%s" .Watched) "unwatched" }}selected{{ end }}>{{ t $.Ctx.Lang "library.filterUnwatched" }}</option>
         <option value="watched" {{ if eq (printf "%s" .Watched) "watched" }}selected{{ end }}>{{ t $.Ctx.Lang "library.filterWatched" }}</option>
+        <option value="vaulted" {{ if eq (printf "%s" .Watched) "vaulted" }}selected{{ end }}>{{ t $.Ctx.Lang "library.filterVaulted" }}</option>
     </select>
 </form>
 {{ end }}

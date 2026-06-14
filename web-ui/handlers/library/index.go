@@ -60,6 +60,8 @@ func (s *Handler) bindIndexArgs(c *gin.Context) (args *shared.IndexArgs) {
 		args.Watched = shared.WatchedFilterUnwatched
 	case shared.WatchedFilterWatched:
 		args.Watched = shared.WatchedFilterWatched
+	case shared.WatchedFilterVaulted:
+		args.Watched = shared.WatchedFilterVaulted
 	default:
 		args.Watched = shared.WatchedFilterAll
 	}
@@ -248,8 +250,5 @@ func (s *Handler) index(c *gin.Context) {
 	}
 
 	h := s.tb.Build("library/index")
-	if c.Query("from") != "" {
-		h.WithLayout("")
-	}
 	h.HTML(http.StatusOK, web.NewContext(c).WithData(data))
 }

@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ type AdminPledgeDisplay struct {
 	vaultModels.Pledge
 	WorkerStatus *vault.Resource
 	SeedCount    int
+	InLibrary    bool
 }
 
 func (a AdminPledgeDisplay) ShowProgress() bool {
@@ -79,9 +81,26 @@ func (h *Handler) vaultIndex(c *gin.Context) {
 		return
 	}
 
+	var libEntries []models.Library
+	if db != nil {
+		_ = db.Model(&libEntries).
+			Context(ctx).
+			Column("user_id", "resource_id").
+			Select()
+	}
+	inLibMap := make(map[string]bool)
+	for _, l := range libEntries {
+		key := l.UserID.String() + ":" + l.ResourceID
+		inLibMap[key] = true
+	}
+
 	enrichedPledges := make([]AdminPledgeDisplay, len(pledges))
 	for i, p := range pledges {
-		enrichedPledges[i] = AdminPledgeDisplay{Pledge: p}
+		key := p.UserID.String() + ":" + p.ResourceID
+		enrichedPledges[i] = AdminPledgeDisplay{
+			Pledge:    p,
+			InLibrary: inLibMap[key],
+		}
 	}
 
 	wcc := web.NewContext(c)
@@ -103,6 +122,18 @@ func (h *Handler) vaultIndex(c *gin.Context) {
 		}
 	}
 	_ = eg.Wait()
+
+	sort.Slice(enrichedPledges, func(i, j int) bool {
+		iActive := enrichedPledges[i].WorkerStatus != nil && enrichedPledges[i].WorkerStatus.Status == 1
+		jActive := enrichedPledges[j].WorkerStatus != nil && enrichedPledges[j].WorkerStatus.Status == 1
+		if iActive && !jActive {
+			return true
+		}
+		if !iActive && jActive {
+			return false
+		}
+		return enrichedPledges[i].CreatedAt.After(enrichedPledges[j].CreatedAt)
+	})
 
 	users, err := h.loadUsers(ctx, db, selected)
 	if err != nil {
@@ -364,7 +395,7 @@ func (h *Handler) retryMultiplePledge(c *gin.Context) {
 			continue
 		}
 
-		_, err = h.vault.PutResource(ctx, rID)
+		_, err = h.vault.RefreshResource(ctx, rID)
 		if err != nil {
 			log.WithError(err).WithField("resource_id", rID).Warn("admin failed to bulk retry pledge")
 		}
@@ -401,3 +432,43 @@ func (h *Handler) getLiveSeeds(ctx context.Context, apiClaims *api.Claims, resou
 	}
 	return 0
 }
+
+func (h *Handler) retryPledge(c *gin.Context) {
+	resourceID := c.PostForm("resource_id")
+	userIDRaw := c.PostForm("user_id")
+
+	ctx := c.Request.Context()
+
+	if resourceID == "" || userIDRaw == "" {
+		web.RedirectWithError(c, errors.New("resource_id and user_id are required"))
+		return
+	}
+
+	uID, err := uuid.FromString(userIDRaw)
+	if err != nil {
+		web.RedirectWithError(c, errors.Wrap(err, "invalid user_id"))
+		return
+	}
+
+	resource, err := h.vault.GetResource(ctx, resourceID)
+	if err != nil || resource == nil {
+		web.RedirectWithError(c, errors.New("resource not found"))
+		return
+	}
+
+	user := &auth.User{ID: uID}
+	pledge, err := h.vault.GetPledge(ctx, user, resource)
+	if err != nil || pledge == nil {
+		web.RedirectWithError(c, errors.New("unauthorized: pledge not found for this resource"))
+		return
+	}
+
+	_, err = h.vault.RefreshResource(ctx, resourceID)
+	if err != nil {
+		web.RedirectWithError(c, errors.Wrap(err, "failed to retry resource"))
+		return
+	}
+
+	web.RedirectWithSuccessAndMessage(c, "toast.vaultRetryQueued")
+}
+

@@ -106,3 +106,40 @@ func (s *Web) deleteResource(c *gin.Context) {
 	}
 	c.JSON(http.StatusAccepted, res)
 }
+
+// POST /resource/{id}/refresh — refresh/retry/prioritize the resource
+func (s *Web) refreshResource(c *gin.Context) {
+	id := c.Param("id")
+	db := s.pg.Get()
+	if db == nil {
+		_ = c.Error(errors.New("DB not configured"))
+		return
+	}
+	res, err := ResourceRefresh(c.Request.Context(), db, id)
+	if err != nil {
+		if aerr := APILogWrite(c.Request.Context(), db, id, OperationStore, http.StatusInternalServerError); aerr != nil {
+			log.WithError(aerr).WithField("resource_id", id).Warn("failed to write api log")
+		}
+		_ = c.Error(err)
+		return
+	}
+	if res == nil {
+		if aerr := APILogWrite(c.Request.Context(), db, id, OperationStore, http.StatusNotFound); aerr != nil {
+			log.WithError(aerr).WithField("resource_id", id).Warn("failed to write api log")
+		}
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	if aerr := APILogWrite(c.Request.Context(), db, id, OperationStore, http.StatusOK); aerr != nil {
+		log.WithError(aerr).WithField("resource_id", id).Warn("failed to write api log")
+	}
+
+	// Wake up workers
+	if s.worker != nil {
+		s.worker.Wakeup()
+	}
+
+	c.JSON(http.StatusOK, res)
+}
+

@@ -84,6 +84,7 @@ type Resource struct {
 	// the old "row updated_at is stale" heuristic for cross-pod coordination.
 	ClaimExpiresAt *time.Time `json:"claim_expires_at,omitempty" pg:"claim_expires_at"`
 	ClaimedBy      *string    `json:"claimed_by,omitempty" pg:"claimed_by"`
+	Priority       int        `json:"priority" pg:"priority,notnull,use_zero,default:0"`
 
 	// Relations
 	// All resource<->file links for this resource. Use with Relation("ResourceFiles") or
@@ -271,3 +272,43 @@ func ResourceQueueForDeletion(ctx context.Context, db *pg.DB, id string) (*Resou
 	}
 	return res, nil
 }
+
+// ResourceRefresh resets the worker lease, errors, and marks the resource queued for processing with high priority.
+func ResourceRefresh(ctx context.Context, db *pg.DB, id string) (*Resource, error) {
+	res := &Resource{ID: id}
+	err := db.Model(res).Context(ctx).WherePK().Select()
+	if err != nil {
+		if errors.Is(err, pg.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// If it's a deletion status, queue it for deletion, otherwise queue it for storing.
+	if res.Status == StatusQueuedForDeletion || res.Status == StatusDeleting || res.Status == StatusDeleteError {
+		res.Status = StatusQueuedForDeletion
+	} else {
+		res.Status = StatusQueuedForStoring
+	}
+
+	res.ClaimExpiresAt = nil
+	res.ClaimedBy = nil
+	res.Error = nil
+	res.Priority = 100
+	res.UpdatedAt = time.Now()
+
+	_, err = db.Model(res).Context(ctx).
+		Column("status", "claim_expires_at", "claimed_by", "error", "priority", "updated_at").
+		WherePK().
+		Update()
+	if err != nil {
+		return nil, err
+	}
+
+	// Reload
+	if err = db.Model(res).Context(ctx).WherePK().Select(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+

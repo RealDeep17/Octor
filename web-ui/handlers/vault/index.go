@@ -3,11 +3,13 @@ package vault
 import (
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/webtor-io/web-ui/handlers/library/shared"
+	"github.com/webtor-io/web-ui/models"
 	"github.com/webtor-io/web-ui/services/auth"
 	"github.com/webtor-io/web-ui/services/i18n"
 	"github.com/webtor-io/web-ui/services/vault"
@@ -33,13 +35,27 @@ func (h *Handler) index(c *gin.Context) {
 		return
 	}
 
+	db := h.pg.Get()
+	inLibMap := make(map[string]bool)
+	if db != nil {
+		var libResourceIDs []string
+		_ = db.Model((*models.Library)(nil)).
+			Context(c.Request.Context()).
+			Column("resource_id").
+			Where("user_id = ?", user.ID).
+			Select(&libResourceIDs)
+		for _, rID := range libResourceIDs {
+			inLibMap[rID] = true
+		}
+	}
+
 	ctx := web.NewContext(c)
 	q := strings.TrimSpace(c.Query("q"))
 	data := &PledgeListData{
 		Args: &shared.IndexArgs{
 			Query: q,
 		},
-		Pledges:               buildPledgeDisplay(enriched, h.vault.GetExpirePeriod()),
+		Pledges:               buildPledgeDisplay(enriched, h.vault.GetExpirePeriod(), inLibMap),
 		Stats:                 stats,
 		FreezePeriod:          h.vault.GetFreezePeriod(),
 		ExpirePeriod:          h.vault.GetExpirePeriod(),
@@ -71,7 +87,7 @@ func isFreeTier(ctx *web.Context) bool {
 }
 
 // buildPledgeDisplay converts enriched pledges into display rows for the table.
-func buildPledgeDisplay(enriched []vault.EnrichedPledge, expirePeriod time.Duration) []PledgeDisplay {
+func buildPledgeDisplay(enriched []vault.EnrichedPledge, expirePeriod time.Duration, inLibMap map[string]bool) []PledgeDisplay {
 	display := make([]PledgeDisplay, 0, len(enriched))
 	for _, e := range enriched {
 		var expiresIn time.Duration
@@ -98,7 +114,21 @@ func buildPledgeDisplay(enriched []vault.EnrichedPledge, expirePeriod time.Durat
 			ExpiresIn:    expiresIn,
 			ShowProgress: showProgress,
 			WorkerStatus: e.WorkerStatus,
+			InLibrary:    inLibMap[e.Pledge.ResourceID],
 		})
 	}
+
+	sort.Slice(display, func(i, j int) bool {
+		iActive := display[i].WorkerStatus != nil && display[i].WorkerStatus.Status == 1
+		jActive := display[j].WorkerStatus != nil && display[j].WorkerStatus.Status == 1
+		if iActive && !jActive {
+			return true
+		}
+		if !iActive && jActive {
+			return false
+		}
+		return display[i].CreatedAt.After(display[j].CreatedAt)
+	})
+
 	return display
 }

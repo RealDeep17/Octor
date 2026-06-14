@@ -382,43 +382,55 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 		}()
 	}
 
-	loadVaultState := func() {
-		lastDBResource = nil
-		lastAPIResource = nil
+	var lastVaultCheck time.Time
+	loadVaultState := func(force bool) {
 		if s.vault == nil {
 			return
 		}
-		var err error
-		lastDBResource, err = s.vault.GetResource(ctx, resourceID)
-		if err != nil {
-			log.WithError(err).Warn("failed to get vault resource for status")
-			lastDBResource = nil
+		if !force && time.Since(lastVaultCheck) < 2*time.Second {
 			return
 		}
+		lastVaultCheck = time.Now()
+		var err error
+		dbRes, err := s.vault.GetResource(ctx, resourceID)
+		if err != nil {
+			if ctx.Err() == nil {
+				log.WithError(err).Warn("failed to get vault resource for status")
+			}
+			lastDBResource = nil
+			lastAPIResource = nil
+			return
+		}
+		lastDBResource = dbRes
+		lastAPIResource = nil
 		if lastDBResource != nil && lastDBResource.Funded && !lastDBResource.Vaulted {
-			lastAPIResource, err = s.vault.GetVaultAPIResource(ctx, resourceID)
+			apiRes, err := s.vault.GetVaultAPIResource(ctx, resourceID)
 			if err != nil {
-				log.WithError(err).Warn("failed to get vault api resource for status")
-				lastAPIResource = nil
-			} else if lastAPIResource != nil && lastAPIResource.TotalSize > 0 {
-				now := time.Now()
-				if lastVaultAt.IsZero() || lastAPIResource.StoredSize < lastVaultStored {
-					lastVaultStored = lastAPIResource.StoredSize
-					lastVaultAt = now
-					lastVaultSpeedBytes = 0
-					uploadSpeedWindow = NewSpeedWindow(15)
-				} else {
-					deltaSeconds := now.Sub(lastVaultAt).Seconds()
-					if deltaSeconds > 0 {
-						deltaBytes := lastAPIResource.StoredSize - lastVaultStored
-						if deltaBytes < 0 {
-							deltaBytes = 0
-						}
-						instant := int64(math.Round(float64(deltaBytes) / deltaSeconds))
-						uploadSpeedWindow.Add(instant)
-						lastVaultSpeedBytes = uploadSpeedWindow.Average()
+				if ctx.Err() == nil {
+					log.WithError(err).Warn("failed to get vault api resource for status")
+				}
+			} else {
+				lastAPIResource = apiRes
+				if lastAPIResource != nil && lastAPIResource.TotalSize > 0 {
+					now := time.Now()
+					if lastVaultAt.IsZero() || lastAPIResource.StoredSize < lastVaultStored {
 						lastVaultStored = lastAPIResource.StoredSize
 						lastVaultAt = now
+						lastVaultSpeedBytes = 0
+						uploadSpeedWindow = NewSpeedWindow(15)
+					} else {
+						deltaSeconds := now.Sub(lastVaultAt).Seconds()
+						if deltaSeconds > 0 {
+							deltaBytes := lastAPIResource.StoredSize - lastVaultStored
+							if deltaBytes < 0 {
+								deltaBytes = 0
+							}
+							instant := int64(math.Round(float64(deltaBytes) / deltaSeconds))
+							uploadSpeedWindow.Add(instant)
+							lastVaultSpeedBytes = uploadSpeedWindow.Average()
+							lastVaultStored = lastAPIResource.StoredSize
+							lastVaultAt = now
+						}
 					}
 				}
 			}
@@ -432,7 +444,9 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 		lastPassiveCheck = time.Now()
 		stats, err := s.getPassiveCacheStats(ctx, claims, resourceID, itemID)
 		if err != nil {
-			log.WithError(err).WithField("resourceID", resourceID).Warn("failed to get passive cache status")
+			if ctx.Err() == nil {
+				log.WithError(err).WithField("resourceID", resourceID).Warn("failed to get passive cache status")
+			}
 			return
 		}
 		passiveStats = stats
@@ -458,7 +472,7 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 		return status.State != "vaulted"
 	}
 
-	loadVaultState()
+	loadVaultState(true)
 	loadPassiveCacheState(true)
 	if !sendStatus() {
 		return
@@ -551,7 +565,7 @@ func (s *Handler) statusLoop(ctx context.Context, claims *api.Claims, resourceID
 			}
 
 		case <-ticker.C:
-			loadVaultState()
+			loadVaultState(false)
 			loadPassiveCacheState(false)
 			if !sendStatus() {
 				return

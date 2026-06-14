@@ -55,22 +55,24 @@ func RegisterWebFlags(f []cli.Flag) []cli.Flag {
 }
 
 type Web struct {
-	host string
-	port int
-	ln   net.Listener
-	pg   *cs.PG
-	s3   *cs.S3Client
+	host   string
+	port   int
+	ln     net.Listener
+	pg     *cs.PG
+	s3     *cs.S3Client
 	// bucket to read objects from (same as worker's AWS_BUCKET)
 	bucket string
+	worker *Worker
 }
 
-func NewWeb(c *cli.Context, pg *cs.PG, s3 *cs.S3Client) *Web {
+func NewWeb(c *cli.Context, pg *cs.PG, s3 *cs.S3Client, worker *Worker) *Web {
 	return &Web{
 		host:   c.String(webHostFlag),
 		port:   c.Int(webPortFlag),
 		pg:     pg,
 		s3:     s3,
 		bucket: c.String("aws-bucket"),
+		worker: worker,
 	}
 }
 
@@ -89,6 +91,7 @@ func (s *Web) Serve() error {
 	rg.PUT("/:id", s.putResource)
 	rg.GET("/:id", s.getResource)
 	rg.DELETE("/:id", s.deleteResource)
+	rg.POST("/:id/refresh", s.refreshResource)
 	// files listing endpoint is not needed per requirements
 
 	// WebSeed: /webseed/{id}/{path}

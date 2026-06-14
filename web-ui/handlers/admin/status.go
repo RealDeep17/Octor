@@ -53,6 +53,11 @@ type StatusPageData struct {
 	TotalNetRx30d     int64
 	TotalNetTx30d     int64
 
+	// Vaulting Stats
+	ActiveVaultWorkers  int
+	VaultingConcurrency int
+	VaultingSpeedMB     float64
+
 	// Health services status
 	Services []ServiceStatus
 
@@ -108,11 +113,13 @@ func StartStatsCollector(db *pg.DB) {
 
 func telemetryCollectorLoop() {
 	var lastDiskRead, lastDiskWrite, lastNetRx, lastNetTx int64
+	var lastVaultBytes int64
 	var lastTime time.Time
 
 	// Initial reads
 	lastDiskRead, lastDiskWrite, _ = readDiskStats()
 	lastNetRx, lastNetTx, _ = readNetStats()
+	_, _, lastVaultBytes, _ = parseVaultMetrics()
 	lastTime = time.Now()
 
 	ticker := time.NewTicker(3 * time.Second)
@@ -164,6 +171,21 @@ func telemetryCollectorLoop() {
 			lastNetRx = currNetRx
 			lastNetTx = currNetTx
 		}
+
+		// Vault metrics and speed
+		activeVaultWorkers, vaultingConcurrency, currVaultBytes, errVault := parseVaultMetrics()
+		var vaultingSpeedMB float64
+		if errVault == nil && lastVaultBytes > 0 {
+			diffVault := currVaultBytes - lastVaultBytes
+			if diffVault < 0 {
+				diffVault = 0
+			}
+			vaultingSpeedMB = (float64(diffVault) / 1048576.0) / elapsed
+		}
+		if errVault == nil {
+			lastVaultBytes = currVaultBytes
+		}
+
 		lastTime = now
 
 		// Query CPU, memory, streams, seeds
@@ -198,6 +220,10 @@ func telemetryCollectorLoop() {
 		liveTelemetry.NetTxRate = netTxRate
 		liveTelemetry.StreamCount = streamCount
 		liveTelemetry.SeedCount = seedCount
+
+		liveTelemetry.ActiveVaultWorkers = activeVaultWorkers
+		liveTelemetry.VaultingConcurrency = vaultingConcurrency
+		liveTelemetry.VaultingSpeedMB = vaultingSpeedMB
 		liveTelemetryMutex.Unlock()
 	}
 }
@@ -304,8 +330,16 @@ func databaseCollectorLoop(db *pg.DB) {
 	}
 }
 
+func getProcPath(p string) string {
+	hostPath := filepath.Join("/host", p)
+	if _, err := os.Stat(hostPath); err == nil {
+		return hostPath
+	}
+	return p
+}
+
 func readDiskStats() (int64, int64, error) {
-	file, err := os.Open("/proc/diskstats")
+	file, err := os.Open(getProcPath("/proc/diskstats"))
 	if err != nil {
 		return 0, 0, err
 	}
@@ -334,7 +368,7 @@ func readDiskStats() (int64, int64, error) {
 }
 
 func readNetStats() (int64, int64, error) {
-	file, err := os.Open("/proc/net/dev")
+	file, err := os.Open(getProcPath("/proc/net/dev"))
 	if err != nil {
 		return 0, 0, err
 	}
@@ -561,12 +595,12 @@ func checkHealthVal(db *pg.DB) []ServiceStatus {
 		}) {
 			defer wg.Done()
 			status := ServiceStatus{Name: s.name, Type: "core", Port: s.port, Status: "online", Action: "restart-service-" + s.name}
+			status.ErrorLogs = readLastLines(filepath.Join("/var/log/supervisor", fmt.Sprintf("%s.err.log", s.name)), 20)
 			url := fmt.Sprintf("http://localhost:%d/liveness", s.port)
 			if s.name == "octor-sidecar" || s.name == "octor-ai-proxy" || s.name == "octor-s3-gateway" {
 				if conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", s.port), 500*time.Millisecond); err != nil {
 					status.Status = "offline"
 					status.Message = err.Error()
-					status.ErrorLogs = readLastLines(filepath.Join("/var/log/supervisor", fmt.Sprintf("%s.err.log", s.name)), 20)
 				} else {
 					conn.Close()
 				}
@@ -579,7 +613,6 @@ func checkHealthVal(db *pg.DB) []ServiceStatus {
 					} else {
 						status.Message = fmt.Sprintf("HTTP %d", resp.StatusCode)
 					}
-					status.ErrorLogs = readLastLines(filepath.Join("/var/log/supervisor", fmt.Sprintf("%s.err.log", s.name)), 20)
 				} else {
 					resp.Body.Close()
 				}
@@ -637,7 +670,7 @@ func (h *Handler) statusAction(c *gin.Context) {
 }
 
 func getCPUUsageVal() float64 {
-	f, err := os.Open("/proc/stat")
+	f, err := os.Open(getProcPath("/proc/stat"))
 	if err != nil {
 		return 0
 	}
@@ -658,7 +691,7 @@ func getCPUUsageVal() float64 {
 	}
 	idle, _ := strconv.ParseUint(parts[4], 10, 64)
 	time.Sleep(100 * time.Millisecond)
-	f2, err := os.Open("/proc/stat")
+	f2, err := os.Open(getProcPath("/proc/stat"))
 	if err != nil {
 		return 0
 	}
@@ -681,7 +714,7 @@ func getCPUUsageVal() float64 {
 }
 
 func getRAMUsedVal() int64 {
-	f, err := os.Open("/proc/meminfo")
+	f, err := os.Open(getProcPath("/proc/meminfo"))
 	if err != nil {
 		return 0
 	}
@@ -704,7 +737,7 @@ func getRAMUsedVal() int64 {
 }
 
 func getRAMTotalVal() int64 {
-	f, err := os.Open("/proc/meminfo")
+	f, err := os.Open(getProcPath("/proc/meminfo"))
 	if err != nil {
 		return 0
 	}
@@ -739,7 +772,7 @@ func getDiskTotalVal() int64 {
 
 func getStreamCountVal() int {
 	client := &http.Client{Timeout: 1 * time.Second}
-	resp, err := client.Get("http://localhost:52086/metrics") // query octor-vault probe port
+	resp, err := client.Get("http://localhost:53086/metrics") // query octor-vault prom port
 	if err != nil {
 		return 0
 	}
@@ -760,7 +793,7 @@ func getStreamCountVal() int {
 
 func getSeedCountVal() int {
 	client := &http.Client{Timeout: 1 * time.Second}
-	resp, err := client.Get("http://localhost:52054/metrics") // query octor-torrent-web-seeder probe port
+	resp, err := client.Get("http://localhost:53054/metrics") // query octor-torrent-web-seeder prom port
 	if err != nil {
 		return 0
 	}
@@ -777,4 +810,34 @@ func getSeedCountVal() int {
 		}
 	}
 	return 0
+}
+
+func parseVaultMetrics() (activeWorkers int, vaultingConcurrency int, storedBytes int64, err error) {
+	client := &http.Client{Timeout: 1 * time.Second}
+	resp, err := client.Get("http://localhost:53086/metrics")
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer resp.Body.Close()
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "vault_worker_leases_held ") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 {
+				activeWorkers, _ = strconv.Atoi(fields[1])
+			}
+		} else if strings.HasPrefix(line, "vault_resources_total{status=\"storing\"} ") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 {
+				vaultingConcurrency, _ = strconv.Atoi(fields[1])
+			}
+		} else if strings.HasPrefix(line, "vault_resources_stored_bytes_total{status=\"storing\"} ") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 {
+				storedBytes, _ = strconv.ParseInt(fields[1], 10, 64)
+			}
+		}
+	}
+	return activeWorkers, vaultingConcurrency, storedBytes, nil
 }

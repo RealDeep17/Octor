@@ -43,7 +43,7 @@ type cacheEntry struct {
 	Body       []byte              `json:"body"`
 }
 
-var cacheMu sync.Mutex
+var cacheMu sync.RWMutex
 
 func cacheKey(prefix, key string) string {
 	h := md5.Sum([]byte(key))
@@ -85,8 +85,8 @@ func normStashBody(body []byte) string {
 }
 
 func loadCache(path string) (cacheEntry, bool) {
-	cacheMu.Lock()
-	defer cacheMu.Unlock()
+	cacheMu.RLock()
+	defer cacheMu.RUnlock()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return cacheEntry{}, false
@@ -130,7 +130,7 @@ var proxyClient = &http.Client{
 
 // liveSem limits concurrent live API requests to avoid rate-limit hammering.
 // Using 3 so we stay well within TPDB's rate limit when cache is cold.
-var liveSem = make(chan struct{}, 3)
+var liveSem = make(chan struct{}, 5)
 var liveMu sync.Mutex
 var lastLive time.Time
 
@@ -239,12 +239,12 @@ func startCachingProxy(tpdbKey, stashKey string) {
 		}
 	})
 
-	fmt.Println("Caching proxy started on :8002")
+	fmt.Println("Caching proxy started on :8003")
 	srv := &http.Server{
-		Addr:         ":8002",
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:         ":8003",
+		ReadTimeout:  120 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  180 * time.Second,
 	}
 	if err := srv.ListenAndServe(); err != nil {
 		fmt.Printf("Proxy error: %v\n", err)
@@ -333,12 +333,15 @@ func parsePreviousLog(logPath string) map[string]prevResult {
 func main() {
 	fmt.Println("=== Go-Only Regression & Improvement Test (cached) ===")
 
+	testsheetPath := "sidecar/test/testsheet447-mismatches.json"
+	if v := os.Getenv("TESTSHEET"); v != "" {
+		testsheetPath = v
+	}
 	const (
-		testsheetPath = "sidecar/test/testsheet447-mismatches.json"
 		prevLogPath   = "sidecar/test/compare_live_output.log"
 		tpdbAPIKey    = "4MODCdLTeVcKDx28wTWiW86sF2IRqlnmVe0XVkGG55696daf"
 		stashAPIKey   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiIwMTlkZmZkYS0yZGVmLTdlN2UtYWQ4Zi0yN2FkZjc1MDI1NmYiLCJzdWIiOiJBUElLZXkiLCJpYXQiOjE3NzgxMTM5ODF9.GgudiUnFvNXpQic158c3QtheEkYY2rTLtEu5PuYn2xY"
-		workers = 20
+		workers = 10
 	)
 
 	outputLogPath := fmt.Sprintf("sidecar/test/compare_output_%s.log", time.Now().Format("20060102_150405"))
@@ -387,12 +390,12 @@ func main() {
 	// Start Go sidecar — point at our caching proxy
 	goCmd := exec.Command(binPath)
 	goCmd.Env = append(os.Environ(),
-		"PORT=8095",
+		"PORT=8097",
 		"GIN_MODE=release",
 		"THEPORNDB_API_KEY="+tpdbAPIKey,
 		"STASHDB_API_KEY="+stashAPIKey,
-		"TPDB_BASE=http://localhost:8002/tpdb",
-		"STASHDB_ENDPOINT=http://localhost:8002/stashdb",
+		"TPDB_BASE=http://localhost:8003/tpdb",
+		"STASHDB_ENDPOINT=http://localhost:8003/stashdb",
 	)
 	goCmd.Stdout = os.Stdout
 	goCmd.Stderr = os.Stderr
@@ -410,7 +413,7 @@ func main() {
 	client := &http.Client{Timeout: 60 * time.Second}
 	for i := 0; i < 30; i++ {
 		time.Sleep(500 * time.Millisecond)
-		if resp, err := client.Get("http://localhost:8095/settings"); err == nil {
+		if resp, err := client.Get("http://localhost:8097/settings"); err == nil {
 			resp.Body.Close()
 			fmt.Println("Go sidecar is up!")
 			break
@@ -453,7 +456,7 @@ func main() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			goURL := fmt.Sprintf("http://localhost:8095/?t=%s&porn=true", url.QueryEscape(t))
+			goURL := fmt.Sprintf("http://localhost:8097/?t=%s&porn=true", url.QueryEscape(t))
 			resp, err := client.Get(goURL)
 
 			var goData map[string]any

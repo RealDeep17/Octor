@@ -1,0 +1,17 @@
+#!/bin/bash
+# ==============================================================================
+# Octor Auto-Vault-Reap Daily Maintenance Cron Job
+# ==============================================================================
+# Executed automatically by system cron every day to reap stuck vault resources.
+# Logs are appended to /var/log/octor-vault-reap.log
+# ==============================================================================
+
+echo -e "\n=== Auto-Vault-Reap Started: $(date) ===" >> /var/log/octor-vault-reap.log
+
+if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^octor-monolith$"; then
+    docker exec -i octor-monolith /app/bin/web-ui vault reap >> /var/log/octor-vault-reap.log 2>&1
+else
+    sudo -u __RUN_USER__ __PROJECT_ROOT__/bin/web-ui vault reap >> /var/log/octor-vault-reap.log 2>&1
+fi
+
+echo -e "=== Auto-Vault-Reap Finished: $(date) ===\n" >> /var/log/octor-vault-reap.log

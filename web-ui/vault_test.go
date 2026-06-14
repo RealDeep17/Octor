@@ -3,12 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/webtor-io/web-ui/models"
 	vaultModels "github.com/webtor-io/web-ui/models/vault"
+	"github.com/webtor-io/web-ui/services/vault"
 )
 
 // --- Mock implementations ---
@@ -30,6 +38,10 @@ func (m *mockReaperStore) GetGhostResources(_ context.Context) ([]vaultModels.Re
 	return m.ghostResources, m.ghostResourcesErr
 }
 
+func (m *mockReaperStore) RemoveFromLibrary(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
+
 func (m *mockReaperStore) GetResourcePledgesWithUsers(_ context.Context, resourceID string) ([]vaultModels.Pledge, error) {
 	if m.pledgesWithUsersErr != nil {
 		if err, ok := m.pledgesWithUsersErr[resourceID]; ok {
@@ -48,11 +60,13 @@ type removePledgeCall struct {
 }
 
 type mockReaperVault struct {
-	removePledgeErr    error
-	removePledgeCalls  []removePledgeCall
-	removeResourceErr  error
-	removeResourceIDs  []string
-	removePledgeErrMap map[uuid.UUID]error
+	removePledgeErr        error
+	removePledgeCalls      []removePledgeCall
+	removeResourceErr      error
+	removeResourceIDs      []string
+	removePledgeErrMap    map[uuid.UUID]error
+	getVaultAPIResourceVal *vault.Resource
+	getVaultAPIResourceErr error
 }
 
 func (m *mockReaperVault) RemovePledge(_ context.Context, pledge *vaultModels.Pledge) error {
@@ -71,6 +85,10 @@ func (m *mockReaperVault) RemovePledge(_ context.Context, pledge *vaultModels.Pl
 func (m *mockReaperVault) RemoveResource(_ context.Context, resourceID string) error {
 	m.removeResourceIDs = append(m.removeResourceIDs, resourceID)
 	return m.removeResourceErr
+}
+
+func (m *mockReaperVault) GetVaultAPIResource(_ context.Context, _ string) (*vault.Resource, error) {
+	return m.getVaultAPIResourceVal, m.getVaultAPIResourceErr
 }
 
 type notificationCall struct {
@@ -112,7 +130,8 @@ func newTestReaper(store reaperStore, v reaperVault, n reaperNotification) *reap
 		notification:           n,
 		expirePeriod:           7 * 24 * time.Hour,
 		abandonedExpirePeriod:  24 * time.Hour,
-		transferTimeoutPeriod:  7 * 24 * time.Hour,
+		transferTimeoutPeriod:  48 * time.Hour,
+		httpClient:             http.DefaultClient,
 	}
 }
 
@@ -127,6 +146,9 @@ func makeResource(id string, expiredAt *time.Time) vaultModels.Resource {
 }
 
 func makePledge(pledgeID uuid.UUID, resourceID string, userID uuid.UUID, amount float64, user *models.User) vaultModels.Pledge {
+	if user != nil {
+		user.VaultAutoDeleteUnseeded = true
+	}
 	return vaultModels.Pledge{
 		PledgeID:   pledgeID,
 		ResourceID: resourceID,
@@ -272,6 +294,118 @@ func TestProcessResource_TransferTimeout(t *testing.T) {
 		t.Errorf("expected 'transfer_timeout' action, got %q", n.calls[0].action)
 	}
 }
+
+func TestProcessResource_TransferTimeout_Disabled(t *testing.T) {
+	os.Setenv("VAULT_AUTO_DELETE_UNSEEDED", "false")
+	defer os.Unsetenv("VAULT_AUTO_DELETE_UNSEEDED")
+
+	// ExpiredAt == nil indicates transfer timeout
+	resource := makeResource("res1", nil)
+	userID := uuid.NewV4()
+	pledgeID := uuid.NewV4()
+
+	store := &mockReaperStore{
+		pledgesWithUsers: map[string][]vaultModels.Pledge{
+			"res1": {
+				makePledge(pledgeID, "res1", userID, 1.0, &models.User{
+					UserID: userID,
+					Email:  "user@example.com",
+				}),
+			},
+		},
+	}
+	v := &mockReaperVault{}
+	n := &mockReaperNotification{}
+	r := newTestReaper(store, v, n)
+
+	r.processResource(context.Background(), resource)
+
+	// Should NOT send notification
+	if len(n.calls) != 0 {
+		t.Errorf("expected 0 notifications, got %d", len(n.calls))
+	}
+	// Should NOT remove resource
+	if len(v.removeResourceIDs) != 0 {
+		t.Errorf("expected 0 resources removed, got %d", len(v.removeResourceIDs))
+	}
+}
+
+func TestProcessResource_TransferTimeout_UserDisabled(t *testing.T) {
+	// ExpiredAt == nil indicates transfer timeout
+	resource := makeResource("res1", nil)
+	userID := uuid.NewV4()
+	pledgeID := uuid.NewV4()
+
+	user := &models.User{
+		UserID:                  userID,
+		Email:                   "user@example.com",
+		VaultAutoDeleteUnseeded: false,
+	}
+
+	store := &mockReaperStore{
+		pledgesWithUsers: map[string][]vaultModels.Pledge{
+			"res1": {
+				makePledge(pledgeID, "res1", userID, 1.0, user),
+			},
+		},
+	}
+	v := &mockReaperVault{}
+	n := &mockReaperNotification{}
+	r := newTestReaper(store, v, n)
+
+	// Since makePledge overrides VaultAutoDeleteUnseeded to true, explicitly set it back to false
+	store.pledgesWithUsers["res1"][0].User.VaultAutoDeleteUnseeded = false
+
+	r.processResource(context.Background(), resource)
+
+	// Should NOT send notification
+	if len(n.calls) != 0 {
+		t.Errorf("expected 0 notifications, got %d", len(n.calls))
+	}
+	// Should NOT remove resource
+	if len(v.removeResourceIDs) != 0 {
+		t.Errorf("expected 0 resources removed, got %d", len(v.removeResourceIDs))
+	}
+}
+
+func TestProcessResource_TransferTimeout_RecentActivity(t *testing.T) {
+	// ExpiredAt == nil indicates transfer timeout
+	resource := makeResource("res1", nil)
+	userID := uuid.NewV4()
+	pledgeID := uuid.NewV4()
+
+	store := &mockReaperStore{
+		pledgesWithUsers: map[string][]vaultModels.Pledge{
+			"res1": {
+				makePledge(pledgeID, "res1", userID, 1.0, &models.User{
+					UserID: userID,
+					Email:  "user@example.com",
+				}),
+			},
+		},
+	}
+	v := &mockReaperVault{
+		getVaultAPIResourceVal: &vault.Resource{
+			ResourceID: "res1",
+			UpdatedAt:  time.Now(), // Very recent activity
+		},
+	}
+	n := &mockReaperNotification{}
+	r := newTestReaper(store, v, n)
+
+	r.processResource(context.Background(), resource)
+
+	// Should NOT send notification
+	if len(n.calls) != 0 {
+		t.Errorf("expected 0 notifications, got %d", len(n.calls))
+	}
+	// Should NOT remove resource
+	if len(v.removeResourceIDs) != 0 {
+		t.Errorf("expected 0 resources removed, got %d", len(v.removeResourceIDs))
+	}
+}
+
+
 
 func TestProcessResource_NoPledges(t *testing.T) {
 	expired := timePtr(time.Now().Add(-8 * 24 * time.Hour))
@@ -863,4 +997,91 @@ func TestReapGhostResources_MixedWithExpired(t *testing.T) {
 	if len(n.calls) != 1 {
 		t.Errorf("expected 1 notification, got %d", len(n.calls))
 	}
+}
+
+func TestRemoveAndBlocklistInArrs(t *testing.T) {
+	// Set API keys so that the client configs are not skipped
+	os.Setenv("RADARR_API_KEY", "radarr_key")
+	os.Setenv("SONARR_API_KEY", "sonarr_key")
+	os.Setenv("WHISPARR_API_KEY", "whisparr_key")
+	defer func() {
+		os.Unsetenv("RADARR_API_KEY")
+		os.Unsetenv("SONARR_API_KEY")
+		os.Unsetenv("WHISPARR_API_KEY")
+	}()
+
+	// Create a test HTTP server to mock all *arr APIs
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify API Key
+		if r.Header.Get("X-Api-Key") != "radarr_key" && r.Header.Get("X-Api-Key") != "sonarr_key" && r.Header.Get("X-Api-Key") != "whisparr_key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		if r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/api/v3/queue") {
+			// Return a queue with a matching downloadId/infoHash
+			queueData := `{
+				"records": [
+					{
+						"id": 123,
+						"downloadId": "stuck_info_hash"
+					}
+				]
+			}`
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(queueData))
+			return
+		}
+
+		if r.Method == "DELETE" && (r.URL.Path == "/radarr/api/v3/queue/123" || r.URL.Path == "/sonarr/api/v3/queue/123" || r.URL.Path == "/whisparr/api/v3/queue/123") {
+			// Verify query parameters
+			if r.URL.Query().Get("removeFromClient") == "true" && r.URL.Query().Get("blocklist") == "true" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer mockServer.Close()
+
+	// Parse host and port from test server URL
+	u, err := url.Parse(mockServer.URL)
+	if err != nil {
+		t.Fatalf("failed to parse test server URL: %v", err)
+	}
+	host, portStr, _ := net.SplitHostPort(u.Host)
+	port, _ := strconv.Atoi(portStr)
+
+	// Build a custom HTTP client that redirects any client requests to our mock test server
+	customTransport := &mockTransport{
+		targetHost: host,
+		targetPort: port,
+	}
+	customClient := &http.Client{
+		Transport: customTransport,
+	}
+
+	r := newTestReaper(nil, nil, nil)
+	r.httpClient = customClient
+
+	// Call the function under test
+	removed := r.removeAndBlocklistInArrs(context.Background(), "stuck_info_hash")
+
+	if !removed {
+		t.Errorf("expected removeAndBlocklistInArrs to return true, got false")
+	}
+}
+
+type mockTransport struct {
+	targetHost string
+	targetPort int
+}
+
+func (t *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Re-route the request to our mock server
+	req.URL.Scheme = "http"
+	req.URL.Host = net.JoinHostPort(t.targetHost, strconv.Itoa(t.targetPort))
+	return http.DefaultTransport.RoundTrip(req)
 }

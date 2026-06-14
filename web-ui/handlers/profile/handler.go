@@ -78,6 +78,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	gr.POST("/skin", h.updateSkin)
 	gr.POST("/grid-density", h.updateGridDensity)
 	gr.POST("/settings", h.settingsSave)
+	gr.POST("/vault-auto-delete", h.updateVaultAutoDelete)
 }
 
 type skinUpdateReq struct {
@@ -302,6 +303,21 @@ func (h *Handler) settingsSave(c *gin.Context) {
 	autoVault := c.PostForm("auto_vault") == "1"
 	s.AutoVault = &autoVault
 	if err := admin.SaveSettings(s); err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	web.RedirectWithSuccessAndMessage(c, "toast.settingsSaved")
+}
+
+func (s *Handler) updateVaultAutoDelete(c *gin.Context) {
+	u := auth.GetUserFromContext(c)
+	db := s.pg.Get()
+	if db == nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("database connection is not available"))
+		return
+	}
+	enabled := c.PostForm("vault_auto_delete") == "1"
+	if err := models.UpdateUserVaultAutoDeleteUnseeded(c.Request.Context(), db, u.ID, enabled); err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}

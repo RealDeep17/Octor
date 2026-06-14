@@ -10,6 +10,7 @@ const (
 	WatchedFilterAll       WatchedFilter = ""
 	WatchedFilterUnwatched WatchedFilter = "unwatched"
 	WatchedFilterWatched   WatchedFilter = "watched"
+	WatchedFilterVaulted   WatchedFilter = "vaulted"
 )
 
 type GroupBy string

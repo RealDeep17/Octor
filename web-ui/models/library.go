@@ -391,6 +391,8 @@ func GetLibraryMovieList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort Sor
 		query.Where("ums.video_id IS NULL")
 	case "watched":
 		query.Where("ums.video_id IS NOT NULL")
+	case "vaulted":
+		query.Where("EXISTS (SELECT 1 FROM vault.resource WHERE resource.resource_id = movie.resource_id AND resource.vaulted = true AND resource.expired = false)")
 	}
 
 	switch sort {
@@ -462,6 +464,8 @@ func GetLibrarySeriesList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort So
 		query.Where("uss.video_id IS NULL")
 	case "watched":
 		query.Where("uss.video_id IS NOT NULL")
+	case "vaulted":
+		query.Where("EXISTS (SELECT 1 FROM vault.resource WHERE resource.resource_id = series.resource_id AND resource.vaulted = true AND resource.expired = false)")
 	}
 
 	switch sort {
@@ -864,6 +868,8 @@ func GetLibraryAdultList(ctx context.Context, db *pg.DB, uID uuid.UUID, sort Sor
 		query.Where("ums.video_id IS NULL")
 	case "watched":
 		query.Where("ums.video_id IS NOT NULL")
+	case "vaulted":
+		query.Where("EXISTS (SELECT 1 FROM vault.resource WHERE resource.resource_id = movie.resource_id AND resource.vaulted = true AND resource.expired = false)")
 	}
 
 	switch sort {

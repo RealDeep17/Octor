@@ -209,13 +209,14 @@ func (s *Auth) Init() error {
 }
 
 type User struct {
-	ID          uuid.UUID
-	Email       string
-	Expired     bool
-	IsNew       bool
-	Tier        string
-	Skin        string
-	GridDensity string
+	ID                      uuid.UUID
+	Email                   string
+	Expired                 bool
+	IsNew                   bool
+	Tier                    string
+	Skin                    string
+	GridDensity             string
+	VaultAutoDeleteUnseeded bool
 }
 
 func (s *User) HasAuth() bool {
@@ -232,6 +233,7 @@ func makeUserFromContext(c *gin.Context) *User {
 		u.Tier = su.Tier
 		u.Skin = su.Skin
 		u.GridDensity = su.GridDensity
+		u.VaultAutoDeleteUnseeded = su.VaultAutoDeleteUnseeded
 	}
 	inc := c.Request.Context().Value(IsNewContext{})
 	isNew, ok := inc.(bool)

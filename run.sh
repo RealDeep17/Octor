@@ -793,6 +793,11 @@ cmd_mode() {
             "$PROJECT_ROOT"/deploy/cron/octor-prune.cron > "$TEMP_DIR"/octor-prune
         run_sudo cp "$TEMP_DIR"/octor-prune /etc/cron.weekly/octor-prune 2>/dev/null || true
         run_sudo chmod +x /etc/cron.weekly/octor-prune 2>/dev/null || true
+
+        sed -e "s|__PROJECT_ROOT__|$PROJECT_ROOT|g" -e "s|__RUN_USER__|$RUN_USER|g" \
+            "$PROJECT_ROOT"/deploy/cron/octor-vault-reap.cron > "$TEMP_DIR"/octor-vault-reap
+        run_sudo cp "$TEMP_DIR"/octor-vault-reap /etc/cron.daily/octor-vault-reap 2>/dev/null || true
+        run_sudo chmod +x /etc/cron.daily/octor-vault-reap 2>/dev/null || true
         run_sudo systemctl daemon-reload
 
 
