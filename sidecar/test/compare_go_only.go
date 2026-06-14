@@ -35,7 +35,7 @@ import (
 
 // ── Cache helpers ──────────────────────────────────────────────────────────
 
-const cacheDir = "sidecar/test/cache"
+var cacheDir = "sidecar/test/cache"
 
 type cacheEntry struct {
 	StatusCode int                 `json:"status_code"`
@@ -97,6 +97,8 @@ func loadCache(path string) (cacheEntry, bool) {
 	}
 	return e, true
 }
+
+// ── Caching proxy ──────────────────────────────────────────────────────────
 
 func saveCache(path string, e cacheEntry) {
 	cacheMu.Lock()
@@ -337,11 +339,25 @@ func main() {
 	if v := os.Getenv("TESTSHEET"); v != "" {
 		testsheetPath = v
 	}
+
+	prevLogPath := "sidecar/test/compare_live_output.log"
+	// Adjust paths if we are running from inside sidecar/test
+	if _, err := os.Stat("go.mod"); err != nil {
+		if _, err := os.Stat("../go.mod"); err == nil {
+			// We are in sidecar/test
+			cacheDir = "cache"
+			prevLogPath = "compare_live_output.log"
+			if !strings.HasPrefix(testsheetPath, "/") && !strings.HasPrefix(testsheetPath, "../") && !strings.HasPrefix(testsheetPath, "testsheet") {
+				// if it was "sidecar/test/...", strip it
+				testsheetPath = strings.TrimPrefix(testsheetPath, "sidecar/test/")
+			}
+		}
+	}
+
 	const (
-		prevLogPath   = "sidecar/test/compare_live_output.log"
 		tpdbAPIKey    = "4MODCdLTeVcKDx28wTWiW86sF2IRqlnmVe0XVkGG55696daf"
 		stashAPIKey   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiIwMTlkZmZkYS0yZGVmLTdlN2UtYWQ4Zi0yN2FkZjc1MDI1NmYiLCJzdWIiOiJBUElLZXkiLCJpYXQiOjE3NzgxMTM5ODF9.GgudiUnFvNXpQic158c3QtheEkYY2rTLtEu5PuYn2xY"
-		workers = 10
+		workers = 5
 	)
 
 	outputLogPath := fmt.Sprintf("sidecar/test/compare_output_%s.log", time.Now().Format("20060102_150405"))
@@ -379,8 +395,19 @@ func main() {
 
 	// Build Go sidecar binary
 	fmt.Println("Building Go sidecar...")
-	binPath := "bin/sidecar_go_only_bin"
-	buildOut, err := exec.Command("go", "build", "-o", binPath, "./sidecar").CombinedOutput()
+	// Determine sidecar root (parent of this test file's runtime dir)
+	sidecarRoot := "sidecar"
+	if _, err2 := os.Stat("go.mod"); err2 == nil {
+		sidecarRoot = "." // already in sidecar root
+	} else if _, err2 := os.Stat("../go.mod"); err2 == nil {
+		sidecarRoot = ".." // in sidecar/test
+	}
+	binPath := sidecarRoot + "/bin/sidecar_go_only_bin"
+	os.MkdirAll(sidecarRoot+"/bin", 0755)
+	// Build with Dir=sidecarRoot so "bin/..." is relative to sidecar root
+	buildCmd := exec.Command("go", "build", "-o", "bin/sidecar_go_only_bin", ".")
+	buildCmd.Dir = sidecarRoot
+	buildOut, err := buildCmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("ERROR: Build failed: %v\n%s\n", err, buildOut)
 		return
@@ -564,16 +591,18 @@ func main() {
 				Notes:    notes,
 			})
 
-			// Live progress for regressions & improvements
-			if change == "REGRESSED" || change == "IMPROVED" {
-				icon := "✅"
-				if change == "REGRESSED" {
-					icon = "⚠️ "
-				}
-				fmt.Printf("  %s [%s] %s\n", icon, change, t)
-				for _, n := range notes {
-					fmt.Printf("       %s\n", n)
-				}
+			// Live progress for all titles
+			icon := "  "
+			if change == "IMPROVED" || change == "NEW_GO_ONLY" {
+				icon = "✅"
+			} else if change == "REGRESSED" {
+				icon = "⚠️ "
+			} else if strings.Contains(change, "NEITHER") || strings.Contains(change, "NOT_ENRICHED") {
+				icon = "❌"
+			}
+			fmt.Printf("[%d/%d] [%s] %s %s\n", totalDone, len(titles), change, icon, t)
+			for _, n := range notes {
+				fmt.Printf("       %s\n", n)
 			}
 
 			if totalDone%50 == 0 || totalDone == len(titles) {

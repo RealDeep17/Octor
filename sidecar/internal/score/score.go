@@ -23,7 +23,8 @@ var (
 	rxWord          = regexp.MustCompile(`[a-z0-9]+`)
 	rxWord3         = regexp.MustCompile(`[a-z0-9]{3,}`)
 	rxBareYear      = regexp.MustCompile(`^(19|20)\d{2}$`)
-	rxTrailingNum   = regexp.MustCompile(`(?i)(?:(?:part|vol|volume|ep|episode|visit|#)\s*([0-9]+)|\b([0-9]+)\s*$)`)
+	rxTrailingNum   = regexp.MustCompile(`(?i)(?:(?:scene|part|vol|volume|ep|episode|visit|#)\s*([0-9]+)(?:st|nd|rd|th)?|([0-9]+)(?:st|nd|rd|th)?(?:\s*(?:scene|part|vol|volume|ep|episode|visit|#))?\s*$)`)
+	rxPack          = regexp.MustCompile(`(?i)\b(?:pack|[0-9]+\s*videos?)\b`)
 	// Trailer/preview/BTS indicator keywords in scene titles
 	trailerKeywords = []string{"trailer", "preview", "teaser", "promo", "bts", "behind the scenes", "behind-the-scenes", "making of", "making-of"}
 	// Compilation/best-of indicator keywords in scene titles
@@ -50,10 +51,10 @@ func getWords3(s string) []string {
 	return rxWord3.FindAllString(strings.ToLower(s), -1)
 }
 
-// extractSeriesNum extracts a trailing series/part/volume/visit number from a title.
+// ExtractSeriesNum extracts a trailing series/part/volume/visit number from a title.
 // Matches patterns like "Part 3", "Vol 2", "Visit 4", "15" at end of string.
 // Returns 0 if no such number found.
-func extractSeriesNum(s string) int {
+func ExtractSeriesNum(s string) int {
 	m := rxTrailingNum.FindStringSubmatch(strings.ToLower(s))
 	if m == nil {
 		return 0
@@ -136,6 +137,14 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 		}
 	}
 
+	dateMatch := false
+	if parsed.Date != "" && scene.Date != "" {
+		if strings.HasPrefix(scene.Date, parsed.Date) {
+			dateMatch = true
+		}
+	}
+	isWhitelisted := false
+
 	// 2. Pre-calculate Platform and Performer Match
 	parsedSiteClean := cleanAlphanumeric(unidecode.Unidecode(effectiveSite))
 
@@ -150,6 +159,16 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 		}
 	}
 	isPlatform := parsedIsGeneric || sceneIsGeneric
+
+	// 2.5 Extract series numbers for later use
+	torrentSeriesNum := 0
+	sceneSeriesNum := 0
+	if parsed.Name != "" {
+		torrentSeriesNum = ExtractSeriesNum(parsed.Name)
+	}
+	if scene.Title != "" {
+		sceneSeriesNum = ExtractSeriesNum(scene.Title)
+	}
 
 	perfMatch := false
 	rawTitle := strings.ToLower(parsed.Raw)
@@ -232,7 +251,7 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 	siteMatched := false
 	if effectiveSite != "" {
 		parsedSite := cleanAlphanumeric(unidecode.Unidecode(effectiveSite))
-		_, isWhitelisted := detect.NSFWStudios[parsedSite]
+		_, isWhitelisted = detect.NSFWStudios[parsedSite]
 
 		sceneSite := cleanAlphanumeric(unidecode.Unidecode(scene.Site))
 		if parsedSite != "" && sceneSite != "" && (strings.Contains(sceneSite, parsedSite) || strings.Contains(parsedSite, sceneSite) || detect.IsAbbreviation(effectiveSite, scene.Site)) {
@@ -263,8 +282,12 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 			} else {
 				if !isPlatform || (isWhitelisted && sceneIsGeneric) {
 					hasStrongPerformerAndDate := perfMatch && parsed.Date != "" && scene.Date != "" && strings.HasPrefix(scene.Date, parsed.Date)
-					if isWhitelisted && !hasStrongPerformerAndDate {
+					hasSeriesMatch := torrentSeriesNum > 0 && torrentSeriesNum == sceneSeriesNum
+					if isWhitelisted && !hasStrongPerformerAndDate && !hasSeriesMatch {
 						score -= 180
+					} else if isWhitelisted && hasSeriesMatch {
+						// Relax penalty if series matches (could be different indexing of same content)
+						score -= 80
 					} else {
 						score -= 80
 					}
@@ -442,10 +465,6 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 		if sceneIsTrailer && !torrentHasTrailer {
 			// Scene is BTS/trailer but torrent is not — penalise strongly
 			score -= 70.0
-		} else if torrentHasTrailer && !sceneIsTrailer {
-			// Torrent is BTS/trailer but matched scene isn't — softer penalty
-			// (some BTS scenes don't include "BTS" in their title)
-			score -= 50.0
 		}
 
 		// 5d. Compilation/best-of scoring: penalise compilation scenes when torrent is not.
@@ -469,23 +488,31 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 			score -= 150.0
 		}
 
+		// 5d-2. Pack exclusion: penalise when torrent indicates a pack/collection but scene is a single video.
+		// Use -150 to ensure a performer match alone (+150) isn't enough to trigger a match.
+		if rxPack.MatchString(rawTorrentLower) && !rxPack.MatchString(sceneTitleLower) && !sceneIsCompilation {
+			score -= 150.0
+		}
+
 		// 5e. Series/volume number mismatch: penalise when torrent specifies a part/vol number
 		// that doesn't match the scene's part/vol number.
 		// e.g. torrent "Granny Loves Cock 4" but scene "Granny Loves Cock" → wrong volume.
 		// e.g. torrent "Sleezy Rider" but scene "Sleazy Rider: Part 3" → spurious part.
-		if !isOnlyPerformer && parsed.Name != "" {
-			torrentSeriesNum := extractSeriesNum(parsed.Name)
-			sceneSeriesNum := extractSeriesNum(scene.Title)
+		if !isOnlyPerformer {
 			switch {
+			case torrentSeriesNum > 0 && sceneSeriesNum > 0 && torrentSeriesNum == sceneSeriesNum:
+				// Both have the SAME number — very strong match signal
+				score += 150.0
 			case torrentSeriesNum > 0 && sceneSeriesNum > 0 && torrentSeriesNum != sceneSeriesNum:
 				// Both have a number but they differ — strong mismatch signal
-				score -= 80.0
+				// Use -150 to disqualify performer matches on wrong volume.
+				score -= 150.0
 			case torrentSeriesNum > 0 && sceneSeriesNum == 0 && siteMatched:
 				// Torrent specifies a volume but scene is generic (no number) — likely wrong episode
-				score -= 45
+				score -= 60
 			case torrentSeriesNum == 0 && sceneSeriesNum > 0 && siteMatched:
 				// Scene has a part number but torrent doesn't mention one — likely wrong part selected
-				score -= 40
+				score -= 50
 			}
 		}
 	}
@@ -579,6 +606,10 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 			if len(qw) == 4 && rxBareYear.MatchString(qw) {
 				continue
 			}
+			// Skip words that match the effective site name
+			if parsedSiteClean != "" && (strings.Contains(parsedSiteClean, qw) || strings.Contains(qw, parsedSiteClean)) {
+				continue
+			}
 			matched := false
 			for cw := range allCandidateWords {
 				if qw == cw || strings.Contains(qw, cw) || strings.Contains(cw, qw) {
@@ -606,7 +637,7 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 			}
 		}
 
-		hasSharedTitle := sharedTitleWordsCount >= 2 || (sharedTitleWordsCount >= 1 && (perfMatch || siteMatched))
+		hasSharedTitle := sharedTitleWordsCount >= 2 || (sharedTitleWordsCount >= 1 && (perfMatch || siteMatched || (torrentSeriesNum > 0 && torrentSeriesNum == sceneSeriesNum)))
 
 		if extraWords3Count >= 2 {
 			if isPlatform {
@@ -616,7 +647,7 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 			} else {
 				baseMult := 60.0
 				baseCap := 150.0
-				if hasSharedTitle || perfMatch {
+				if hasSharedTitle || perfMatch || (torrentSeriesNum > 0 && torrentSeriesNum == sceneSeriesNum) {
 					baseMult = 30.0
 					baseCap = 75.0
 				}
@@ -697,6 +728,12 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 				hasLegitimateMatch = true
 			} else if isOnlyPerformer && perfMatch {
 				// Query name is purely performer-based; title word overlap is meaningless.
+				hasLegitimateMatch = true
+			} else if (siteMatched || sharedNonGenericCount >= 1) && torrentSeriesNum > 0 && torrentSeriesNum == sceneSeriesNum {
+				// Exact series number match on a known site OR with some title overlap is a very strong pointer.
+				hasLegitimateMatch = true
+			} else if dateMatch && siteMatched && isWhitelisted {
+				// Exact date match on a whitelisted studio is a very strong signal (covers performer aliases)
 				hasLegitimateMatch = true
 			}
 

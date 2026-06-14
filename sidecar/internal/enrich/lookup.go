@@ -2,6 +2,7 @@ package enrich
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -166,6 +167,22 @@ func AdultEnrichmentLookup(
 	}
 
 	performer := parsed.Performer
+	seriesNum := score.ExtractSeriesNum(nameOrTitle)
+
+	if seriesNum > 0 {
+		if site != "" {
+			tasks = append(tasks, func() ([]scene.Scene, error) {
+				return tpdbCl.Search(site, "", fmt.Sprintf("%d", seriesNum), 10)
+			})
+			tasks = append(tasks, func() ([]scene.Scene, error) {
+				return tpdbCl.SearchRaw(fmt.Sprintf("%s scene %d", site, seriesNum), 10)
+			})
+		}
+		tasks = append(tasks, func() ([]scene.Scene, error) {
+			return tpdbCl.SearchRaw(fmt.Sprintf("%s %d", site, seriesNum), 10)
+		})
+	}
+
 	if performer != "" {
 		// Insert performer at top of search terms if not present
 		found := false

@@ -58,6 +58,10 @@ var notJavPrefixes = map[string]struct{}{
 	"s1":   {},
 	"s2":   {},
 	"s3":   {},
+	"scene":  {},
+	"part":   {},
+	"vol":    {},
+	"volume": {},
 }
 
 func StudioInTitle(title string) bool {

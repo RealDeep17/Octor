@@ -1,6 +1,12 @@
 package detect
 
 var NSFWStudios = map[string]struct{}{
+	"asiaxxxtour":                       {},
+	"dripdropprod":                       {},
+	"momlover":                       {},
+	"pixiemistress":                       {},
+	"teenmegaworld":                       {},
+	"theprincessluxy":                       {},
 	"10musume":                       {},
 	"18eighteen":                     {},
 	"18vr":                           {},
@@ -131,6 +137,7 @@ var NSFWStudios = map[string]struct{}{
 	"cardiogasm":                     {},
 	"caribbeancom":                   {},
 	"caribbeancompr":                 {},
+	"cathyscraving":                  {},
 	"caughtfapping":                  {},
 	"caughtmycoach":                  {},
 	"cfnm":                           {},

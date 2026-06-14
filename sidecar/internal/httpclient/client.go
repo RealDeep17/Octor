@@ -15,7 +15,7 @@ var defaultClient = &http.Client{
 		MaxIdleConnsPerHost: 64,
 		IdleConnTimeout:     90 * time.Second,
 	},
-	Timeout: 8 * time.Second,
+	Timeout: 60 * time.Second,
 }
 
 func Do(req *http.Request) (*http.Response, error) {
