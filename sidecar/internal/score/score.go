@@ -23,8 +23,9 @@ var (
 	rxWord          = regexp.MustCompile(`[a-z0-9]+`)
 	rxWord3         = regexp.MustCompile(`[a-z0-9]{3,}`)
 	rxBareYear      = regexp.MustCompile(`^(19|20)\d{2}$`)
-	// Trailer/preview indicator keywords in scene titles
-	trailerKeywords = []string{"trailer", "preview", "teaser", "promo"}
+	rxTrailingNum   = regexp.MustCompile(`(?i)(?:(?:part|vol|volume|ep|episode|visit|#)\s*([0-9]+)|\b([0-9]+)\s*$)`)
+	// Trailer/preview/BTS indicator keywords in scene titles
+	trailerKeywords = []string{"trailer", "preview", "teaser", "promo", "bts", "behind the scenes", "behind-the-scenes", "making of", "making-of"}
 	// Compilation/best-of indicator keywords in scene titles
 	compilationKeywords = []string{"compilation", "best of", "best of ", "collection", "greatest hits", "cumpilation", "cumshot compilation"}
 )
@@ -47,6 +48,31 @@ func getWords(s string) []string {
 
 func getWords3(s string) []string {
 	return rxWord3.FindAllString(strings.ToLower(s), -1)
+}
+
+// extractSeriesNum extracts a trailing series/part/volume/visit number from a title.
+// Matches patterns like "Part 3", "Vol 2", "Visit 4", "15" at end of string.
+// Returns 0 if no such number found.
+func extractSeriesNum(s string) int {
+	m := rxTrailingNum.FindStringSubmatch(strings.ToLower(s))
+	if m == nil {
+		return 0
+	}
+	// group 1: named keyword match (part/vol/...), group 2: bare trailing number
+	for _, g := range m[1:] {
+		if g != "" {
+			n := 0
+			for _, c := range g {
+				if c >= '0' && c <= '9' {
+					n = n*10 + int(c-'0')
+				}
+			}
+			if n > 0 && n < 500 { // sanity cap (avoid matching years)
+				return n
+			}
+		}
+	}
+	return 0
 }
 
 var stopWordsAndCodecs = map[string]struct{}{
@@ -395,7 +421,7 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 		}
 	}
 
-	// 5c. Trailer scoring: penalise scene-is-trailer when torrent is not.
+	// 5c. Trailer/BTS scoring: penalise mismatch between torrent and scene on BTS/trailer type.
 	if scene.Title != "" {
 		sceneTitleLower := strings.ToLower(scene.Title)
 		rawTorrentLower := strings.ToLower(parsed.Raw)
@@ -414,8 +440,12 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 			}
 		}
 		if sceneIsTrailer && !torrentHasTrailer {
-			// Scene is a trailer but torrent is not — penalise
-			score -= 120.0
+			// Scene is BTS/trailer but torrent is not — penalise strongly
+			score -= 70.0
+		} else if torrentHasTrailer && !sceneIsTrailer {
+			// Torrent is BTS/trailer but matched scene isn't — softer penalty
+			// (some BTS scenes don't include "BTS" in their title)
+			score -= 50.0
 		}
 
 		// 5d. Compilation/best-of scoring: penalise compilation scenes when torrent is not.
@@ -437,6 +467,26 @@ func ScoreResult(parsed parse.ParsedFilename, scene scene.Scene, targetDuration 
 		if sceneIsCompilation && !torrentHasCompilation {
 			// Scene is a compilation but torrent filename doesn't indicate one — penalise
 			score -= 150.0
+		}
+
+		// 5e. Series/volume number mismatch: penalise when torrent specifies a part/vol number
+		// that doesn't match the scene's part/vol number.
+		// e.g. torrent "Granny Loves Cock 4" but scene "Granny Loves Cock" → wrong volume.
+		// e.g. torrent "Sleezy Rider" but scene "Sleazy Rider: Part 3" → spurious part.
+		if !isOnlyPerformer && parsed.Name != "" {
+			torrentSeriesNum := extractSeriesNum(parsed.Name)
+			sceneSeriesNum := extractSeriesNum(scene.Title)
+			switch {
+			case torrentSeriesNum > 0 && sceneSeriesNum > 0 && torrentSeriesNum != sceneSeriesNum:
+				// Both have a number but they differ — strong mismatch signal
+				score -= 80.0
+			case torrentSeriesNum > 0 && sceneSeriesNum == 0 && siteMatched:
+				// Torrent specifies a volume but scene is generic (no number) — likely wrong episode
+				score -= 45
+			case torrentSeriesNum == 0 && sceneSeriesNum > 0 && siteMatched:
+				// Scene has a part number but torrent doesn't mention one — likely wrong part selected
+				score -= 40
+			}
 		}
 	}
 
