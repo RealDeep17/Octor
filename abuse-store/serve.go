@@ -54,10 +54,11 @@ func serve(c *cli.Context) error {
 
 	// Setting Store
 	st := s.NewStore(c, b, pg)
-	err = st.Sync()
-	if err != nil {
-		return err
-	}
+	go func() {
+		if err := st.Sync(); err != nil {
+			log.WithError(err).Error("initial DB sync failed")
+		}
+	}()
 
 	// Setting SMTP
 	smtp := s.NewSMTP(c)

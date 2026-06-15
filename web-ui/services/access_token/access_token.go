@@ -105,6 +105,11 @@ func (s *AccessToken) getToken(ctx context.Context, tokenStr string) (*models.Ac
 	return models.GetUserByAccessTokenWithUser(ctx, db, token)
 }
 
+func (s *AccessToken) GetToken(ctx context.Context, tokenStr string) (*models.AccessToken, error) {
+	return s.getToken(ctx, tokenStr)
+}
+
+
 func (s *AccessToken) HasScope(scopes ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Query(common2.AccessTokenParamName) == "" {

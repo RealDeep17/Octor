@@ -10,7 +10,11 @@ This document serves as the official record of all stabilization, security, and 
 5. [Phase 5: Functional Backlog & Heuristics](#phase-5-functional-backlog--heuristics)
 6. [Phase 6: Core Feature Completion & Compliance](#phase-6-core-feature-completion--compliance)
 7. [Phase 7: Knowledge Base & CI Sync](#phase-7-knowledge-base--ci-sync)
-8. [Stremio Integration Hardening (Tier 1)](#stremio-integration-hardening-tier-1)
+8. [Phase 8: Critical Infrastructure Deaths](#phase-8-critical-infrastructure-deaths)
+9. [Stremio Integration Hardening (Tier 1)](#stremio-integration-hardening-tier-1)
+10. [Stremio Integration Hardening (Tier 2)](#stremio-integration-hardening-tier-2)
+11. [Stremio Integration Hardening (Tier 3)](#stremio-integration-hardening-tier-3)
+12. [Stremio Integration Hardening (Tier 4)](#stremio-integration-hardening-tier-4)
 
 ---
 
@@ -99,3 +103,40 @@ This document serves as the official record of all stabilization, security, and 
 *   **SSRF Prevention:** Injected a custom `net.Dialer` into the Stremio HTTP client to explicitly reject all internal/private IP ranges (RFC1918).
 *   **Secret Management:** Migrated hardcoded cryptographic signatures from `manifest.go` to the `STREMIO_ADDONS_SIGNATURE` environment variable.
 *   **Discovery Reliability:** Increased stream discovery timeouts to 20s and enabled environment overrides to support high-latency DHT scraping.
+
+---
+
+## Stremio Integration Hardening (Tier 2)
+**Goal:** Prevent CPU exhaustion during deduplication, optimize duplicate manifest parsing, and preserve private tracker swarms.
+
+*   **Stream Deduplication Guard:** Capped stream list processing in `dedup_stream.go` to 50 streams per infohash, eliminating O(N^2) CPU/memory stalls from rogue/malicious addons.
+*   **Flexible ID Normalization:** Expanded the addon ID normalization suffix check in `AddonWizard.jsx` from `{3,5}` to `{3,10}` to cover longer auto-generated instances securely, stopping duplicate catalogs and redundant queries.
+*   **Private Tracker Swarm Rescue:** For library streams (`library.go`), parsed announce trackers from the S3 MagnetURI and injected them as `sources` (prefixed with `tracker:`) to prevent stalled playback and disconnection of private tracker swarms.
+
+---
+
+## Stremio Integration Hardening (Tier 3)
+**Goal:** Address Mixed Content and Private Network blocks via clean browser headers and ensure asynchronous community manifest resilience.
+
+*   **CORS & Private Network Access (PNA) Preflight:** Added a global `CORSPNAMiddleware` in `middleware.go` (registered in `web.go`) that handles OPTIONS preflight and `Access-Control-Request-Private-Network` requests securely, returning `Access-Control-Allow-Private-Network: true` to support self-hosters and Stremio Web seamlessly.
+*   **Asynchronous Manifest Cache Refresher:** Implemented a background cron-like refresher daemon (`startSnapshotRefresher` running every 6 hours) in `handlers/stremio/stremio_addon_url/handler.go` that asynchronously updates `ManifestSnapshot` for all active URLs. If a remote addon is down, the system preserves the last functional cached manifest, avoiding empty Discover pages.
+
+---
+
+## Stremio Integration Hardening (Tier 4)
+**Goal:** Native configuration arrays, robust browser LocalStorage protection, and zombie addon eradication.
+
+*   **Dynamic User Configuration:** Registered parametric routes under `/:config` in `web-ui/handlers/stremio/handler.go` with `withConfig` middleware to parse and apply user-configured resolution/language settings natively.
+*   **LocalStorage Schema Safeguard:** Hardened cache pruning in `manifestCache.js` with strict JSON schema validation to protect third-party or unparseable keys under the `stremio.manifest.` prefix.
+*   **Zombie Addon Eradication:** Configured `StremioClient` constructor to strictly verify seeds against the active URLs list, and updated profile `handleDeleteAddon` to immediately clear deleted addons from `window._addons` and localStorage caches.
+
+---
+
+## Phase 8: Critical Infrastructure Deaths
+**Goal:** Eradicate container boot crash loops, block path-traversal-based arbitrary file overwrites, prevent Billion Laughs DoS, stop S3 multipart orphaned-parts storage leaks, and eliminate FFmpeg transcoding OOM triggers.
+
+*   **Abuse-Store Synchronous Boot Crash (O(N) Scan):** Abandoned global O(N) full-table db scans in `abuse-store/services/store.go` and migrated to a watermark-based incremental synchronization strategy using a new `sync_watermarks` database table with index support on `abuse(created_at)`. Additionally, moved initial boot synchronization inside a background goroutine in `abuse-store/serve.go` to guarantee container boot-up is instantaneous, preventing Kubernetes Liveness/Readiness probe timeouts.
+*   **Path Traversal Vulnerability (S3 Gateway & WebDAV):** Hardened custom `s3-gateway/main.go` and WebDAV `web-ui/handlers/webdav/local.go` to clean path boundaries and enforce strict `strings.HasPrefix` parent-directory boundary verification on user-controlled inputs (such as the `X-Amz-Meta-Human-Path` header and WebDAV paths), fully eliminating arbitrary host file overwrites or unauthorized path access.
+*   **Billion Laughs XML DoS:** Wrapped incoming WebDAV XML request bodies in `web-ui/services/webdav/internal/server.go` using an `io.LimitReader` explicitly capped to 1MB, ensuring recursive entity expansion attacks cannot exhaust memory resources and trigger container OOM kills.
+*   **500GB Orphaned S3 Part Leaks:** Implemented dynamic S3 multipart upload part size calculation in `vault/services/worker.go` based on total file size / 10000 (rounded up to the nearest 5MB), allowing the worker to safely upload files larger than 500GB without hitting the S3 10,000 part limit. Also fixed the garbage collection sweep logic to skip database row deletions if an active S3 multipart upload abort attempt fails with a real error, preventing invisible storage leaks.
+*   **FFmpeg Transcoder Scrubbing CPU/RAM pegging:** Implemented strict per-session concurrency in `content-transcoder` (`services/run_manager.go`, `services/session.go`). During user seeking or scrubbing across the video timeline, any previous FFmpeg run owned by the session is immediately force-terminated via `ReleaseForce`, bypassing the grace period and preventing concurrent process build-up and Linux OOM kills.

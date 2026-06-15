@@ -93,8 +93,8 @@ function isAdult(addon) {
 
 // Normalize manifest ID: strip random instance suffixes (e.g. "stremio.comet.fast.twaD" → "stremio.comet.fast")
 function normalizeId(id) {
-    // Strip trailing dot + 3-5 char random suffix (e.g. ".twaD", ".VUwl", ".aKyc", ".iofD")
-    return (id || '').replace(/\.[A-Za-z0-9]{3,5}$/, '');
+    // Strip trailing dot + 3-10 char random suffix (e.g. ".twaD", ".VUwl", ".abcdef", ".iofD")
+    return (id || '').replace(/\.[A-Za-z0-9]{3,10}$/, '');
 }
 
 function dedup(addons) {

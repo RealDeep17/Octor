@@ -103,10 +103,13 @@ export class StremioClient {
         //   { baseUrl, manifest, status: 'ok'|'unreachable'|'misconfigured',
         //     source: 'fresh'|'cache'|'seed'|null, error?: string }
         this.addonStatuses = null;
+        const urlSet = new Set(this.addonUrls);
         this.seedsByUrl = new Map();
         for (const s of addonSeeds || []) {
             const baseUrl = (s.url || '').replace(/\/manifest\.json$/, '');
-            if (baseUrl) this.seedsByUrl.set(baseUrl, s);
+            if (baseUrl && urlSet.has(baseUrl)) {
+                this.seedsByUrl.set(baseUrl, s);
+            }
         }
         manifestCache.prune(this.addonUrls);
     }

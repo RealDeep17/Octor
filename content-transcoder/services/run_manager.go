@@ -106,6 +106,25 @@ func (m *RunManager) Release(run *TranscodeRun) {
 	}
 }
 
+// ReleaseForce decrements the run's refCount. When it reaches 0, the run is
+// cleaned up and force-terminated immediately, bypassing the grace period.
+func (m *RunManager) ReleaseForce(run *TranscodeRun) {
+	n := run.Release()
+
+	if n <= 0 {
+		m.mu.Lock()
+		if mr, ok := m.runs[run.key]; ok && mr.run == run {
+			delete(m.runs, run.key)
+		}
+		m.mu.Unlock()
+
+		log.WithFields(log.Fields{
+			"runKey": run.key,
+		}).Info("runManager: run idle, force-cleaning up run immediately")
+		run.Cleanup()
+	}
+}
+
 // CloseAll stops all runs and the reaper.
 func (m *RunManager) CloseAll() {
 	m.mu.Lock()

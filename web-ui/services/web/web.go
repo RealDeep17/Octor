@@ -80,6 +80,7 @@ func (s *Web) Use(mw func(http.Handler) http.Handler) {
 
 func New(c *cli.Context, r *gin.Engine) (*Web, error) {
 	r.UseRawPath = true
+	r.Use(CORSPNAMiddleware())
 
 	return &Web{
 		host: c.String(webHostFlag),

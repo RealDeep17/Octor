@@ -413,7 +413,13 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		humanPath := r.Header.Get("X-Amz-Meta-Human-Path")
 		finalPath := filepath.Join(bucketDir, key)
 		if humanReadable && humanPath != "" {
-			finalPath = filepath.Join(storageDir, humanPath)
+			cleanStorageDir := filepath.Clean(storageDir)
+			candidatePath := filepath.Clean(filepath.Join(cleanStorageDir, humanPath))
+			if !strings.HasPrefix(candidatePath, cleanStorageDir) || (len(candidatePath) > len(cleanStorageDir) && candidatePath[len(cleanStorageDir)] != filepath.Separator) {
+				writeError(w, http.StatusBadRequest, "InvalidPath", "Path traversal detected in X-Amz-Meta-Human-Path", r.URL.Path)
+				return
+			}
+			finalPath = candidatePath
 			log.Printf("[S3] Direct Human Upload: Mapping %s/%s -> %s", bucket, key, finalPath)
 		}
 
@@ -842,7 +848,13 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		humanPath := r.Header.Get("X-Amz-Meta-Human-Path")
 		finalPath := filepath.Join(bucketDir, key)
 		if humanReadable && humanPath != "" {
-			finalPath = filepath.Join(storageDir, humanPath)
+			cleanStorageDir := filepath.Clean(storageDir)
+			candidatePath := filepath.Clean(filepath.Join(cleanStorageDir, humanPath))
+			if !strings.HasPrefix(candidatePath, cleanStorageDir) || (len(candidatePath) > len(cleanStorageDir) && candidatePath[len(cleanStorageDir)] != filepath.Separator) {
+				writeError(w, http.StatusBadRequest, "InvalidPath", "Path traversal detected in X-Amz-Meta-Human-Path", r.URL.Path)
+				return
+			}
+			finalPath = candidatePath
 		}
 
 		if err := os.MkdirAll(filepath.Dir(finalPath), 0777); err != nil {

@@ -42,6 +42,21 @@ av(async function(){
             // Update hidden input
             deletedAddonsInput.value = Array.from(deletedAddons).join(',');
             
+            // Clear the manifestCache entry in localStorage for this addon
+            try {
+                if (addonUrl) {
+                    const baseUrl = addonUrl.replace(/\/manifest\.json$/, '');
+                    window.localStorage.removeItem('stremio.manifest.' + baseUrl);
+                }
+            } catch (e) {
+                // ignore
+            }
+
+            // Clean up window._addons so that if they navigate to discover without refreshing, it remains clean
+            if (window._addons) {
+                window._addons = window._addons.filter(a => a.id !== addonId);
+            }
+
             // Remove the element from DOM
             addonItem.remove();
 

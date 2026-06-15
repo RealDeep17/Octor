@@ -45,23 +45,60 @@ func NewStore(c *cli.Context, b *badger.DB, p *cs.PG) *Store {
 	}
 }
 
+type SyncWatermark struct {
+	tableName    struct{}  `pg:"public.sync_watermarks,alias:sw"`
+	Key          string    `pg:"key,pk"`
+	LastSyncedAt time.Time `pg:"last_synced_at"`
+}
+
 func (s *Store) Sync() error {
 	pg := s.p.Get()
 	if pg == nil {
 		return errors.New("database not initialized")
 	}
 	log.Info("DB syncing started")
-	err := pg.Model(&m.Abuse{}).ForEach(func(a *m.Abuse) error {
-		err := s.pushToCache(a)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
+
+	watermark := &SyncWatermark{Key: "abuse_store"}
+	err := pg.Model(watermark).WherePK().Select()
 	if err != nil {
-		return err
+		if err.Error() == "pg: no rows in result set" {
+			watermark.LastSyncedAt = time.Unix(0, 0)
+		} else {
+			return errors.Wrap(err, "failed to fetch sync watermark")
+		}
 	}
-	log.Info("DB syncing finished")
+
+	log.Infof("DB syncing from last watermark: %v", watermark.LastSyncedAt)
+
+	var maxCreatedAt time.Time
+	err = pg.Model(&m.Abuse{}).
+		Where("created_at > ?", watermark.LastSyncedAt).
+		Order("created_at ASC").
+		ForEach(func(a *m.Abuse) error {
+			err := s.pushToCache(a)
+			if err != nil {
+				return err
+			}
+			if a.CreatedAt.After(maxCreatedAt) {
+				maxCreatedAt = a.CreatedAt
+			}
+			return nil
+		})
+	if err != nil {
+		return errors.Wrap(err, "failed to sync abuses from database")
+	}
+
+	if !maxCreatedAt.IsZero() {
+		watermark.LastSyncedAt = maxCreatedAt
+		_, err = pg.Model(watermark).OnConflict("(key) DO UPDATE").Set("last_synced_at = EXCLUDED.last_synced_at").Insert()
+		if err != nil {
+			return errors.Wrap(err, "failed to update sync watermark")
+		}
+		log.Infof("DB syncing finished, new watermark: %v", maxCreatedAt)
+	} else {
+		log.Info("DB syncing finished, no new records to sync")
+	}
+
 	return nil
 }
 

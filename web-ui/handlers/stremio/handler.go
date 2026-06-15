@@ -56,6 +56,14 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, at *at.AccessToken, b *strem
 	grapi.GET("/stream/:type/*id", h.stream)
 	grapi.GET("/meta/:type/*id", h.meta)
 	grapi.GET("/resolve/*data", h.resolve)
+
+	// Route group for parametric configuration (e.g. /stremio/token=abc,resolution=1080p/...)
+	grc := gr.Group("/:config")
+	grc.Use(h.withConfig)
+	grc.GET("/manifest.json", h.manifest)
+	grc.GET("/catalog/:type/*id", h.catalog)
+	grc.GET("/stream/:type/*id", h.stream)
+	grc.GET("/meta/:type/*id", h.meta)
 }
 
 func (s *Handler) generateUrl(c *gin.Context) {
@@ -223,3 +231,111 @@ func (s *Handler) resolve(c *gin.Context) {
 	// Step 8: Redirect to destination URL
 	c.Redirect(http.StatusFound, linkResult.URL)
 }
+
+func parseConfigSegment(segment string) map[string]string {
+	config := make(map[string]string)
+	if segment == "" {
+		return config
+	}
+	unescaped, err := url.QueryUnescape(segment)
+	if err == nil {
+		segment = unescaped
+	}
+	// Split by comma or semicolon
+	parts := strings.Split(segment, ",")
+	if len(parts) == 1 && strings.Contains(segment, ";") {
+		parts = strings.Split(segment, ";")
+	}
+	for _, part := range parts {
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) == 2 {
+			config[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+		}
+	}
+	return config
+}
+
+func buildDynamicSettings(config map[string]string) *models.StremioSettingsData {
+	dyn := &models.StremioSettingsData{}
+
+	// 1. Resolution
+	if res, ok := config["resolution"]; ok && res != "" && res != "All" {
+		dyn.PreferredResolutions = []models.ResolutionSetting{
+			{Resolution: res, Enabled: true},
+		}
+	}
+
+	// 2. Language
+	if lang, ok := config["language"]; ok && lang != "" {
+		dyn.PreferredLanguage = lang
+	}
+
+	// 3. DiscoverOnly
+	if do, ok := config["discoverOnly"]; ok {
+		dyn.DiscoverOnly = (do == "true")
+	}
+
+	return dyn
+}
+
+func (s *Handler) withConfig(c *gin.Context) {
+	configSeg := c.Param("config")
+	configMap := parseConfigSegment(configSeg)
+
+	tokenStr := configMap["token"]
+	isManifest := strings.HasSuffix(c.Request.URL.Path, "/manifest.json")
+
+	if !isManifest {
+		if tokenStr == "" {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		atRecord, err := s.at.GetToken(c.Request.Context(), tokenStr)
+		if err != nil || atRecord == nil {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		// Verify scope
+		hasScope := false
+		for _, sc := range atRecord.Scope {
+			if sc == "stremio:read" {
+				hasScope = true
+				break
+			}
+		}
+		if !hasScope {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+
+		// Set token in query parameters
+		q := c.Request.URL.Query()
+		q.Set(sv.AccessTokenParamName, tokenStr)
+		c.Request.URL.RawQuery = q.Encode()
+
+		// Inject authenticated user and scope into context
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), auth.UserContext{}, atRecord.User))
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), at.TokenScope{}, atRecord.Scope))
+	} else {
+		// For manifest, if token is valid, inject it
+		if tokenStr != "" {
+			atRecord, err := s.at.GetToken(c.Request.Context(), tokenStr)
+			if err == nil && atRecord != nil {
+				// Set token in query parameters
+				q := c.Request.URL.Query()
+				q.Set(sv.AccessTokenParamName, tokenStr)
+				c.Request.URL.RawQuery = q.Encode()
+
+				c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), auth.UserContext{}, atRecord.User))
+				c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), at.TokenScope{}, atRecord.Scope))
+			}
+		}
+	}
+
+	// Build and inject dynamic settings
+	dyn := buildDynamicSettings(configMap)
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), stremio.StremioDynamicSettingsKey{}, dyn))
+
+	c.Next()
+}
+

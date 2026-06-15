@@ -50,6 +50,10 @@ func RegisterHandler(c *cli.Context, av *stremio.AddonValidator, r *gin.Engine, 
 	gr.POST("/delete/:id", h.delete)
 	gr.POST("/update", h.update)
 	gr.POST("/:id/refresh-snapshot", h.refreshSnapshot)
+
+	// Start background job to asynchronously refresh addon manifest snapshots
+	go h.startSnapshotRefresher()
+
 	return nil
 }
 
@@ -446,4 +450,68 @@ func (s *Handler) deleteAddonUrl(ctx context.Context, idStr string, user *auth.U
 
 	// Delete addon URL owned by the current user
 	return models.DeleteUserStremioAddonUrl(ctx, db, id, user.ID)
+}
+
+func (s *Handler) startSnapshotRefresher() {
+	// A brief delay on startup to allow the server and database to fully initialize
+	time.Sleep(30 * time.Second)
+
+	refresh := func() {
+		log.Info("Starting background stremio addon manifest snapshot refresh...")
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer cancel()
+
+		db := s.pg.Get()
+		if db == nil {
+			log.Warn("Background snapshot refresh: no database connection available")
+			return
+		}
+
+		activeAddons, err := models.GetActiveStremioAddonUrls(ctx, db)
+		if err != nil {
+			log.WithError(err).Error("Background snapshot refresh: failed to fetch active addon URLs")
+			return
+		}
+
+		successCount := 0
+		failCount := 0
+		skippedCount := 0
+
+		for _, addon := range activeAddons {
+			// Skip if the snapshot is fresh enough (fetched within the last 12 hours)
+			if addon.ManifestFetchedAt != nil && time.Since(*addon.ManifestFetchedAt) < 12*time.Hour {
+				skippedCount++
+				continue
+			}
+
+			log.WithField("url", addon.Url).Debug("Background snapshot refresh: fetching manifest")
+			snapshot, err := s.validator.ValidateAndFetch(addon.Url)
+			if err != nil {
+				log.WithError(err).WithField("url", addon.Url).Warn("Background snapshot refresh: failed to fetch manifest snapshot, keeping existing snapshot")
+				failCount++
+				continue
+			}
+
+			err = models.UpdateStremioAddonUrlSnapshot(ctx, db, addon.ID, addon.UserID, snapshot)
+			if err != nil {
+				log.WithError(err).WithField("addon_id", addon.ID).Error("Background snapshot refresh: failed to update snapshot in database")
+				failCount++
+				continue
+			}
+			successCount++
+		}
+
+		log.Infof("Background snapshot refresh completed. Success: %d, Failed: %d, Skipped: %d", successCount, failCount, skippedCount)
+	}
+
+	// Run initially on startup
+	refresh()
+
+	// Then run every 6 hours
+	ticker := time.NewTicker(6 * time.Hour)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		refresh()
+	}
 }

@@ -97,6 +97,20 @@ func GetAllUserStremioAddonUrls(ctx context.Context, db *pg.DB, userID uuid.UUID
 	return stremioAddonUrls, nil
 }
 
+// GetActiveStremioAddonUrls returns all enabled stremio addon URLs in the system
+func GetActiveStremioAddonUrls(ctx context.Context, db *pg.DB) ([]StremioAddonUrl, error) {
+	var stremioAddonUrls []StremioAddonUrl
+	err := db.Model(&stremioAddonUrls).
+		Context(ctx).
+		Where("enabled = ?", true).
+		Select()
+	if err != nil {
+		return nil, err
+	}
+	return stremioAddonUrls, nil
+}
+
+
 // CountUserStremioAddonUrls returns the number of stremio addon URLs for a specific user
 func CountUserStremioAddonUrls(ctx context.Context, db *pg.DB, userID uuid.UUID) (int, error) {
 	return db.Model(&StremioAddonUrl{}).

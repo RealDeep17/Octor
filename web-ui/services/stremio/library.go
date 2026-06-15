@@ -3,6 +3,7 @@ package stremio
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -201,6 +202,18 @@ func (s *Library) getStreamItem(ctx context.Context, vc models.VideoContentWithM
 	if err != nil {
 		return nil, err
 	}
+
+	var sources []string
+	if res, err := s.sapi.GetResourceCached(ctx, s.cla, vc.GetContent().ResourceID); err == nil && res != nil && res.MagnetURI != "" {
+		if u, err := url.Parse(res.MagnetURI); err == nil {
+			for _, tr := range u.Query()["tr"] {
+				if tr != "" {
+					sources = append(sources, "tracker:"+tr)
+				}
+			}
+		}
+	}
+
 	return &StreamItem{
 		Name:     s.makeStreamName("Octor", md),
 		Title:    s.makeStreamTitle(title, md),
@@ -210,6 +223,7 @@ func (s *Library) getStreamItem(ctx context.Context, vc models.VideoContentWithM
 			Filename:   ti.Name,
 			BingeGroup: fmt.Sprintf("octorio|%v", vc.GetContent().ResourceID),
 		},
+		Sources: sources,
 	}, nil
 
 }

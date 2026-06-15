@@ -38,7 +38,10 @@ func DecodeXMLRequest(r *http.Request, v interface{}) error {
 		return HTTPErrorf(http.StatusBadRequest, "webdav: expected application/xml request")
 	}
 
-	if err := xml.NewDecoder(r.Body).Decode(v); err != nil {
+	// Limit request body to 1MB to prevent XML entity expansion (Billion Laughs) DoS
+	limitedBody := io.LimitReader(r.Body, 1024*1024)
+
+	if err := xml.NewDecoder(limitedBody).Decode(v); err != nil {
 		return &HTTPError{http.StatusBadRequest, err}
 	}
 	return nil

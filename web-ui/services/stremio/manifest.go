@@ -48,7 +48,36 @@ func (s *Manifest) GetManifest(c context.Context) (*ManifestResponse, error) {
 			Configurable:          true,
 			ConfigurationRequired: true,
 		}
-
+		m.Config = []ConfigOption{
+			{
+				Key:      "token",
+				Type:     "password",
+				Label:    "Octor Access Token",
+				Required: true,
+			},
+			{
+				Key:      "resolution",
+				Type:     "select",
+				Label:    "Preferred Resolution",
+				Default:  "All",
+				Options:  []string{"All", "2160p", "1080p", "720p", "480p"},
+				Required: false,
+			},
+			{
+				Key:      "language",
+				Type:     "text",
+				Label:    "Preferred Language (2-letter ISO, e.g. en, ru)",
+				Default:  "",
+				Required: false,
+			},
+			{
+				Key:      "discoverOnly",
+				Type:     "checkbox",
+				Label:    "Discover Only",
+				Default:  "false",
+				Required: false,
+			},
+		}
 	}
 	return m, nil
 }

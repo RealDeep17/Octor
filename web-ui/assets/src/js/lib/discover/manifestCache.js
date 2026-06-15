@@ -63,14 +63,18 @@ export function prune(activeBaseUrls) {
             const k = ls.key(i);
             if (!k || !k.startsWith(PREFIX)) continue;
             const baseUrl = k.slice(PREFIX.length);
-            if (!active.has(baseUrl)) { toRemove.push(k); continue; }
             try {
-                const obj = JSON.parse(ls.getItem(k));
-                if (!obj?.lastSuccessAt || now - obj.lastSuccessAt > MAX_AGE_MS) {
-                    toRemove.push(k);
+                const raw = ls.getItem(k);
+                if (!raw) continue;
+                const obj = JSON.parse(raw);
+                // Strict schema validation: must be an object with lastSuccessAt as a number and manifest as an object.
+                if (obj && typeof obj === 'object' && typeof obj.lastSuccessAt === 'number' && obj.manifest && typeof obj.manifest === 'object') {
+                    if (!active.has(baseUrl) || now - obj.lastSuccessAt > MAX_AGE_MS) {
+                        toRemove.push(k);
+                    }
                 }
             } catch {
-                toRemove.push(k);
+                // Not our JSON, or corrupt/foreign key. Do not assume ownership; leave it alone.
             }
         }
         for (const k of toRemove) ls.removeItem(k);

@@ -131,7 +131,7 @@ func (s *Session) acquireRunLocked() error {
 // releaseRunLocked releases the current run if any.
 func (s *Session) releaseRunLocked() {
 	if s.run != nil {
-		s.runMgr.Release(s.run)
+		s.runMgr.ReleaseForce(s.run)
 		s.run = nil
 	}
 }
@@ -163,7 +163,7 @@ func (s *Session) Seek(seekTime float64) error {
 
 	// Release old run only after successful acquire
 	if oldRun != nil {
-		s.runMgr.Release(oldRun)
+		s.runMgr.ReleaseForce(oldRun)
 	}
 	return nil
 }

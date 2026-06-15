@@ -916,17 +916,31 @@ func (s *Worker) sweepOrphanFiles(ctx context.Context, db *pg.DB) (int, error) {
 		cleanCtx, cleanCancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 		if f.UploadID != "" {
-			_, _ = s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
+			var abortErr error
+			_, err1 := s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
 				Key:      aws.String(s.s3Key(f.Hash, "", "")),
 				UploadId: aws.String(f.UploadID),
 			})
-			if _, err := s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
+			if err1 != nil {
+				if awsErr, ok := err1.(awserr.Error); !ok || (awsErr.Code() != "NoSuchUpload" && awsErr.Code() != "NotFound" && awsErr.Code() != "NoSuchKey") {
+					abortErr = err1
+				}
+			}
+			_, err2 := s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
 				Key:      aws.String(f.Hash),
 				UploadId: aws.String(f.UploadID),
-			}); err != nil {
-				log.WithError(err).WithField("hash", f.Hash).Warn("sweep: abort multipart failed; continuing")
+			})
+			if err2 != nil {
+				if awsErr, ok := err2.(awserr.Error); !ok || (awsErr.Code() != "NoSuchUpload" && awsErr.Code() != "NotFound" && awsErr.Code() != "NoSuchKey") {
+					abortErr = err2
+				}
+			}
+			if abortErr != nil {
+				log.WithError(abortErr).WithField("hash", f.Hash).Warn("sweep: abort multipart failed; skipping database row deletion")
+				cleanCancel()
+				continue
 			}
 		}
 		_, _ = s3Cl.DeleteObjectWithContext(cleanCtx, &awss3.DeleteObjectInput{
@@ -1297,6 +1311,19 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	var visibleStored int64
 	mu.Unlock()
 	partSize := s.part
+	if item.Size > 0 {
+		minPartSize := (item.Size + 9999) / 10000
+		const fiveMB = 5 * 1024 * 1024
+		roundedMinPartSize := ((minPartSize + fiveMB - 1) / fiveMB) * fiveMB
+		if roundedMinPartSize > partSize {
+			partSize = roundedMinPartSize
+			log.WithFields(log.Fields{
+				"file_size":          item.Size,
+				"default_part_size":  s.part,
+				"adjusted_part_size": partSize,
+			}).Info("Adjusted S3 multipart upload part size to satisfy 10,000 part limit")
+		}
+	}
 	if partSize < 5*1024*1024 {
 		partSize = 5 * 1024 * 1024
 	}
