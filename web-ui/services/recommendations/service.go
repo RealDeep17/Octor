@@ -293,6 +293,10 @@ var (
 	// Handlers return 400.
 	ErrQueryTooLong = errors.New("query is too long")
 
+	// ErrPromptInjection means the user-provided query is flagged as potential prompt injection.
+	// Handlers return 400.
+	ErrPromptInjection = errors.New("prompt injection detected")
+
 	// ErrEmptyQuery means the recommend handler was called without any
 	// query text. Handlers return 400.
 	ErrEmptyQuery = errors.New("query is empty")

@@ -40,5 +40,13 @@ func Save(dir string, s *Settings) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }

@@ -2,8 +2,11 @@ package recommendations
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+var injectionRegex = regexp.MustCompile(`(?i)\b(ignore|forget|override|disregard|bypass)\b.*\b(instructions|rules|prompt|constraints)\b|\b(developer\s+mode|dan\s+mode|jailbreak\s+prompt|system\s+prompt|unrestricted\s+mode)\b|\b(you\s+are\s+now\s+a|act\s+as\s+a|pretend\s+to\s+be|instead\s+of\s+recommending|instead\s+of\s+movies)\b`)
 
 // systemPrompt is the instruction block Claude sees at the start of every
 // request. It is deliberately firm about the "tool use only" contract and
@@ -469,3 +472,10 @@ func indent(s, prefix string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// HasPromptInjection checks if a user query contains keywords or phrases
+// characteristic of prompt injection or system prompt override attempts.
+func HasPromptInjection(query string) bool {
+	return injectionRegex.MatchString(query)
+}
+

@@ -225,6 +225,7 @@ func (ts *mmapTorrentStorage) Close() error {
 	for _, m := range ts.mmaps {
 		if m != nil {
 			_ = madviseEvict(m)
+			_ = m.Unmap()
 		}
 	}
 	// Close the piece-completion store: releases its background goroutine,

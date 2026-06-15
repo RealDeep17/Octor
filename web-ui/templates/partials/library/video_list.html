@@ -4,7 +4,7 @@
      and docs/uikit.html section 7 "Video Card". */}}
 <div class="dynamic-grid grid-flow-row-dense gap-4">
     {{ range $.Data }}
-    <a href="{{ langPath $.Ctx.Lang (. | getCardHref) }}" data-async-target="main" class="library-item group flex [&:has(.layout-toggle-checkbox:checked)]:col-span-2"
+    <a href="{{ langPath $.Ctx.Lang (. | getCardHref) }}" data-async-target="main" class="library-item group flex has-[.layout-toggle-checkbox:checked]:col-span-2"
        data-adult-type="{{ if . | isAdultJAV }}jav{{ else }}porn{{ end }}"
        data-series-type="{{ if . | isSeriesAnime }}anime{{ else }}tv{{ end }}">
         <div class="w-card-frame {{ if . | getUserWatched }}is-watched{{ end }} w-full">

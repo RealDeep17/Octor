@@ -374,6 +374,8 @@ func (h *Handler) writeServiceError(c *gin.Context, err error, tier rec.Tier) {
 		c.JSON(http.StatusBadRequest, errorBody{Code: "empty_query", Message: "query is required"})
 	case errors.Is(err, rec.ErrQueryTooLong):
 		c.JSON(http.StatusBadRequest, errorBody{Code: "query_too_long", Message: "query is too long"})
+	case errors.Is(err, rec.ErrPromptInjection):
+		c.JSON(http.StatusBadRequest, errorBody{Code: "prompt_injection_detected", Message: "invalid query characters or potential instruction hijack detected"})
 	case errors.Is(err, rec.ErrNoChips):
 		// Chips generation produced nothing usable but the call itself
 		// succeeded — surface 200 with an empty chip list so the UI can

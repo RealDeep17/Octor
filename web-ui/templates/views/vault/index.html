@@ -514,6 +514,10 @@ window.submitVaultBulk = function(formId) {
     cbs.forEach(function(cb) { if (cb.checked) count++; });
     if (count === 0) return false;
 
+    if (formId === 'vault-bulk-remove-form') {
+        return window.handleConfirmRemove(form, 'vault');
+    }
+
     if (formId === 'vault-bulk-retry-form') {
         // Clear previous dynamically added resource_ids
         form.querySelectorAll('input[name="resource_ids[]"]').forEach(function(el) {

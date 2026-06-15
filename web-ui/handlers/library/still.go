@@ -22,6 +22,9 @@ import (
 	"github.com/webtor-io/web-ui/models"
 )
 
+// stillResizeSemaphore restricts the number of concurrent still-image resizing operations.
+var stillResizeSemaphore = make(chan struct{}, 8)
+
 type StillArgs struct {
 	videoID string
 	season  int
@@ -120,9 +123,16 @@ func (s *Handler) still(c *gin.Context) {
 
 	// 4. Trigger background download, resize, and S3-caching (if S3 is configured)
 	if s.s3Cl != nil && s.posterCacheS3Bucket != "" {
-		go func(sa *StillArgs) {
-			// Detached context so caching completes even if client request is aborted
-			detachedCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		reqCtx := c.Request.Context()
+		go func(sa *StillArgs, rCtx context.Context) {
+			select {
+			case stillResizeSemaphore <- struct{}{}:
+				defer func() { <-stillResizeSemaphore }()
+			case <-rCtx.Done():
+				return
+			}
+
+			detachedCtx, cancel := context.WithTimeout(rCtx, 60*time.Second)
 			defer cancel()
 
 			resizedBuf, resizeErr := s.getResizedJPEGStill(detachedCtx, s.pg.Get(), sa)
@@ -136,7 +146,7 @@ func (s *Handler) still(c *gin.Context) {
 			} else {
 				log.Infof("still: successfully cached resized still in background for episode %s S%dE%d", sa.videoID, sa.season, sa.episode)
 			}
-		}(sa)
+		}(sa, reqCtx)
 	}
 
 	// 5. Instantly redirect browser to original CDN URL
@@ -172,6 +182,10 @@ func (s *Handler) getResizedJPEGStill(ctx context.Context, db *pg.DB, args *Stil
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	srcImg, err := imaging.Decode(resp.Body)
 	if err != nil {

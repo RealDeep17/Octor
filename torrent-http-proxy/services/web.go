@@ -485,7 +485,7 @@ func (s *Web) Serve() error {
 	logrus.Infof("serving Web at %v", addr)
 	srv := &http.Server{
 		Handler:        mux,
-		MaxHeaderBytes: 50 << 20,
+		MaxHeaderBytes: 1 << 20,
 	}
 	return srv.Serve(ln)
 }

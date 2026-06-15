@@ -307,6 +307,10 @@ func (s *ClaudeService) RecommendStream(ctx context.Context, req RecommendReques
 		sendError("query_too_long")
 		return
 	}
+	if HasPromptInjection(q) {
+		sendError("prompt_injection_detected")
+		return
+	}
 
 	uc, err := s.context.Build(ctx, req.UserID, req.Locale, req.Clock)
 	if err != nil {

@@ -91,7 +91,7 @@
                     Refresh
                 </button>
             </form>
-            <form method="post" action="{{ langPath $.Lang "/library/layout-multiple" }}" id="library-bulk-layout-form" onsubmit="return window.submitLibraryBulk('library-bulk-layout-form')" data-async-target="main" data-async-no-scroll="true">
+            <form method="post" action="{{ langPath $.Lang "/admin/library/layout-multiple" }}" id="library-bulk-layout-form" onsubmit="return window.submitLibraryBulk('library-bulk-layout-form')" data-async-target="main" data-async-no-scroll="true">
                 <button type="submit" class="btn btn-xs btn-outline border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 hover:border-cyan-500" title="Toggle Layout Selected">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 mr-1">
                         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -124,7 +124,7 @@
       {{ else }}
       <div class="dynamic-grid grid-flow-row-dense gap-4">
         {{ range .Data.Items }}
-        <a href="{{ langPath $.Lang (.Content | getCardHref) }}?user={{ if $.Data.SelectedUser }}{{ $.Data.SelectedUser }}{{ else }}all{{ end }}" data-async-target="main" class="admin-library-item group flex [&:has(.layout-toggle-checkbox:checked)]:col-span-2"
+        <a href="{{ langPath $.Lang (.Content | getCardHref) }}?user={{ if $.Data.SelectedUser }}{{ $.Data.SelectedUser }}{{ else }}all{{ end }}" data-async-target="main" class="admin-library-item group flex has-[.layout-toggle-checkbox:checked]:col-span-2"
            data-adult-type="{{ if .Content | isAdultJAV }}jav{{ else }}porn{{ end }}"
            data-series-type="{{ if .Content | isSeriesAnime }}anime{{ else }}tv{{ end }}">
           <div class="w-card-frame w-full relative">
@@ -308,6 +308,10 @@ window.submitLibraryBulk = function(formId) {
     let count = 0;
     cbs.forEach(cb => { if (cb.checked) count++; });
     if (count === 0) return false;
+
+    if (formId === 'library-bulk-remove-form') {
+        return window.handleConfirmRemove(form, 'library');
+    }
 
     if (formId === 'library-bulk-enrich-form') {
         form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());

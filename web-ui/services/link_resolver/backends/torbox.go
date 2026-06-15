@@ -2,6 +2,8 @@ package backends
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -77,7 +79,8 @@ func (s *Torbox) fileAtIdx(files []tb.File, fileIdx int) (*tb.File, bool) {
 // ResolveLink generates a direct link using Torbox with caching
 // Returns the direct download URL and cached status
 func (s *Torbox) ResolveLink(ctx context.Context, token, hash string, fileIdx int) (string, bool, error) {
-	cacheKey := fmt.Sprintf("%s:%s:%d", token, hash, fileIdx)
+	tokenHash := sha256.Sum256([]byte(token))
+	cacheKey := fmt.Sprintf("%s:%s:%d", hex.EncodeToString(tokenHash[:]), hash, fileIdx)
 
 	log.WithFields(log.Fields{
 		"hash":      hash,

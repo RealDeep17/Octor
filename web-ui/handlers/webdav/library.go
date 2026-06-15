@@ -15,7 +15,7 @@ type Library interface {
 type AllLibrary struct{}
 
 func (s *AllLibrary) GetContent(ctx context.Context, db *pg.DB, uID uuid.UUID) ([]*models.Library, error) {
-	return models.GetLibraryTorrentsList(ctx, db, uID, models.SortTypeName, "")
+	return getLibraryTorrentsListLightweightPaginated(ctx, db, uID, models.SortTypeName, "")
 }
 
 var _ Library = (*AllLibrary)(nil)
@@ -23,7 +23,7 @@ var _ Library = (*AllLibrary)(nil)
 type MovieLibrary struct{}
 
 func (s *MovieLibrary) GetContent(ctx context.Context, db *pg.DB, uID uuid.UUID) ([]*models.Library, error) {
-	return models.GetLibraryMovieTorrentList(ctx, db, uID, models.SortTypeName, "")
+	return getLibraryMovieTorrentListLightweightPaginated(ctx, db, uID, models.SortTypeName, "")
 }
 
 var _ Library = (*MovieLibrary)(nil)
@@ -31,7 +31,7 @@ var _ Library = (*MovieLibrary)(nil)
 type SeriesLibrary struct{}
 
 func (s *SeriesLibrary) GetContent(ctx context.Context, db *pg.DB, uID uuid.UUID) ([]*models.Library, error) {
-	return models.GetLibrarySeriesTorrentList(ctx, db, uID, models.SortTypeName, "")
+	return getLibrarySeriesTorrentListLightweightPaginated(ctx, db, uID, models.SortTypeName, "")
 }
 
 var _ Library = (*SeriesLibrary)(nil)
@@ -39,7 +39,7 @@ var _ Library = (*SeriesLibrary)(nil)
 type AdultLibrary struct{}
 
 func (s *AdultLibrary) GetContent(ctx context.Context, db *pg.DB, uID uuid.UUID) ([]*models.Library, error) {
-	return models.GetLibraryAdultTorrentList(ctx, db, uID, models.SortTypeName, "")
+	return getLibraryAdultTorrentListLightweightPaginated(ctx, db, uID, models.SortTypeName, "")
 }
 
 var _ Library = (*AdultLibrary)(nil)

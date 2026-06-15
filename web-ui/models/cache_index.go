@@ -67,18 +67,32 @@ func IsCached(ctx context.Context, db *pg.DB, resourceID string, fileIdx int, ex
 	return results, nil
 }
 
-// DeleteOldCacheEntries removes cache entries older than the specified expiration
+// DeleteOldCacheEntries removes cache entries older than the specified expiration in batches of 5000
 func DeleteOldCacheEntries(ctx context.Context, db *pg.DB, expiration time.Duration) (int, error) {
 	cutoffTime := time.Now().Add(-expiration)
+	totalDeleted := 0
 
-	res, err := db.Model((*CacheIndex)(nil)).
-		Context(ctx).
-		Where("last_seen_at < ?", cutoffTime).
-		Delete()
+	for {
+		res, err := db.ExecContext(ctx, `
+			DELETE FROM cache_index
+			WHERE cache_index_id IN (
+				SELECT cache_index_id
+				FROM cache_index
+				WHERE last_seen_at < ?
+				LIMIT 5000
+			)
+		`, cutoffTime)
 
-	if err != nil {
-		return 0, err
+		if err != nil {
+			return totalDeleted, err
+		}
+
+		rows := res.RowsAffected()
+		if rows == 0 {
+			break
+		}
+		totalDeleted += rows
 	}
 
-	return res.RowsAffected(), nil
+	return totalDeleted, nil
 }

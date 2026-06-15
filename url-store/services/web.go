@@ -112,7 +112,7 @@ func (s *Web) Serve() error {
 	log.Infof("serving Web at %v", addr)
 	srv := &http.Server{
 		Handler:        m,
-		MaxHeaderBytes: 50 << 20,
+		MaxHeaderBytes: 1 << 20,
 	}
 	return srv.Serve(ln)
 }

@@ -50,7 +50,15 @@ func SaveSettings(s *OctorSettings) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal settings")
 	}
-	return os.WriteFile(settingsFilePath, data, 0644)
+	tmpPath := settingsFilePath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return errors.Wrap(err, "failed to write temp settings file")
+	}
+	if err := os.Rename(tmpPath, settingsFilePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return errors.Wrap(err, "failed to atomically rename settings file")
+	}
+	return nil
 }
 
 func (h *Handler) settingsIndex(c *gin.Context) {

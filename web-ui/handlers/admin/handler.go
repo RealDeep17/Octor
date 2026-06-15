@@ -21,6 +21,7 @@ import (
 	"github.com/webtor-io/web-ui/services/i18n"
 	"github.com/webtor-io/web-ui/services/template"
 	"github.com/webtor-io/web-ui/services/vault"
+	uvs "github.com/webtor-io/web-ui/services/user_video_status"
 	"github.com/webtor-io/web-ui/services/web"
 )
 
@@ -32,6 +33,7 @@ type Handler struct {
 	admin          *adminsvc.Admin
 	api            *api.Api
 	enrichmentLock sync.Mutex
+	uvs            *uvs.Service
 }
 
 type UserOption struct {
@@ -88,12 +90,13 @@ func (i AdminVideoItem) OwnerTitle() string {
 
 func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.PG, v *vault.Vault, en *enrich.Enricher, admin *adminsvc.Admin, sapi *api.Api) {
 	h := &Handler{
-		tb:       tm.MustRegisterViews("admin/*").WithHelper(libHelpers.NewVideoContentHelper()).WithLayout("main"),
-		pg:       pg,
-		vault:    v,
-		enricher: en,
-		admin:    admin,
-		api:      sapi,
+		tb:             tm.MustRegisterViews("admin/*").WithHelper(libHelpers.NewVideoContentHelper()).WithLayout("main"),
+		pg:             pg,
+		vault:          v,
+		enricher:       en,
+		admin:          admin,
+		api:            sapi,
+		uvs:            uvs.New(pg.Get()),
 	}
 
 	// Start System I/O Stats Collector background thread
@@ -102,11 +105,16 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 	gr := r.Group("/admin")
 	gr.Use(admin.Require())
 	gr.GET("", func(c *gin.Context) { c.Redirect(http.StatusFound, i18n.LangPath(i18n.GetLang(c), "/admin/library")) })
-	gr.GET("/library", h.library)
-	gr.GET("/library/:type", h.library)
-	gr.POST("/library/remove", h.remove)
-	gr.POST("/library/remove-multiple", h.removeMultiple)
-	gr.POST("/library/enrich-multiple", h.enrichMultiple)
+	
+	lg := gr.Group("/library")
+	lg.GET("", h.library)
+	lg.GET("/:type", h.library)
+	lg.POST("/remove", h.remove)
+	lg.POST("/remove-multiple", h.removeMultiple)
+	lg.POST("/enrich-multiple", h.enrichMultiple)
+	lg.POST("/layout-multiple", h.layoutMultiple)
+	lg.POST("/toggle-multiple", h.toggleMultiple)
+
 	gr.GET("/vault", h.vaultIndex)
 	gr.POST("/vault/remove", h.removePledge)
 	gr.POST("/vault/remove-multiple", h.removeMultiplePledge)

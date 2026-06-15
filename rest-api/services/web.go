@@ -1,12 +1,14 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -36,6 +38,7 @@ type Web struct {
 	host         string
 	port         int
 	ln           net.Listener
+	server       *http.Server
 	rm           *ResourceMap
 	c            *List
 	e            *Export
@@ -304,10 +307,10 @@ func (s *Web) errorHandler(c *gin.Context) {
 func (s *Web) Serve() error {
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	ln, err := net.Listen("tcp", addr)
-	s.ln = ln
 	if err != nil {
 		return errors.Wrap(err, "Failed to web listen to tcp connection")
 	}
+	s.ln = ln
 	r := gin.Default()
 	r.UseRawPath = true
 	r.Use(s.errorHandler)
@@ -349,7 +352,14 @@ func (s *Web) Serve() error {
 
 	docs.SwaggerInfo.BasePath = "/"
 	log.Infof("serving Web at %v", addr)
-	return http.Serve(s.ln, r)
+	s.server = &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+	if err := s.server.Serve(s.ln); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 
 func (s *Web) postWebhookIngest(g *gin.Context) {
@@ -459,7 +469,14 @@ func (s *Web) Close() {
 	defer func() {
 		log.Info("Web closed")
 	}()
-	if s.ln != nil {
+	if s.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := s.server.Shutdown(ctx); err != nil {
+			log.Errorf("Web graceful shutdown failed: %v", err)
+			_ = s.server.Close()
+		}
+	} else if s.ln != nil {
 		_ = s.ln.Close()
 	}
 }

@@ -119,7 +119,7 @@ func (s *Web) Serve() error {
 		Handler: mux,
 		// ReadTimeout:    5 * time.Minute,
 		// WriteTimeout:   5 * time.Minute,
-		MaxHeaderBytes: 50 << 20,
+		MaxHeaderBytes: 1 << 20,
 	}
 	return srv.Serve(ln)
 }

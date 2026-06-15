@@ -15,6 +15,7 @@ import (
 	"github.com/webtor-io/web-ui/services/template"
 	"github.com/webtor-io/web-ui/services/tpdb"
 	"github.com/webtor-io/web-ui/services/vault"
+	uvs "github.com/webtor-io/web-ui/services/user_video_status"
 	"github.com/webtor-io/web-ui/services/web"
 )
 
@@ -45,6 +46,7 @@ type Handler struct {
 	vault               *vault.Vault
 	posterCacheS3Bucket string
 	nats                *cs.NATS
+	uvs                 *uvs.Service
 }
 
 func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], api *api.Api, pg *cs.PG, jobs *j.Jobs, cl *http.Client, s3Cl *cs.S3Client, en *enrich.Enricher, admin *admin.Admin, tpdb *tpdb.Service, v *vault.Vault, nats *cs.NATS) {
@@ -66,6 +68,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 		vault:               v,
 		posterCacheS3Bucket: c.String(awsPosterCacheBucket),
 		nats:                nats,
+		uvs:                 uvs.New(pg.Get()),
 	}
 	lg := r.Group("/lib")
 	lg.GET("/", h.index)
@@ -82,5 +85,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	lg.POST("/remove", h.remove)
 	lg.POST("/remove-multiple", h.removeMultiple)
 	lg.POST("/enrich-multiple", h.enrichMultiple)
+	lg.POST("/layout-multiple", h.layoutMultiple)
+	lg.POST("/toggle-multiple", h.toggleMultiple)
 	lg.POST("/:id/enrich", h.enrichResource)
 }

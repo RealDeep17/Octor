@@ -11,10 +11,11 @@ This document serves as the official record of all stabilization, security, and 
 6. [Phase 6: Core Feature Completion & Compliance](#phase-6-core-feature-completion--compliance)
 7. [Phase 7: Knowledge Base & CI Sync](#phase-7-knowledge-base--ci-sync)
 8. [Phase 8: Critical Infrastructure Deaths](#phase-8-critical-infrastructure-deaths)
-9. [Stremio Integration Hardening (Tier 1)](#stremio-integration-hardening-tier-1)
-10. [Stremio Integration Hardening (Tier 2)](#stremio-integration-hardening-tier-2)
-11. [Stremio Integration Hardening (Tier 3)](#stremio-integration-hardening-tier-3)
-12. [Stremio Integration Hardening (Tier 4)](#stremio-integration-hardening-tier-4)
+9. [Phase 9: Memory Leaks, DoS, and Database Lockups](#phase-9-memory-leaks-dos-and-database-lockups)
+10. [Stremio Integration Hardening (Tier 1)](#stremio-integration-hardening-tier-1)
+11. [Stremio Integration Hardening (Tier 2)](#stremio-integration-hardening-tier-2)
+12. [Stremio Integration Hardening (Tier 3)](#stremio-integration-hardening-tier-3)
+13. [Stremio Integration Hardening (Tier 4)](#stremio-integration-hardening-tier-4)
 
 ---
 
@@ -140,3 +141,19 @@ This document serves as the official record of all stabilization, security, and 
 *   **Billion Laughs XML DoS:** Wrapped incoming WebDAV XML request bodies in `web-ui/services/webdav/internal/server.go` using an `io.LimitReader` explicitly capped to 1MB, ensuring recursive entity expansion attacks cannot exhaust memory resources and trigger container OOM kills.
 *   **500GB Orphaned S3 Part Leaks:** Implemented dynamic S3 multipart upload part size calculation in `vault/services/worker.go` based on total file size / 10000 (rounded up to the nearest 5MB), allowing the worker to safely upload files larger than 500GB without hitting the S3 10,000 part limit. Also fixed the garbage collection sweep logic to skip database row deletions if an active S3 multipart upload abort attempt fails with a real error, preventing invisible storage leaks.
 *   **FFmpeg Transcoder Scrubbing CPU/RAM pegging:** Implemented strict per-session concurrency in `content-transcoder` (`services/run_manager.go`, `services/session.go`). During user seeking or scrubbing across the video timeline, any previous FFmpeg run owned by the session is immediately force-terminated via `ReleaseForce`, bypassing the grace period and preventing concurrent process build-up and Linux OOM kills.
+
+---
+
+## Phase 9: Memory Leaks, DoS, and Database Lockups
+**Goal:** Secure the platform against WebDAV memory explosions, HTTP header RAM bombs, detached resizing CPU starvation, process virtual memory address space leaks, race conditions during state synchronization, database locks, and violent connection severing.
+
+*   **Bug 199 (WebDAV O(N) Memory Explosion):** Implemented paginated DB queries (page size 1,000) preloading only the `Torrent` relation inside `web-ui/handlers/webdav/query.go` (and updated callers in `library.go` and `admin.go`), completely bypassing heavy relations and limiting transaction buffers to avoid container OOM kills.
+*   **Bug 165 (The 50MB HTTP Header RAM Bomb):** Reduced `MaxHeaderBytes` from `50 << 20` to `1 << 20` (1MB) across external-proxy, srt2vtt, torrent-http-proxy, and url-store HTTP servers, preventing memory exhaustion under concurrent connections with junk headers.
+*   **Bug 154 (Detached Image Resizing CPU Denial of Service):** Defined a size-8 concurrent semaphore to restrict poster/still image resizing and checked context cancellation prior to CPU-heavy image decoding, ensuring background routines abort immediately if a client disconnects.
+*   **Bug 163 (Memory-Mapped Virtual Address Space Leaks):** Modified the `Close()` routine in `torrent-web-seeder/server/services/mmap.go` to explicitly call `_ = m.Unmap()` right after `madviseEvict`, properly invoking `unix.Munmap` to release virtual address space back to the kernel on torrent removal.
+*   **Bug 164 (Settings.json Truncation Race):** Replaced raw `os.WriteFile` truncation with an atomic POSIX write-and-rename pattern (writing to `.tmp` first, then renaming) inside both `web-ui/handlers/admin/settings.go` and `sidecar/internal/settings/settings.go` to avoid 0-byte state corruptions.
+*   **Bug 160 (Unbounded Cache Index Deletions):** Redefined `DeleteOldCacheEntries` in `web-ui/models/cache_index.go` to delete in loops of 5,000 using a subquery with `LIMIT` on `cache_index_id`, preventing database locking.
+*   **Bug 203 (Violent In-Flight Connection Severing):** Integrated Go's native, graceful `http.Server.Shutdown(ctx)` with a 15-second timeout inside the `rest-api` web service (`rest-api/services/web.go`), replacing abrupt net.Listener socket termination.
+*   **Bug 206 (The 404 Routing Lie / Backend Route Omission):** Explicitly registered bulk layout (`lg.POST("/layout-multiple", h.layoutMultiple)`) and toggle (`lg.POST("/toggle-multiple", h.toggleMultiple)`) routes in user library and admin handlers, resolving 404 dead route failures.
+*   **Bug 207 (Broken Poster Toggle / Tailwind CSS Compilation Failure):** Corrected malformed arbitrary variant class declarations to the valid Tailwind JIT syntax `has-[.layout-toggle-checkbox:checked]:col-span-2` in both standard and admin video lists.
+*   **Bug 208 (The "Also Remove" Modal Bypass / JS Logic Bomb):** Added strict conditional interceptors to `submitLibraryBulk` and `submitVaultBulk` frontend helpers to catch bulk deletions and redirect them to the `window.handleConfirmRemove` confirmation safety modal.

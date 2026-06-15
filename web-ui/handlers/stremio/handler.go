@@ -1,6 +1,7 @@
 package stremio
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	cs "github.com/webtor-io/common-services"
+	"github.com/webtor-io/web-ui/models"
 	at "github.com/webtor-io/web-ui/services/access_token"
 	"github.com/webtor-io/web-ui/services/api"
 	"github.com/webtor-io/web-ui/services/auth"
