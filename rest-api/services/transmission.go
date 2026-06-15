@@ -1368,13 +1368,6 @@ func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash str
 			} else {
 				log.Infof("Created dummy video file (%dx%d) for *arr import: %s", width, width*9/16, cleanPath)
 			}
-		} else {
-			createErr = createEmptyFile(cleanPath)
-			if createErr != nil {
-				log.WithError(createErr).Errorf("Failed to create empty dummy file: %s", cleanPath)
-				return createErr
-			}
-			log.Infof("Created empty dummy file for *arr import: %s", cleanPath)
 		}
 	}
 
@@ -1439,14 +1432,6 @@ func copyFile(src, dst string) error {
 	return out.Sync()
 }
 
-func createEmptyFile(dst string) error {
-	file, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	file.Close()
-	return nil
-}
 
 var (
 	arrEmailsLock  sync.Mutex

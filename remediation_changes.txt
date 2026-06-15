@@ -727,7 +727,7 @@ ADDITION:
 
 -------------------------------------------------------------------------------
 FILE 26: rest-api/services/transmission.go
-CHANGE: Updated dummyTemplatePath to return an error if no template is found, and updated ensureDummyFiles to check for this error and return it immediately, failing gracefully instead of creating corrupted 0-byte files.
+CHANGE: Updated dummyTemplatePath to return an error if no template is found, and updated ensureDummyFiles to return an error immediately if template creation fails. Completely removed all 0-byte/empty file fallback logic to protect downstream ffprobe/ARR ingestion.
 -------------------------------------------------------------------------------
 REMOVAL:
 func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash string, wantedIndices, unwantedIndices []int) error {
@@ -772,11 +772,6 @@ func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash str
     ...
 }
 
-func dummyTemplatePath(name string) string {
-    ...
-	return candidates[0]
-}
-
 ADDITION:
 func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash string, wantedIndices, unwantedIndices []int) error {
     ...
@@ -810,20 +805,9 @@ func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash str
 			} else {
 				log.Infof("Created dummy video file (%dx%d) for *arr import: %s", width, width*9/16, cleanPath)
 			}
-		} else {
-			createErr = createEmptyFile(cleanPath)
-			if createErr != nil {
-				log.WithError(createErr).Errorf("Failed to create empty dummy file: %s", cleanPath)
-				return createErr
-			}
-			log.Infof("Created empty dummy file for *arr import: %s", cleanPath)
 		}
+	}
     ...
-}
-
-func dummyTemplatePath(name string) (string, error) {
-    ...
-	return "", fmt.Errorf("dummy template %s not found in any of %v", name, candidates)
 }
 
 -------------------------------------------------------------------------------
