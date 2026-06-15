@@ -66,7 +66,7 @@ We fixed brittle heuristics, API constraints, logic bombs, and UI/UX edge cases 
 
 - **Bug 37 (Dummy File Blind Array Access Panic):**
   - **Target File:** `rest-api/services/transmission.go`
-  - **Remediation:** Updated `dummyTemplatePath` to verify file existence on disk and return a proper error if no template is found. Updated `ensureDummyFiles` to check for this error and fallback to creating an empty 0-byte file. This prevents the system from attempting to open non-existent template paths, which previously resulted in unhandled `fs.PathError` panics that broke the torrent ingestion pipeline.
+  - **Remediation:** Updated `dummyTemplatePath` to verify file existence on disk and return a proper error if no template is found. Updated `ensureDummyFiles` to check for this error and return it immediately, failing gracefully instead of creating corrupted 0-byte files. This prevents the system from attempting to open non-existent template paths or providing corrupted assets to ARR clients, ensuring the ingestion pipeline remains stable.
 
 ### Architectural Cluster 2: External API Constraints & DoS Fallbacks
 - **Bug 95 (8-Second Hardcoded Stream Discovery DoS):**

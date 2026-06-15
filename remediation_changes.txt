@@ -946,3 +946,244 @@ ADDITION:
 ...
 		})
 		if _, err := s3Cl.DeleteObjectWithContext(cleanCtx, &awss3.DeleteObjectInput{
+
+-------------------------------------------------------------------------------
+FILE 26: rest-api/services/transmission.go
+CHANGE: Updated dummyTemplatePath to return an error if no template is found, and updated ensureDummyFiles to check for this error and return it immediately, failing gracefully instead of creating corrupted 0-byte files.
+-------------------------------------------------------------------------------
+REMOVAL:
+func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash string, wantedIndices, unwantedIndices []int) error {
+    ...
+			templatePath := dummyTemplatePath("dummy_1080p.mkv")
+			var width int
+			switch {
+			case is4K:
+				templatePath = dummyTemplatePath("dummy_2160p.mkv")
+				width = 3840
+			case is1080:
+				templatePath = dummyTemplatePath("dummy_1080p.mkv")
+				width = 1920
+			case is720:
+				templatePath = dummyTemplatePath("dummy_720p.mkv")
+				width = 1280
+			case is480:
+				templatePath = dummyTemplatePath("dummy_480p.mkv")
+				width = 720
+			default:
+				width = 1920 // safe fallback
+			}
+			createErr = copyFile(templatePath, cleanPath)
+			if createErr != nil {
+				log.WithError(createErr).Errorf("Failed to copy dummy video template: %s", cleanPath)
+				// Fallback to 0-byte file
+				createErr = createEmptyFile(cleanPath)
+			} else {
+				log.Infof("Created dummy video file (%dx%d) for *arr import: %s", width, width*9/16, cleanPath)
+			}
+		} else {
+			createErr = createEmptyFile(cleanPath)
+			if createErr == nil {
+				log.Infof("Created empty dummy file for *arr import: %s", cleanPath)
+			}
+		}
+
+		if createErr != nil {
+			log.WithError(createErr).Errorf("Failed to create dummy file: %s", cleanPath)
+			continue
+		}
+    ...
+}
+
+func dummyTemplatePath(name string) string {
+    ...
+	return candidates[0]
+}
+
+ADDITION:
+func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash string, wantedIndices, unwantedIndices []int) error {
+    ...
+			var templatePath string
+			var width int
+			switch {
+			case is4K:
+				templatePath, createErr = dummyTemplatePath("dummy_2160p.mkv")
+				width = 3840
+			case is1080:
+				templatePath, createErr = dummyTemplatePath("dummy_1080p.mkv")
+				width = 1920
+			case is720:
+				templatePath, createErr = dummyTemplatePath("dummy_720p.mkv")
+				width = 1280
+			case is480:
+				templatePath, createErr = dummyTemplatePath("dummy_480p.mkv")
+				width = 720
+			default:
+				templatePath, createErr = dummyTemplatePath("dummy_1080p.mkv")
+				width = 1920 // safe fallback
+			}
+
+			if createErr == nil {
+				createErr = copyFile(templatePath, cleanPath)
+			}
+
+			if createErr != nil {
+				log.WithError(createErr).Errorf("Failed to copy dummy video template: %s", cleanPath)
+				return createErr
+			} else {
+				log.Infof("Created dummy video file (%dx%d) for *arr import: %s", width, width*9/16, cleanPath)
+			}
+		} else {
+			createErr = createEmptyFile(cleanPath)
+			if createErr != nil {
+				log.WithError(createErr).Errorf("Failed to create empty dummy file: %s", cleanPath)
+				return createErr
+			}
+			log.Infof("Created empty dummy file for *arr import: %s", cleanPath)
+		}
+    ...
+}
+
+func dummyTemplatePath(name string) (string, error) {
+    ...
+	return "", fmt.Errorf("dummy template %s not found in any of %v", name, candidates)
+}
+
+-------------------------------------------------------------------------------
+FILE 27: web-ui/handlers/embed/get.go
+CHANGE: Sanitized code and id in generateCheckScript using json.Marshal to prevent XSS vulnerabilities when injecting strings into raw JavaScript templates.
+-------------------------------------------------------------------------------
+REMOVAL:
+func (s *Handler) generateCheckScript(code string, id string) string {
+	return fmt.Sprintf(`
+		var found = false;
+		var scripts = document.getElementsByTagName('script');
+			for (var i = scripts.length; i--;) {
+				if (
+					scripts[i].src.includes('https://cdn.jsdelivr.net/npm/@octor/') ||
+					scripts[i].src.includes('http://localhost:9009/')
+				) {
+					found = '%v';
+				}
+			}
+		var f = window.frames['octor-%v'];
+		f.contentWindow.postMessage({id: '%v', name: 'check', data: found}, '*');
+	`, code, id, id)
+}
+
+ADDITION:
+func (s *Handler) generateCheckScript(code string, id string) string {
+	codeJSON, _ := json.Marshal(code)
+	idJSON, _ := json.Marshal(id)
+	return fmt.Sprintf(`
+		var found = false;
+		var scripts = document.getElementsByTagName('script');
+			for (var i = scripts.length; i--;) {
+				if (
+					scripts[i].src.includes('https://cdn.jsdelivr.net/npm/@octor/') ||
+					scripts[i].src.includes('http://localhost:9009/')
+				) {
+					found = %s;
+				}
+			}
+		var f = window.frames['octor-' + %s];
+		f.contentWindow.postMessage({id: %s, name: 'check', data: found}, '*');
+	`, string(codeJSON), string(idJSON), string(idJSON))
+}
+
+-------------------------------------------------------------------------------
+FILE 28: web-ui/assets/src/js/lib/discover/client.js
+CHANGE: Increased hardcoded searchCatalog timeout from 8s to 15s and made it configurable via window._env.SEARCH_TIMEOUT to accommodate slower third-party indexers.
+-------------------------------------------------------------------------------
+REMOVAL:
+        const res = await fetchWithTimeout(url, signal, 8000);
+
+ADDITION:
+        // Increase timeout to 15s to accommodate slower third-party indexers.
+        // Can be overridden via window._env.SEARCH_TIMEOUT.
+        const timeout = window._env?.SEARCH_TIMEOUT ? parseInt(window._env.SEARCH_TIMEOUT) : 15000;
+        const res = await fetchWithTimeout(url, signal, timeout);
+
+-------------------------------------------------------------------------------
+FILE 29: web-ui/services/stremio/dedup_stream.go
+CHANGE: Implemented a hard limit of 50 streams processed per infohash to prevent O(N^2) memory exhaustion from malicious addons injecting thousands of slightly randomized URLs.
+-------------------------------------------------------------------------------
+REMOVAL:
+	// Track seen combinations of infohash and file index
+	seen := make(map[dedupKey]bool)
+	var dedupedStreams []StreamItem
+
+	// Process streams in order, keeping only the first occurrence of each unique combination
+	for _, stream := range response.Streams {
+		key := dedupKey{
+			InfoHash: stream.InfoHash,
+			//Filename: stream.BehaviorHints.Filename,
+			//FileIdx:  stream.FileIdx,
+		}
+
+		// Only add the stream if we haven't seen this combination before
+		if !seen[key] {
+			seen[key] = true
+			dedupedStreams = append(dedupedStreams, stream)
+		} else if stream.Url != "" {
+			dedupedStreams = append(dedupedStreams, stream)
+		}
+	}
+
+ADDITION:
+	// Track seen combinations of infohash and file index
+	seen := make(map[dedupKey]bool)
+	counts := make(map[string]int)
+	var dedupedStreams []StreamItem
+
+	// Process streams in order, keeping only the first occurrence of each unique combination
+	for _, stream := range response.Streams {
+		// Hard limit on streams per infohash to prevent O(N^2) exhaustion from malicious addons
+		if stream.InfoHash != "" {
+			counts[stream.InfoHash]++
+			if counts[stream.InfoHash] > 50 {
+				continue
+			}
+		}
+
+		key := dedupKey{
+			InfoHash: stream.InfoHash,
+			//Filename: stream.BehaviorHints.Filename,
+			//FileIdx:  stream.FileIdx,
+		}
+
+		// Only add the stream if we haven't seen this combination before
+		if !seen[key] {
+			seen[key] = true
+			dedupedStreams = append(dedupedStreams, stream)
+		} else if stream.Url != "" {
+			dedupedStreams = append(dedupedStreams, stream)
+		}
+	}
+
+-------------------------------------------------------------------------------
+FILE 30: web-ui/services/parse_torrent_name/main.go
+CHANGE: Added fallback logic below tor.Map(ms) to revert to the original filename if the parsed Title is empty, preventing fatal NOT NULL database constraint violations.
+-------------------------------------------------------------------------------
+REMOVAL:
+func Parse(tor *TorrentInfo, filename string) (*TorrentInfo, error) {
+    ...
+	tor.Map(ms)
+
+	return tor, nil
+}
+
+ADDITION:
+func Parse(tor *TorrentInfo, filename string) (*TorrentInfo, error) {
+    ...
+	tor.Map(ms)
+
+	if tor.Title == "" {
+		tor.Title = filename
+	}
+
+	return tor, nil
+}
+
+-------------------------------------------------------------------------------
+END OF CHANGES
+-------------------------------------------------------------------------------

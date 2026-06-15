@@ -1338,42 +1338,43 @@ func (s *TransmissionService) ensureDummyFiles(ctx context.Context, infoHash str
 				strings.Contains(name, ".dvd.") || strings.Contains(name, " dvd ") ||
 				strings.Contains(name, "-dvd-")
 
-			templatePath := dummyTemplatePath("dummy_1080p.mkv")
+			var templatePath string
 			var width int
 			switch {
 			case is4K:
-				templatePath = dummyTemplatePath("dummy_2160p.mkv")
+				templatePath, createErr = dummyTemplatePath("dummy_2160p.mkv")
 				width = 3840
 			case is1080:
-				templatePath = dummyTemplatePath("dummy_1080p.mkv")
+				templatePath, createErr = dummyTemplatePath("dummy_1080p.mkv")
 				width = 1920
 			case is720:
-				templatePath = dummyTemplatePath("dummy_720p.mkv")
+				templatePath, createErr = dummyTemplatePath("dummy_720p.mkv")
 				width = 1280
 			case is480:
-				templatePath = dummyTemplatePath("dummy_480p.mkv")
+				templatePath, createErr = dummyTemplatePath("dummy_480p.mkv")
 				width = 720
 			default:
+				templatePath, createErr = dummyTemplatePath("dummy_1080p.mkv")
 				width = 1920 // safe fallback
 			}
-			createErr = copyFile(templatePath, cleanPath)
+
+			if createErr == nil {
+				createErr = copyFile(templatePath, cleanPath)
+			}
+
 			if createErr != nil {
 				log.WithError(createErr).Errorf("Failed to copy dummy video template: %s", cleanPath)
-				// Fallback to 0-byte file
-				createErr = createEmptyFile(cleanPath)
+				return createErr
 			} else {
 				log.Infof("Created dummy video file (%dx%d) for *arr import: %s", width, width*9/16, cleanPath)
 			}
 		} else {
 			createErr = createEmptyFile(cleanPath)
-			if createErr == nil {
-				log.Infof("Created empty dummy file for *arr import: %s", cleanPath)
+			if createErr != nil {
+				log.WithError(createErr).Errorf("Failed to create empty dummy file: %s", cleanPath)
+				return createErr
 			}
-		}
-
-		if createErr != nil {
-			log.WithError(createErr).Errorf("Failed to create dummy file: %s", cleanPath)
-			continue
+			log.Infof("Created empty dummy file for *arr import: %s", cleanPath)
 		}
 	}
 
@@ -1655,9 +1656,4 @@ func extractMagnetHash(magnet string) (hash, name string) {
 		name = hash
 	}
 	return
-}
-sh != "" {
-		name = hash
 	}
-	return
-}
