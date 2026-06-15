@@ -1653,17 +1653,30 @@ cmd_status() {
 
 cmd_doctor() {
     echo "=== OCTOR DOCTOR: SYSTEM DIAGNOSTICS ==="
-    PATHS=("$HOME/.docker/run/docker.sock" "/var/run/docker.sock" "$HOME/.docker/desktop/docker.sock")
-    echo "Searching for active Docker socket..."
-    for p in "${PATHS[@]}"; do
-        if [ -S "$p" ]; then
-            if DOCKER_HOST="unix://$p" docker ps > /dev/null 2>&1; then
-                echo "✅ FOUND WORKING DOCKER SOCKET: $p"
-                return 0
-            fi
+    # Only probe the well-known system socket by default. Users can override
+    # via DOCKER_HOST if their daemon listens elsewhere. Auto-probing
+    # user-writable paths (e.g. $HOME/.docker/) is a security risk: a
+    # compromised dependency could plant a fake socket at a predictable path.
+    if [ -n "${DOCKER_HOST:-}" ]; then
+        echo "Using DOCKER_HOST=$DOCKER_HOST"
+        if docker ps > /dev/null 2>&1; then
+            echo "✅ DOCKER_HOST is working."
+            return 0
+        else
+            echo "❌ DOCKER_HOST is set but docker is not responding."
+            return 1
         fi
-    done
-    echo "❌ No working Docker socket found."
+    fi
+    local SOCKET="/var/run/docker.sock"
+    echo "Checking Docker socket at $SOCKET..."
+    if [ -S "$SOCKET" ]; then
+        if DOCKER_HOST="unix://$SOCKET" docker ps > /dev/null 2>&1; then
+            echo "✅ FOUND WORKING DOCKER SOCKET: $SOCKET"
+            return 0
+        fi
+    fi
+    echo "❌ No working Docker socket found at $SOCKET."
+    echo "   Set DOCKER_HOST if your Docker daemon uses a non-standard socket."
 }
 
 # ------------------------------------------------------------------------------

@@ -263,12 +263,17 @@ func (s *Handler) prepareInitialStatus(ctx context.Context, resourceID string) *
 // Uses c.Stream() + c.SSEvent() like the job handler for proper proxy compatibility.
 // All computation happens in a background goroutine; the callback only reads from a channel.
 func (s *Handler) status(c *gin.Context) {
-	// Validate CSRF token from query parameter (EventSource doesn't support custom headers)
+	// Validate CSRF token from query parameter (EventSource doesn't support custom headers).
 	token := c.Query("_csrf")
 	if token == "" || token != csrf.GetToken(c) {
 		c.String(http.StatusForbidden, "CSRF token mismatch")
 		return
 	}
+	// Strip _csrf from the URL so it is not persisted in access logs,
+	// proxy logs, or browser history. We've already consumed it above.
+	q := c.Request.URL.Query()
+	q.Del("_csrf")
+	c.Request.URL.RawQuery = q.Encode()
 
 	resourceID := c.Param("resource_id")
 	active := c.Query("active") == "1"

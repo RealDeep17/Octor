@@ -150,10 +150,12 @@ func (s *LinkResolver) ResolveLink(ctx context.Context, userID uuid.UUID, apiCla
 	}, nil
 }
 
-// isPaidUser checks if the user has paid tier
+// isPaidUser checks if the user has paid tier.
+// Fail-closed: missing or incomplete claims are treated as unpaid to prevent
+// premium bypass during claims-provider outages or session manipulation.
 func (s *LinkResolver) isPaidUser(userClaims *claims.Data) bool {
 	if userClaims == nil || userClaims.Context == nil || userClaims.Context.Tier == nil {
-		return true
+		return false
 	}
 	return userClaims.Context.Tier.Id > 0
 }

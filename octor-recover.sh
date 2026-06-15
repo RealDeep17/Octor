@@ -18,8 +18,14 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Load variables
-export $(grep -v '^#' "$ENV_FILE" | xargs)
+# Load variables safely (no xargs — prevents shell injection from metacharacters in values)
+while IFS= read -r line || [[ -n "$line" ]]; do
+    line="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+        export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+    fi
+done < "$ENV_FILE"
 
 # Check if octor-monolith is running
 CONTAINER_RUNNING=false

@@ -78,8 +78,7 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:   SessionSecretFlag,
-			Usage:  "session secret",
-			Value:  "secret123",
+			Usage:  "session secret (required, must be set via SESSION_SECRET env var)",
 			EnvVar: "SESSION_SECRET",
 		},
 		cli.BoolFlag{

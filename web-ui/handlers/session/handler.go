@@ -3,6 +3,7 @@ package session
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -49,16 +50,20 @@ type Session struct {
 }
 
 func RegisterHandler(c *cli.Context, r *gin.Engine, csrfIgnorePrefixes []string) (err error) {
+	secret := c.String(common.SessionSecretFlag)
+	if secret == "" {
+		return errors.New("SESSION_SECRET is required but not set — refusing to boot with an empty session secret")
+	}
 	var store sessions.Store
 	if c.String(redisHostFlag) != "" && c.Int(redisPortFlag) != 0 {
 		url := fmt.Sprintf("%v:%v", c.String(redisHostFlag), c.Int(redisPortFlag))
-		store, err = redis.NewStore(10, "tcp", url, c.String(redisPassFlag), []byte(common.SessionSecretFlag))
+		store, err = redis.NewStore(10, "tcp", url, c.String(redisPassFlag), []byte(secret))
 		if err != nil {
 			return err
 		}
 		log.Infof("using redis store %v", url)
 	} else {
-		store = cookie.NewStore([]byte(common.SessionSecretFlag))
+		store = cookie.NewStore([]byte(secret))
 	}
 	// SameSite=None + Secure is required so the session cookie survives
 	// POSTs from a cross-origin iframe (embed flow) — without it modern

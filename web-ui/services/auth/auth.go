@@ -130,8 +130,7 @@ func (s *Auth) Init() error {
 		Password: s.smtpPass,
 		Secure:   s.smtpSecure,
 		TLSConfig: &tls.Config{
-			InsecureSkipVerify: true,
-			ServerName:         s.smtpHost,
+			ServerName: s.smtpHost,
 		},
 	}
 	apiBasePath := "/auth"

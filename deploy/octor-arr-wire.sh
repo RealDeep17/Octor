@@ -29,8 +29,14 @@ if [[ ! -f "$ENV_FILE" ]]; then
     exit 1
 fi
 
-# Load env variables
-export $(grep -v '^#' "$ENV_FILE" | xargs)
+# Load env variables safely (no xargs — prevents shell injection from metacharacters in values)
+while IFS= read -r line || [[ -n "$line" ]]; do
+    line="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+        export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+    fi
+done < "$ENV_FILE"
 
 # 1. Setup target directory and copy docker-compose template from reference
 echo "Preparing Big ARRS folder..."
@@ -135,8 +141,14 @@ if [ -n "$WHISPARR_KEY" ]; then
     sed_inline "s|^WHISPARR_API_KEY=.*|WHISPARR_API_KEY=$WHISPARR_KEY|" "$ENV_FILE"
 fi
 
-# Reload environment
-export $(grep -v '^#' "$ENV_FILE" | xargs)
+# Reload environment safely
+while IFS= read -r line || [[ -n "$line" ]]; do
+    line="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+        export "${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+    fi
+done < "$ENV_FILE"
 
 # 2. Bootstrapping Indexers in Prowlarr
 if [ -n "$PROWLARR_KEY" ]; then

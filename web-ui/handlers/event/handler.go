@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -40,8 +41,7 @@ func New(c *cli.Context, nats *cs.NATS, pg *cs.PG, v *vault.Vault, cl *claims.Cl
 func (h *Handler) Serve() error {
 	nc := h.nats.Get()
 	if nc == nil {
-		log.Warn("nats connection is nil, skipping subscriptions")
-		return nil
+		return errors.New("nats connection is nil, cannot subscribe to event subjects (resource.banned, resource.vaulted, user.updated)")
 	}
 	js, err := nc.JetStream()
 	if err != nil {

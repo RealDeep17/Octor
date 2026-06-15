@@ -234,6 +234,11 @@ func (h *Handler) handleRecommendStream(c *gin.Context, withHistory bool) {
 		c.String(http.StatusForbidden, "CSRF token mismatch")
 		return
 	}
+	// Strip _csrf from the URL so it is not persisted in access logs,
+	// proxy logs, or browser history. We've already consumed it above.
+	q := c.Request.URL.Query()
+	q.Del("_csrf")
+	c.Request.URL.RawQuery = q.Encode()
 
 	user := auth.GetUserFromContext(c)
 	tier := tierFromClaims(claims.GetFromContext(c))

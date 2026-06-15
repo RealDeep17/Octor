@@ -92,12 +92,11 @@ func (s *TorrentLibraryDirectory) Create(ctx context.Context, name string, body 
 }
 
 func (s *TorrentLibraryDirectory) isAdmin(ctx context.Context) bool {
-	_, err := getWebContext(ctx)
+	wcc, err := getWebContext(ctx)
 	if err != nil {
 		return false
 	}
-	// For now, let's assume if they can access the 'admin' folder in WebDAV, they are admins.
-	return true
+	return wcc.IsAdmin
 }
 
 func (s *TorrentLibraryDirectory) RemoveAll(ctx context.Context, name string, opts *webdav.RemoveAllOptions) error {
