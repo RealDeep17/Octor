@@ -921,6 +921,12 @@ func (s *Vault) defundPledge(ctx context.Context, tx *pg.Tx, pledge *vaultModels
 
 	// 3. If funded_vp < required_vp and expired = false, mark as expired
 	if resource.FundedVP < resource.RequiredVP && !resource.Expired {
+		if s.vaultApi != nil {
+			if _, err = s.vaultApi.DeleteResource(ctx, resource.ResourceID); err != nil {
+				return errors.Wrap(err, "failed to queue resource deletion in vault api")
+			}
+		}
+
 		err = vaultModels.MarkResourceExpiredAndUnfunded(ctx, tx, resource.ResourceID)
 		if err != nil {
 			return errors.Wrap(err, "failed to mark resource as expired and unfunded")

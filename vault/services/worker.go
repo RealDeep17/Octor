@@ -1664,10 +1664,9 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	}()
 
 	for stored < f.TotalSize {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
+		if ctx.Err() != nil {
+			setUploadErr(ctx.Err())
+			break
 		}
 		if uploadErr != nil {
 			break
@@ -1695,10 +1694,9 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 		filled := 0
 		attempt := 0
 		for filled < len(buf) {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			default:
+			if ctx.Err() != nil {
+				setUploadErr(ctx.Err())
+				break
 			}
 
 			chunkEnd := filled + visibleReadChunk
@@ -1777,12 +1775,14 @@ func (s *Worker) storeFile(ctx context.Context, cla *Claims, id string, item ra.
 	wg.Wait()
 
 	if uploadErr != nil {
-		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+		abortCtx, cancelAbort := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelAbort()
+		_, _ = s3Cl.AbortMultipartUploadWithContext(abortCtx, &awss3.AbortMultipartUploadInput{
 			Bucket:   aws.String(s.bucket),
 			Key:      aws.String(s3Key(hash)),
 			UploadId: aws.String(f.UploadID),
 		})
-		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+		_, _ = s3Cl.AbortMultipartUploadWithContext(abortCtx, &awss3.AbortMultipartUploadInput{
 			Bucket:   aws.String(s.bucket),
 			Key:      aws.String(hash),
 			UploadId: aws.String(f.UploadID),

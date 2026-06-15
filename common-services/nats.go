@@ -72,6 +72,6 @@ func (s *NATS) Get() *nats.Conn {
 
 func (s *NATS) Close() {
 	if s.nc != nil {
-		s.nc.Close()
+		s.nc.Drain()
 	}
 }

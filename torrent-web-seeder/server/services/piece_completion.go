@@ -6,14 +6,16 @@ import (
 	"github.com/anacrolix/torrent/storage"
 	"github.com/go-llsqlite/adapter"
 	"github.com/go-llsqlite/adapter/sqlitex"
+	log "github.com/sirupsen/logrus"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+	"sync/atomic"
 )
 
 type completions struct {
-	pieces         []bool
+	pieces         []int32
 	completedCount int
 	completedFiles map[string]bool
 	completed      bool
@@ -24,11 +26,11 @@ type completions struct {
 func (s *completions) Complete(index int) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
-	if s.pieces[index] {
+	if atomic.LoadInt32(&s.pieces[index]) == 1 {
 		return
 	}
 	s.completedCount++
-	s.pieces[index] = true
+	atomic.StoreInt32(&s.pieces[index], 1)
 	s.completed = s.completedCount == len(s.pieces)
 }
 
@@ -37,11 +39,11 @@ func (s *completions) Complete(index int) {
 func (s *completions) Uncomplete(index int) []string {
 	s.mux.Lock()
 	defer s.mux.Unlock()
-	if !s.pieces[index] {
+	if atomic.LoadInt32(&s.pieces[index]) == 0 {
 		return nil
 	}
 	s.completedCount--
-	s.pieces[index] = false
+	atomic.StoreInt32(&s.pieces[index], 0)
 	s.completed = false
 	// Find and reset file completions affected by this piece.
 	var affectedFiles []string
@@ -101,14 +103,17 @@ func (s *completions) IsPieceInCompletedFile(index int) bool {
 }
 
 func (s *completions) GetCompletedFiles() []string {
-	s.mux.Lock()
-	defer s.mux.Unlock()
 	var files []string
+
+	s.mux.Lock()
+	completedGlobal := s.completed
+	s.mux.Unlock()
+
 	if len(s.info.Files) == 0 {
 		completed := true
-		if !s.completed {
-			for _, b := range s.pieces {
-				if !b {
+		if !completedGlobal {
+			for i := range s.pieces {
+				if atomic.LoadInt32(&s.pieces[i]) == 0 {
 					completed = false
 					break
 				}
@@ -129,12 +134,17 @@ func (s *completions) GetCompletedFiles() []string {
 		startPiece := offset / int(s.info.PieceLength)
 		endPiece := (offset + int(f.Length) - 1) / int(s.info.PieceLength)
 		offset += int(f.Length)
-		if !s.completed && !s.completedFiles[path] {
+
+		s.mux.Lock()
+		isCompletedFile := s.completedFiles[path]
+		s.mux.Unlock()
+
+		if !completedGlobal && !isCompletedFile {
 			for i := startPiece; i <= endPiece; i++ {
 				if i >= len(s.pieces) {
 					break
 				}
-				if !s.pieces[i] {
+				if atomic.LoadInt32(&s.pieces[i]) == 0 {
 					completed = false
 					break
 				}
@@ -142,7 +152,11 @@ func (s *completions) GetCompletedFiles() []string {
 		}
 		if completed {
 			files = append(files, s.info.Name+"/"+strings.Join(f.Path, "/"))
-			s.completedFiles[path] = true
+			if !isCompletedFile {
+				s.mux.Lock()
+				s.completedFiles[path] = true
+				s.mux.Unlock()
+			}
 		}
 	}
 	return files
@@ -176,16 +190,16 @@ func NewPieceCompletion(dir string, info *metainfo.Info, hash metainfo.Hash) (re
 		_ = db.Close()
 		return
 	}
-	pieces := make([]bool, info.NumPieces())
+	pieces := make([]int32, info.NumPieces())
 	for i := 0; i < info.NumPieces(); i++ {
-		pieces[i] = false
+		pieces[i] = 0
 	}
 	completedCount := 0
 	err = sqlitex.Exec(db, `select "index", complete from piece_completion`,
 		func(stmt *sqlite.Stmt) error {
 			if stmt.ColumnInt(1) == 1 {
 				index := stmt.ColumnInt(0)
-				pieces[index] = true
+				pieces[index] = 1
 				completedCount++
 			}
 			return nil
@@ -218,7 +232,8 @@ func NewPieceCompletion(dir string, info *metainfo.Info, hash metainfo.Hash) (re
 		for {
 			for _, f := range completions.GetCompletedFiles() {
 				if err := ret.CompleteFile(f); err != nil {
-					return
+					log.WithError(err).Error("failed to complete file in database")
+					continue
 				}
 			}
 			if completions.completed {
