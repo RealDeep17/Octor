@@ -82,3 +82,28 @@ We fixed brittle heuristics, API constraints, logic bombs, and UI/UX edge cases 
 - Bug 87 (Cross-Site Scripting (XSS) via Unsanitized fmt.Sprintf Injection):
   - Target File: web-ui/handlers/embed/get.go
   - Remediation: Refactored generateCheckScript to use json.Marshal for all strings injected into the raw JavaScript template, preventing arbitrary JavaScript execution.
+
+---
+
+## Phase 6: Core Feature Completion & Compliance
+We implemented the remaining high-value features requested by the project owners, focusing on user privacy, dashboard interactivity, and video player enhancements.
+
+### 1. Vault Dashboard Interactivity
+- **Target Files:** `web-ui/assets/src/js/app/vault/progress.js`, `web-ui/templates/partials/vault/stats.html`, `web-ui/templates/views/vault/index.html`
+- **Remediation:** 
+  - Added clickable stat cards (Vaulted, Processing, Expiring) that automatically filter the Vault pledges list.
+  - Implemented a 10-second `setInterval` polling loop utilizing the `data-async-layout` pattern to dynamically auto-refresh the "Loading/Processing" metric.
+  - Added a new "Expiring" status filter for torrents that have lost their pledge funding.
+
+### 2. GDPR Data Portability & Erasure
+- **Target Files:** `web-ui/models/video_status_gdpr.go`, `web-ui/handlers/profile/handler.go`, `web-ui/templates/views/profile/get.html`
+- **Remediation:** 
+  - Built an "Export Data" endpoint that serializes the user's `MovieStatus`, `SeriesStatus`, `EpisodeStatus`, and `WatchHistory` telemetry into a downloadable JSON file.
+  - Built a "Clear Watch History" endpoint with a UI confirmation modal that permanently hard-deletes all viewing telemetry (including the highly sensitive `watch_history` table) from the database to comply with the Right to Erasure.
+
+### 3. Video Player Subtitle Size Control
+- **Target Files:** `web-ui/assets/src/js/lib/player/Player.jsx`, `web-ui/templates/views/action/stream_video.html`, `web-ui/assets/src/styles/player.css`
+- **Remediation:** 
+  - Added a "Subtitle Size" selection block (Small, Medium, Large, Extra Large) to the video player's subtitles modal.
+  - Implemented the `wireSubtitleSizeHandlers` JavaScript logic to persist the user's size preference in `localStorage` and apply it to the player container.
+  - Added CSS overrides using the `video::cue` pseudo-element and the `data-subtitle-size` attribute to scale the subtitle text across all browsers and HLS implementations.
