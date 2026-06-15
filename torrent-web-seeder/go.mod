@@ -89,9 +89,7 @@ require (
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/onsi/ginkgo/v2 v2.28.0 // indirect
-	github.com/onsi/gomega v1.39.1 // indirect
 	github.com/pion/datachannel v1.5.10 // indirect
 	github.com/pion/dtls/v3 v3.0.8 // indirect
 	github.com/pion/ice/v4 v4.0.13 // indirect
@@ -108,7 +106,6 @@ require (
 	github.com/pion/transport/v3 v3.1.1 // indirect
 	github.com/pion/turn/v4 v4.1.3 // indirect
 	github.com/pion/webrtc/v4 v4.1.8 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
