@@ -20,7 +20,7 @@ cd "$REPO_ROOT" || exit 1
 FILES=$(git ls-files | grep -E '\.(go|py|js|ts|jsx|tsx|html|sh|css|sql|yml|yaml|md|json|proto|mod|sum|txt|xml|toml)$' | grep -vE '^(bin|node_modules|vendor|venv|dist|\.git|OCTOR_CODEBASE_V2|infra-data)')
 
 # 3. Concatenate
-for f in $FILES; do
+git ls-files | grep -E '\.(go|py|js|ts|jsx|tsx|html|sh|css|sql|yml|yaml|md|json|proto|mod|sum|txt|xml|toml)$' | grep -vE '^(bin|node_modules|vendor|venv|dist|\.git|OCTOR_CODEBASE_V2|infra-data)' | while read -r f; do
     # Skip logs/large metadata
     [[ "$f" == "remediation_changes.txt" ]] && continue
     [[ "$f" == "REMEDIATION.md" ]] && continue
