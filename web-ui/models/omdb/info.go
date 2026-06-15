@@ -33,8 +33,8 @@ var startYearRegexp = regexp.MustCompile(`^\d{4}`)
 
 func UpsertInfo(ctx context.Context, db *pg.DB, imdbID string, omdbType OmdbType, metadata map[string]any) (*Info, error) {
 
-	title := metadata["Title"].(string)
-	yearStr := metadata["Year"].(string)
+	title, _ := metadata["Title"].(string)
+	yearStr, _ := metadata["Year"].(string)
 	var year int
 	var err error
 	if yearStr != "" {

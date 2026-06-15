@@ -131,6 +131,10 @@ func (s *Helper) matchLang(lis []ListItem, ud *models.VideoStreamUserData) (lInd
 	for t := range lx {
 		langs = append(langs, t)
 	}
+	if len(langs) == 0 {
+		err = errors.New("no languages available")
+		return
+	}
 	matcher := language.NewMatcher(langs)
 	_, index, confidence := matcher.Match(ud.AcceptLangTags...)
 	if confidence > language.No {

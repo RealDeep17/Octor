@@ -31,11 +31,11 @@ func (s *VideoStreamUserData) FetchSessionData(c *gin.Context) {
 	var subtitleID, audioID string
 	audioKey := s.makeKey(s.ResourceID, s.ItemID, "audio")
 	subtitleKey := s.makeKey(s.ResourceID, s.ItemID, "subtitle")
-	if session.Get(subtitleKey) != nil {
-		subtitleID = session.Get(subtitleKey).(string)
+	if val := session.Get(subtitleKey); val != nil {
+		subtitleID, _ = val.(string)
 	}
-	if session.Get(audioKey) != nil {
-		audioID = session.Get(audioKey).(string)
+	if val := session.Get(audioKey); val != nil {
+		audioID, _ = val.(string)
 	}
 	accept := c.GetHeader("Accept-Language")
 	if s.Settings.UserLang != "" {

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -464,7 +465,40 @@ func (s *Api) ExportResourceContent(ctx context.Context, c *Claims, infohash str
 	return
 }
 
+func isInternalURL(u string) bool {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return true // Assume internal if unparseable to be safe
+	}
+	host := parsed.Hostname()
+
+	// Reject RFC1918 internal IP addresses
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() {
+			return true
+		}
+	}
+
+	// Reject common internal domains
+	internalDomains := []string{".local", ".internal", ".lan", "localhost"}
+	for _, d := range internalDomains {
+		if strings.HasSuffix(strings.ToLower(host), d) || strings.ToLower(host) == d {
+			return true
+		}
+	}
+
+	// Reject bare hostnames (no dots)
+	if !strings.Contains(host, ".") {
+		return true
+	}
+
+	return false
+}
+
 func (s *Api) Download(ctx context.Context, u string) (io.ReadCloser, error) {
+	if isInternalURL(u) {
+		return nil, errors.Errorf("forbidden internal URL: %v", u)
+	}
 	return s.DownloadWithRange(ctx, u, 0, -1)
 }
 
@@ -611,6 +645,9 @@ func (s *Api) PurgeResourceCache(ctx context.Context, c *Claims, resourceID stri
 }
 
 func (s *Api) DownloadWithRange(ctx context.Context, u string, start int, end int) (io.ReadCloser, error) {
+	if isInternalURL(u) {
+		return nil, errors.Errorf("forbidden internal URL: %v", u)
+	}
 	req, err := s.makeTorrentHTTPProxyRequest(ctx, u)
 	if err != nil {
 		log.WithError(err).Error("failed to make new request")

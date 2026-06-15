@@ -1,9 +1,11 @@
 package services
 
 import (
+	"errors"
 	"time"
 
 	"github.com/dgraph-io/badger/v3"
+	log "github.com/sirupsen/logrus"
 )
 
 func NewBadger() *badger.DB {
@@ -14,7 +16,10 @@ func NewBadger() *badger.DB {
 		defer ticker.Stop()
 		for range ticker.C {
 			if err := db.RunValueLogGC(0.7); err != nil {
-				return
+				if !errors.Is(err, badger.ErrNoRewrite) {
+					log.WithError(err).Error("badger GC error")
+				}
+				continue
 			}
 		}
 	}()

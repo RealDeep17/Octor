@@ -291,7 +291,8 @@ func (me mmapStoragePiece) pieceKey() metainfo.PieceKey {
 func (sp mmapStoragePiece) Completion() storage.Completion {
 	c, err := sp.t.pc.Get(sp.pieceKey())
 	if err != nil {
-		panic(err)
+		log.WithError(err).Error("failed to get piece completion")
+		return storage.Completion{}
 	}
 	return c
 }

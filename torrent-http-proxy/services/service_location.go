@@ -218,6 +218,9 @@ func (s *ServiceLocation) distributeByHash(src *Source, as []corev1.EndpointAddr
 	sort.Slice(as, func(i, j int) bool {
 		return as[i].IP < as[j].IP
 	})
+	if len(src.InfoHash) < 5 {
+		return nil, errors.Errorf("infohash too short: %v", src.InfoHash)
+	}
 	hex := src.InfoHash[0:5]
 	num64, err := strconv.ParseInt(hex, 16, 64)
 	if err != nil {
@@ -250,6 +253,9 @@ func (s *ServiceLocation) distributeByNodeHash(src *Source, as []corev1.Endpoint
 	nodes, err := s.filterNodesByRole(nodes, claims)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to filter nodes by role")
+	}
+	if len(src.InfoHash) < 5 {
+		return nil, errors.Errorf("infohash too short: %v", src.InfoHash)
 	}
 	hex := src.InfoHash[0:5]
 	num64, err := strconv.ParseInt(hex, 16, 64)

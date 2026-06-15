@@ -18,7 +18,11 @@ const (
 
 func DistributeByHash(dirs []string, hash string) (string, error) {
 	sort.Strings(dirs)
-	hex := fmt.Sprintf("%x", sha1.Sum([]byte(hash)))[0:5]
+	h := fmt.Sprintf("%x", sha1.Sum([]byte(hash)))
+	if len(h) < 5 {
+		return "", errors.Errorf("hash too short: %v", h)
+	}
+	hex := h[0:5]
 	num64, err := strconv.ParseInt(hex, 16, 64)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to parse hex from hex=%v infohash=%v", hex, hash)

@@ -51,7 +51,9 @@ func UpsertInfo(ctx context.Context, db *pg.DB, kpID int, metadata map[string]an
 	}
 	year, ok := metadata["startYear"].(float64)
 	if !ok {
-		year = metadata["year"].(float64)
+		if val, ok := metadata["year"].(float64); ok {
+			year = val
+		}
 	}
 	var err error
 	var yearPtr *int16

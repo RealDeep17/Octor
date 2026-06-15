@@ -276,14 +276,18 @@ func removeParam(params []string, flag string) []string {
 	return result
 }
 
-// injectRealtimeInputParam was previously used to inject -re before -i to
-// prevent FFmpeg from transcoding far ahead of the viewer. However, -re
-// throttles output to 1x real-time, which prevents the browser from buffering
-// ahead and causes constant rebuffering. The session lifecycle (Stop/Cleanup
-// on page close, session timeout, reference counting) already handles stopping
-// FFmpeg when the user leaves, so -re is no longer needed.
+// injectRealtimeInputParam injects -re before -i to prevent FFmpeg from
+// transcoding far ahead of the viewer. This prevents CPU starvation
+// on the host OS.
 func injectRealtimeInputParam(params []string) []string {
-	return params
+	result := make([]string, 0, len(params)+1)
+	for i := 0; i < len(params); i++ {
+		if params[i] == "-i" {
+			result = append(result, "-re")
+		}
+		result = append(result, params[i])
+	}
+	return result
 }
 
 // injectSeekParams adds -ss before -i (input-level seek).
