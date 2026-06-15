@@ -695,3 +695,34 @@ ADDITION:
 		})
 		return nil, uploadErr
 	}
+
+-------------------------------------------------------------------------------
+FILE 25: vault/services/worker.go
+CHANGE: Replaced dead parent context with a fresh, detached background context for AWS S3 AbortMultipartUploadWithContext and DeleteObjectWithContext calls inside gcFileIfUnreferenced and sweepOrphanFiles.
+-------------------------------------------------------------------------------
+REMOVAL:
+	if f.UploadID != "" {
+		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+			Bucket:   aws.String(s.bucket),
+			Key:      aws.String(s.s3Key(hash, "", "")),
+			UploadId: aws.String(f.UploadID),
+		})
+		if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+...
+		})
+		if _, err := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+
+ADDITION:
+	cleanCtx, cleanCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cleanCancel()
+
+	if f.UploadID != "" {
+		_, _ = s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
+			Bucket:   aws.String(s.bucket),
+			Key:      aws.String(s.s3Key(hash, "", "")),
+			UploadId: aws.String(f.UploadID),
+		})
+		if _, err := s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
+...
+		})
+		if _, err := s3Cl.DeleteObjectWithContext(cleanCtx, &awss3.DeleteObjectInput{

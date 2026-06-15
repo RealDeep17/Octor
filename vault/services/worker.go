@@ -832,13 +832,16 @@ func (s *Worker) gcFileIfUnreferenced(ctx context.Context, db *pg.DB, hash strin
 	// Abort any in-flight multipart upload so we don't leave parts
 	// accruing quota. Best-effort: the 7-day S3 lifecycle rule is the
 	// ultimate backstop.
+	cleanCtx, cleanCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cleanCancel()
+
 	if f.UploadID != "" {
-		_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+		_, _ = s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
 			Bucket:   aws.String(s.bucket),
 			Key:      aws.String(s.s3Key(hash, "", "")),
 			UploadId: aws.String(f.UploadID),
 		})
-		if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+		if _, err := s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
 			Bucket:   aws.String(s.bucket),
 			Key:      aws.String(hash),
 			UploadId: aws.String(f.UploadID),
@@ -851,11 +854,11 @@ func (s *Worker) gcFileIfUnreferenced(ctx context.Context, db *pg.DB, hash strin
 	}
 	// Delete the completed object if any. Harmless when the key does
 	// not exist (e.g. we only had an in-flight multipart).
-	_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+	_, _ = s3Cl.DeleteObjectWithContext(cleanCtx, &awss3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(s.s3Key(hash, "", "")),
 	})
-	if _, err := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+	if _, err := s3Cl.DeleteObjectWithContext(cleanCtx, &awss3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(hash),
 	}); err != nil {
@@ -909,13 +912,16 @@ func (s *Worker) sweepOrphanFiles(ctx context.Context, db *pg.DB) (int, error) {
 		if cnt > 0 {
 			continue
 		}
+
+		cleanCtx, cleanCancel := context.WithTimeout(context.Background(), 10*time.Second)
+
 		if f.UploadID != "" {
-			_, _ = s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+			_, _ = s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
 				Key:      aws.String(s.s3Key(f.Hash, "", "")),
 				UploadId: aws.String(f.UploadID),
 			})
-			if _, err := s3Cl.AbortMultipartUploadWithContext(ctx, &awss3.AbortMultipartUploadInput{
+			if _, err := s3Cl.AbortMultipartUploadWithContext(cleanCtx, &awss3.AbortMultipartUploadInput{
 				Bucket:   aws.String(s.bucket),
 				Key:      aws.String(f.Hash),
 				UploadId: aws.String(f.UploadID),
@@ -923,17 +929,19 @@ func (s *Worker) sweepOrphanFiles(ctx context.Context, db *pg.DB) (int, error) {
 				log.WithError(err).WithField("hash", f.Hash).Warn("sweep: abort multipart failed; continuing")
 			}
 		}
-		_, _ = s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+		_, _ = s3Cl.DeleteObjectWithContext(cleanCtx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(s.s3Key(f.Hash, "", "")),
 		})
-		if _, err := s3Cl.DeleteObjectWithContext(ctx, &awss3.DeleteObjectInput{
+		if _, err := s3Cl.DeleteObjectWithContext(cleanCtx, &awss3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(f.Hash),
 		}); err != nil {
 			log.WithError(err).WithField("hash", f.Hash).Warn("sweep: S3 delete failed; skipping")
+			cleanCancel()
 			continue
 		}
+		cleanCancel()
 		if _, err := db.Model(f).Context(ctx).WherePK().Delete(); err != nil && !errors.Is(err, pg.ErrNoRows) {
 			log.WithError(err).WithField("hash", f.Hash).Warn("sweep: DB delete failed")
 			continue
