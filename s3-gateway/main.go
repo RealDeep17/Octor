@@ -90,6 +90,14 @@ type activeUpload struct {
 	totalFlushed  int64
 	partsMetadata []partInfo // For ListParts
 	partSize      int64
+	hasSlot       bool
+	releaseOnce   sync.Once
+}
+
+func (u *activeUpload) release() {
+	if u.hasSlot {
+		u.releaseOnce.Do(releaseUploadSlot)
+	}
 }
 
 var (
@@ -97,7 +105,21 @@ var (
 	activeUploads   = make(map[string]*activeUpload)
 	writeBufferSize = 16 * 1024 * 1024       // Default to 16MB sequential write buffer
 	maxStagingBytes = int64(512 * 1024 * 1024) // 512MB default max staging buffer
+	uploadSem       = make(chan struct{}, 64)  // Global limit: 64 concurrent uploads (approx 1GB RAM)
 )
+
+func acquireUploadSlot() bool {
+	select {
+	case uploadSem <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func releaseUploadSlot() {
+	<-uploadSem
+}
 
 func createLink(finalPath string, humanPath string) {
 	// Links are disabled due to FUSE mount restrictions. 
@@ -377,6 +399,14 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Create Multipart Upload
 	if isUploads && r.Method == http.MethodPost {
+		hasSlot := false
+		if writeBufferSize > 0 {
+			if !acquireUploadSlot() {
+				writeError(w, http.StatusServiceUnavailable, "SlowDown", "Too many concurrent uploads. Please try again later.", r.URL.Path)
+				return
+			}
+			hasSlot = true
+		}
 		upID := generateUploadID()
 		
 		// If human path is provided, use it as the actual filename on the cloud drive
@@ -388,11 +418,17 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := os.MkdirAll(filepath.Dir(finalPath), 0777); err != nil {
+			if hasSlot {
+				releaseUploadSlot()
+			}
 			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
 			return
 		}
 		destFile, err := os.OpenFile(finalPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 		if err != nil {
+			if hasSlot {
+				releaseUploadSlot()
+			}
 			writeError(w, http.StatusInternalServerError, "InternalError", err.Error(), r.URL.Path)
 			return
 		}
@@ -407,6 +443,9 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		if !checkParallelMode() {
 			tempDir = filepath.Join(tempUploadsDir, upID)
 			if err := os.MkdirAll(tempDir, 0777); err != nil {
+				if hasSlot {
+					releaseUploadSlot()
+				}
 				destFile.Close()
 				writeError(w, http.StatusInternalServerError, "InternalError", fmt.Sprintf("Failed to create temp uploads dir: %v", err), r.URL.Path)
 				return
@@ -426,6 +465,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 			doneFlushing:  make(chan struct{}),
 			nextPart:      1,
 			partSize:      uploadPartSize,
+			hasSlot:       hasSlot,
 		}
 		u.cond = sync.NewCond(&u.mu)
 
@@ -663,6 +703,8 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 		// Clean up staging directory
 		_ = os.RemoveAll(u.tempDir)
 
+		u.release()
+
 		createLink(u.finalPath, u.humanPath)
 
 		w.Header().Set("Content-Type", "application/xml")
@@ -689,6 +731,7 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 			_ = u.destFile.Close()
 			_ = os.Remove(u.finalPath)
 			_ = os.RemoveAll(u.tempDir)
+			u.release()
 		}
 		mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
@@ -788,6 +831,13 @@ func handleS3(w http.ResponseWriter, r *http.Request) {
 
 	// 8. Put Object (Single part upload fallback) or Copy Object
 	if r.Method == http.MethodPut {
+		if writeBufferSize > 0 {
+			if !acquireUploadSlot() {
+				writeError(w, http.StatusServiceUnavailable, "SlowDown", "Too many concurrent uploads. Please try again later.", r.URL.Path)
+				return
+			}
+			defer releaseUploadSlot()
+		}
 		copySource := r.Header.Get("x-amz-copy-source")
 		humanPath := r.Header.Get("X-Amz-Meta-Human-Path")
 		finalPath := filepath.Join(bucketDir, key)

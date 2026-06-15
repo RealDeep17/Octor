@@ -22,12 +22,6 @@ function needsProxy(baseUrl) {
         const u = new URL(baseUrl);
         // Any plain-HTTP URL on an HTTPS page = Mixed Content → must proxy
         if (u.protocol === 'http:' && window.location.protocol === 'https:') return true;
-        // Unresolvable LAN hostnames (no dots, .local, .internal, .lan, etc.)
-        const host = u.hostname;
-        if (host === 'localhost') return false; // localhost is fine
-        if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) return true; // RFC1918
-        if (host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan')) return true;
-        if (!host.includes('.')) return true; // bare hostname
     } catch {}
     return false;
 }

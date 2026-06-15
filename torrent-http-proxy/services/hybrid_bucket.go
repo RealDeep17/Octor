@@ -75,9 +75,12 @@ type HybridBucket struct {
 	redisKey string
 	redisOK  bool
 	probing  bool
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 func NewHybridBucket(rate float64, capacity float64, rc redis.UniversalClient, sessionID string) *HybridBucket {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &HybridBucket{
 		local:      0, // start empty — first write goes to Redis for coordination
 		rate:       rate,
@@ -86,7 +89,14 @@ func NewHybridBucket(rate float64, capacity float64, rc redis.UniversalClient, s
 		rc:         rc,
 		redisKey:   "bw:limit:" + sessionID,
 		redisOK:    rc != nil,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
+}
+
+func (hb *HybridBucket) Close() error {
+	hb.cancel()
+	return nil
 }
 
 // Wait blocks until count tokens are available, satisfying the Throttler interface.
@@ -193,17 +203,22 @@ func (hb *HybridBucket) refillFromRedis(requested float64) float64 {
 func (hb *HybridBucket) probeRedis() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	for range ticker.C {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		err := hb.rc.Ping(ctx).Err()
-		cancel()
-		if err == nil {
-			hb.mu.Lock()
-			hb.redisOK = true
-			hb.probing = false
-			hb.mu.Unlock()
-			logrus.Info("Redis connection restored for bandwidth limiting")
+	for {
+		select {
+		case <-hb.ctx.Done():
 			return
+		case <-ticker.C:
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			err := hb.rc.Ping(ctx).Err()
+			cancel()
+			if err == nil {
+				hb.mu.Lock()
+				hb.redisOK = true
+				hb.probing = false
+				hb.mu.Unlock()
+				logrus.Info("Redis connection restored for bandwidth limiting")
+				return
+			}
 		}
 	}
 }

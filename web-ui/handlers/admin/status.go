@@ -71,7 +71,22 @@ var (
 	liveTelemetry      StatusPageData
 	liveTelemetryMutex sync.RWMutex
 	baseDiskRx         = regexp.MustCompile(`^([sv]d[a-z]+|nvme[0-9]+n[0-9]+)$`)
+	metricsClient      = &http.Client{
+		Timeout: 2 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			IdleConnTimeout:     90 * time.Second,
+			MaxIdleConnsPerHost: 10,
+		},
+	}
 )
+
+func getMetricsHost(envVar string, defaultHost string) string {
+	if host := os.Getenv(envVar); host != "" {
+		return host
+	}
+	return defaultHost
+}
 
 // StartStatsCollector collects network and disk I/O metrics and stores hourly/minutely diffs in the database
 func StartStatsCollector(db *pg.DB) {
@@ -771,8 +786,9 @@ func getDiskTotalVal() int64 {
 }
 
 func getStreamCountVal() int {
-	client := &http.Client{Timeout: 1 * time.Second}
-	resp, err := client.Get("http://localhost:53086/metrics") // query octor-vault prom port
+	host := getMetricsHost("VAULT_METRICS_HOST", "localhost")
+	url := fmt.Sprintf("http://%s:53086/metrics", host)
+	resp, err := metricsClient.Get(url) // query octor-vault prom port
 	if err != nil {
 		return 0
 	}
@@ -792,8 +808,9 @@ func getStreamCountVal() int {
 }
 
 func getSeedCountVal() int {
-	client := &http.Client{Timeout: 1 * time.Second}
-	resp, err := client.Get("http://localhost:53054/metrics") // query octor-torrent-web-seeder prom port
+	host := getMetricsHost("WEB_SEEDER_METRICS_HOST", "localhost")
+	url := fmt.Sprintf("http://%s:53054/metrics", host)
+	resp, err := metricsClient.Get(url) // query octor-torrent-web-seeder prom port
 	if err != nil {
 		return 0
 	}
@@ -813,8 +830,9 @@ func getSeedCountVal() int {
 }
 
 func parseVaultMetrics() (activeWorkers int, vaultingConcurrency int, storedBytes int64, err error) {
-	client := &http.Client{Timeout: 1 * time.Second}
-	resp, err := client.Get("http://localhost:53086/metrics")
+	host := getMetricsHost("VAULT_METRICS_HOST", "localhost")
+	url := fmt.Sprintf("http://%s:53086/metrics", host)
+	resp, err := metricsClient.Get(url)
 	if err != nil {
 		return 0, 0, 0, err
 	}

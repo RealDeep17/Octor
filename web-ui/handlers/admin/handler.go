@@ -24,12 +24,13 @@ import (
 )
 
 type Handler struct {
-	tb       template.Builder[*web.Context]
-	pg       *cs.PG
-	vault    *vault.Vault
-	enricher *enrich.Enricher
-	admin    *adminsvc.Admin
-	api      *api.Api
+	tb             template.Builder[*web.Context]
+	pg             *cs.PG
+	vault          *vault.Vault
+	enricher       *enrich.Enricher
+	admin          *adminsvc.Admin
+	api            *api.Api
+	enrichmentLock sync.Mutex
 }
 
 type UserOption struct {

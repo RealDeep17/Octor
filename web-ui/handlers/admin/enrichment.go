@@ -54,13 +54,19 @@ loopExit:
 }
 
 func (h *Handler) refreshEnrichment(c *gin.Context) {
+	if !h.enrichmentLock.TryLock() {
+		web.RedirectWithError(c, errors.New("An enrichment job is already running"))
+		return
+	}
 	db, err := h.db()
 	if err != nil {
+		h.enrichmentLock.Unlock()
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
 	go func() {
+		defer h.enrichmentLock.Unlock()
 		bgCtx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
 		defer cancel()
 
@@ -76,7 +82,12 @@ func (h *Handler) refreshEnrichment(c *gin.Context) {
 }
 
 func (h *Handler) forceAllEnrichment(c *gin.Context) {
+	if !h.enrichmentLock.TryLock() {
+		web.RedirectWithError(c, errors.New("An enrichment job is already running"))
+		return
+	}
 	go func() {
+		defer h.enrichmentLock.Unlock()
 		bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 		defer cancel()
 
@@ -103,7 +114,12 @@ func (h *Handler) forceAllEnrichment(c *gin.Context) {
 }
 
 func (h *Handler) forceEverythingEnrichment(c *gin.Context) {
+	if !h.enrichmentLock.TryLock() {
+		web.RedirectWithError(c, errors.New("An enrichment job is already running"))
+		return
+	}
 	go func() {
+		defer h.enrichmentLock.Unlock()
 		bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 		defer cancel()
 

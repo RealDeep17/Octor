@@ -1,6 +1,7 @@
 package lazymap
 
 import (
+	"io"
 	"math"
 	"sort"
 	"sync"
@@ -133,6 +134,9 @@ func (s *lazyMapItem[T]) Cancel() {
 		s.t.Stop()
 	}
 	s.cancel = true
+	if closer, ok := any(s.val).(io.Closer); ok {
+		_ = closer.Close()
+	}
 }
 
 func (s *lazyMapItem[T]) doExpire(exp time.Duration) <-chan time.Time {

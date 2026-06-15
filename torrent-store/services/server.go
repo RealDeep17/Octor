@@ -77,6 +77,10 @@ func (s *Server) checkStoplist(torrent []byte, log *log.Entry, t time.Time, hash
 
 func (s *Server) Push(ctx context.Context, in *pb.PushRequest) (*pb.PushReply, error) {
 	t := time.Now()
+	const maxTorrentSize = 5 * 1024 * 1024 // 5 MiB
+	if len(in.GetTorrent()) > maxTorrentSize {
+		return nil, status.Errorf(codes.InvalidArgument, "torrent file too large: %d bytes (max %d)", len(in.GetTorrent()), maxTorrentSize)
+	}
 	reader := bytes.NewReader(in.GetTorrent())
 	mi, err := metainfo.Load(reader)
 	if err != nil {
