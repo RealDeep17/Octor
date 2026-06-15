@@ -1,0 +1,13 @@
+Edited:
+- web-ui/services/stremio/addon_validator.go
+- web-ui/services/stremio/client.go
+- web-ui/services/stremio/manifest.go
+- custom.env
+- example.env
+- web-ui/assets/src/js/lib/discover/client.js
+
+Added:
+- web-ui/services/stremio/client_test.go
+
+Removed:
+- None

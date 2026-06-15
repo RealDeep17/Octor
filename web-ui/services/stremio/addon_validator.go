@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -68,7 +69,7 @@ func (av *AddonValidator) ValidateAndFetch(url string) (*models.ManifestSnapshot
 	}
 
 	var manifest ManifestResponse
-	decoder := json.NewDecoder(resp.Body)
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 5*1024*1024))
 	if err := decoder.Decode(&manifest); err != nil {
 		return nil, errors.Wrap(err, "invalid JSON response from addon URL")
 	}

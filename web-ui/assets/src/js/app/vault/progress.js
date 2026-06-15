@@ -455,12 +455,13 @@ av(async function () {
     bindStatCards();
 
     // Auto-refresh stats container
-    const statsWrapper = root.querySelector('#vault-stats-wrapper');
-    if (statsWrapper && statsWrapper.getAttribute('data-async-interval')) {
-        const interval = parseInt(statsWrapper.getAttribute('data-async-interval'));
+    const initialStatsWrapper = root.querySelector('#vault-stats-wrapper');
+    if (initialStatsWrapper && initialStatsWrapper.getAttribute('data-async-interval')) {
+        const interval = parseInt(initialStatsWrapper.getAttribute('data-async-interval'));
         const statsTimer = setInterval(() => {
-            if (document.body.contains(statsWrapper) && statsWrapper.reload) {
-                statsWrapper.reload({ noScroll: true }).then(() => {
+            const currentWrapper = document.getElementById('vault-stats-wrapper');
+            if (currentWrapper && document.body.contains(currentWrapper) && currentWrapper.reload) {
+                currentWrapper.reload({ noScroll: true }).then(() => {
                     // Re-bind click handlers after reload
                     bindStatCards();
                 });

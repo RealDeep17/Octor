@@ -9,7 +9,7 @@ import { getLang } from '../i18n';
 import * as manifestCache from './manifestCache';
 import { refreshSnapshot, isSnapshotStale } from './addonsApi';
 
-const FETCH_TIMEOUT = 15000;
+const FETCH_TIMEOUT = 20000;
 const CACHE_MAX = 100;
 
 // Returns true if the given addon base URL needs to go through the server-side
@@ -344,7 +344,8 @@ export class StremioClient {
         const queryType = ADULT_TYPES.has(type) ? 'movie' : type;
         const rest = `stream/${queryType}/${id}.json`;
         const url = needsProxy(addon.baseUrl) ? proxyUrl(addon.baseUrl, rest) : `${addon.baseUrl}/${rest}`;
-        const res = await fetchWithTimeout(url, signal);
+        const timeout = window._env?.STREAM_TIMEOUT ? parseInt(window._env.STREAM_TIMEOUT) : FETCH_TIMEOUT;
+        const res = await fetchWithTimeout(url, signal, timeout);
         if (!res.ok) throw new Error('Failed to fetch streams');
         const data = await res.json();
         return (data.streams || []).map(s => ({

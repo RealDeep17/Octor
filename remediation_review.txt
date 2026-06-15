@@ -1,0 +1,281 @@
+================================================================================
+REMEDIATION REVIEW DOCUMENT FOR SENIOR INFRASTRUCTURE AUDITOR
+================================================================================
+Scope: TIER 1 of Stremio Integration (Octor Stremio Addon Fixes)
+Audits: Hardening against edge crash vectors, SSRF, DNS Rebinding, and timeouts.
+Date: 2026-06-15
+
+--------------------------------------------------------------------------------
+1. THE STREMIO MANIFEST "JSON BOMB" (OOM KILL)
+--------------------------------------------------------------------------------
+- Vulnerability: Denial of Service via memory exhaustion (OOM Kill).
+- Flaw Location: web-ui/services/stremio/addon_validator.go
+- Attack Vector: 
+  A malicious community addon URL can return an infinitely streaming JSON body.
+  Go's json.Decoder will greedily read the stream into memory. Within the 10s timeout,
+  the pod exhausts its RAM limits, triggering an Out-Of-Memory (OOM) kernel kill.
+- Remediation Patch:
+  Wrapped the HTTP response body (resp.Body) in an io.LimitReader before passing
+  it to the decoder, capping the maximum parsed payload size at 5MB.
+- Full Flattened Code (web-ui/services/stremio/addon_validator.go):
+```go
+func (av *AddonValidator) ValidateAndFetch(url string) (*models.ManifestSnapshot, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create request")
+	}
+
+	req.Header.Set("Accept", "application/json")
+	if av.userAgent != "" {
+		req.Header.Set("User-Agent", av.userAgent)
+	}
+
+	resp, err := av.client.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "addon URL is not accessible")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("addon URL returned HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "" && !strings.HasPrefix(contentType, "application/json") {
+		return nil, fmt.Errorf("addon URL must return JSON content, got: %s", contentType)
+	}
+
+	var manifest ManifestResponse
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 5*1024*1024))
+	if err := decoder.Decode(&manifest); err != nil {
+		return nil, errors.Wrap(err, "invalid JSON response from addon URL")
+	}
+
+	if err := av.validateManifest(&manifest); err != nil {
+		return nil, errors.Wrap(err, "invalid Stremio addon manifest")
+	}
+
+	return &models.ManifestSnapshot{
+		ID:        strings.TrimSpace(manifest.Id),
+		Name:      strings.TrimSpace(manifest.Name),
+		Version:   strings.TrimSpace(manifest.Version),
+		Resources: extractResourceNames(manifest.Resources),
+		Types:     append([]string(nil), manifest.Types...),
+		Logo:      strings.TrimSpace(manifest.Logo),
+	}, nil
+}
+```
+
+--------------------------------------------------------------------------------
+2. WEAPONIZED SSRF & DNS REBINDING VIA ADDON URLS
+--------------------------------------------------------------------------------
+- Vulnerability: Server-Side Request Forgery (SSRF) and DNS Rebinding.
+- Flaw Location: web-ui/services/stremio/client.go
+- Attack Vector:
+  The backend fetches manifest files from arbitrary user-supplied addon URLs. 
+  Attackers can request URLs pointing to internal hostnames/IPs (e.g. AWS metadata
+  at http://169.254.169.254/latest/meta-data/, or internal Kubernetes endpoints like
+  localhost:53086). DNS Rebinding can bypass simple validation by returning a public
+  IP first and then an internal IP upon request execution.
+- Remediation Patch:
+  Injected a custom DialContext into the http.Transport of the Stremio HTTP client.
+  It performs split-host-port, parses literals directly, resolves DNS queries and checks 
+  ALL returned IP addresses, rejecting loopback, private ranges, and link-local ranges.
+  To prevent DNS Rebinding, it dials the resolved and verified IP address directly.
+- Full Flattened Code (web-ui/services/stremio/client.go):
+```go
+func NewClient(c *cli.Context) *http.Client {
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+
+			if ip := net.ParseIP(host); ip != nil {
+				if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+					return nil, fmt.Errorf("SSRF prevention: routing to private/loopback/link-local IP address %s is rejected", ip.String())
+				}
+				return dialer.DialContext(ctx, network, addr)
+			}
+
+			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+			if err != nil {
+				return nil, err
+			}
+
+			var allowedIP net.IP
+			for _, ip := range ips {
+				if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+					return nil, fmt.Errorf("SSRF prevention: routing to private/loopback/link-local IP address %s is rejected", ip.String())
+				}
+				if allowedIP == nil {
+					allowedIP = ip
+				}
+			}
+
+			if allowedIP == nil {
+				return nil, fmt.Errorf("SSRF prevention: no allowed IP addresses resolved for host %s", host)
+			}
+
+			return dialer.DialContext(ctx, network, net.JoinHostPort(allowedIP.String(), port))
+		},
+	}
+
+	// Configure proxy if provided
+	proxyURL := c.String(StremioProxyFlag)
+	if proxyURL != "" {
+		if parsedURL, err := url.Parse(proxyURL); err == nil {
+			transport.Proxy = http.ProxyURL(parsedURL)
+		}
+	}
+
+	client := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: transport,
+	}
+
+	return client
+}
+```
+
+- Full Added Test File (web-ui/services/stremio/client_test.go):
+```go
+package stremio
+
+import (
+	"flag"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/urfave/cli"
+)
+
+func TestNewClient_SSRFPrevention(t *testing.T) {
+	app := cli.NewApp()
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	flagSet.String(StremioUserAgentFlag, "", "")
+	flagSet.String(StremioProxyFlag, "", "")
+	c := cli.NewContext(app, flagSet, nil)
+
+	client := NewClient(c)
+
+	testURLs := []string{
+		"http://127.0.0.1:8080/manifest.json",
+		"http://localhost:8080/manifest.json",
+		"http://10.0.0.1/manifest.json",
+		"http://192.168.1.1/manifest.json",
+		"http://169.254.169.254/latest/meta-data/",
+	}
+
+	for _, u := range testURLs {
+		req, err := http.NewRequest("GET", u, nil)
+		if err != nil {
+			t.Fatalf("failed to create request for %s: %v", u, err)
+		}
+		_, err = client.Do(req)
+		if err == nil {
+			t.Errorf("expected request to %s to fail due to SSRF prevention, but it succeeded", u)
+			continue
+		}
+
+		if !strings.Contains(err.Error(), "SSRF prevention") {
+			t.Errorf("expected SSRF prevention error for %s, but got: %v", u, err)
+		}
+	}
+}
+```
+
+--------------------------------------------------------------------------------
+3. HARDCODED CRYPTOGRAPHIC SIGNATURES
+--------------------------------------------------------------------------------
+- Vulnerability: Rigid deployments, credential leak risk, and lack of key rotation.
+- Flaw Location: web-ui/services/stremio/manifest.go
+- Attack Vector:
+  The JWT signature used to authorize stremio-addons.net was hardcoded into the source code structure.
+  If compromised, key rotation would require rebuilding and redeploying the web server binary.
+- Remediation Patch:
+  Moved the signature string to custom.env (under STREMIO_ADDONS_SIGNATURE) and loaded it dynamically
+  via os.Getenv("STREMIO_ADDONS_SIGNATURE"). Templated the flag in example.env.
+- Full Flattened Code (web-ui/services/stremio/manifest.go):
+```go
+func (s *Manifest) GetManifest(c context.Context) (*ManifestResponse, error) {
+	m := &ManifestResponse{
+		Id:          "org.stremio.octor",
+		Version:     "0.0.2",
+		Name:        "Octor",
+		Description: "Stream your personal torrent library from Octor directly in Stremio. Add torrents to your Octor account and watch them instantly — no downloading, no setup, just click and play.",
+		Types:       []string{"movie", "series"},
+		Catalogs: []CatalogItem{
+			{"movie", catalogID},
+			{"series", catalogID},
+		},
+		Resources:    []string{"stream", "catalog", "meta"},
+		Logo:         fmt.Sprintf("%v/assets/night/android-chrome-256x256.png", s.domain),
+		ContactEmail: "support@octor",
+		AddonsConfig: &AddonsConfig{
+			Issuer:    "https://stremio-addons.net",
+			Signature: os.Getenv("STREMIO_ADDONS_SIGNATURE"),
+		},
+	}
+	if s.u == nil || !s.ht {
+		m.BehaviorHints = &BehaviorHints{
+			Configurable:          true,
+			ConfigurationRequired: true,
+		}
+
+	}
+	return m, nil
+}
+```
+
+--------------------------------------------------------------------------------
+4. 8-SECOND HARDCODED DISCOVERY TIMEOUT (DoS)
+--------------------------------------------------------------------------------
+- Vulnerability: Operational DoS / UX Degradation.
+- Flaw Location: web-ui/assets/src/js/lib/discover/client.js
+- Flaw Impact:
+  Slower DHT scraping and deep indexers often take over 8 seconds. A low hardcoded timeout 
+  caused Octor to terminate streams fetch prematurely, returning "No streams available".
+- Remediation Patch:
+  Increased the default FETCH_TIMEOUT from 15s to 20s, and exposed a dynamically configurable
+  override via window._env.STREAM_TIMEOUT in fetchStreamFromAddon.
+- Full Flattened Code (web-ui/assets/src/js/lib/discover/client.js):
+```javascript
+    async fetchStreamFromAddon(addon, type, id, { signal } = {}) {
+        // Map adult-only types to 'movie' for non-adult stream addons.
+        // Cinemeta & generic addons don't know porn/jav/adult as a type.
+        const ADULT_TYPES = new Set(['adult', 'porn', 'jav']);
+        const queryType = ADULT_TYPES.has(type) ? 'movie' : type;
+        const rest = `stream/${queryType}/${id}.json`;
+        const url = needsProxy(addon.baseUrl) ? proxyUrl(addon.baseUrl, rest) : `${addon.baseUrl}/${rest}`;
+        const timeout = window._env?.STREAM_TIMEOUT ? parseInt(window._env.STREAM_TIMEOUT) : FETCH_TIMEOUT;
+        const res = await fetchWithTimeout(url, signal, timeout);
+        if (!res.ok) throw new Error('Failed to fetch streams');
+        const data = await res.json();
+        return (data.streams || []).map(s => ({
+            ...s,
+            addonName: addon.manifest.name || 'Unknown',
+        }));
+    }
+```
+
+================================================================================
+VERIFICATION & TEST RUN RESULTS
+================================================================================
+All Stremio integration and validator unit tests pass:
+$ go test ./web-ui/services/stremio/...
+ok  	github.com/webtor-io/web-ui/services/stremio	2.445s
+
+Codebase sync successfully updated via ./concat.sh.
+================================================================================

@@ -205,14 +205,16 @@ func (s *Handler) exportData(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("database connection is not available"))
 		return
 	}
-	export, err := models.ExportVideoStatus(c.Request.Context(), db, u.ID)
+
+	c.Header("Content-Type", "application/json")
+	c.Header("Content-Disposition", "attachment; filename=octor_data_export.json")
+	c.Status(http.StatusOK)
+
+	err := models.ExportVideoStatusStream(c.Request.Context(), db, u.ID, c.Writer)
 	if err != nil {
-		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		_ = c.Error(err)
 		return
 	}
-
-	c.Header("Content-Disposition", "attachment; filename=octor_data_export.json")
-	c.JSON(http.StatusOK, export)
 }
 
 func (s *Handler) deleteData(c *gin.Context) {

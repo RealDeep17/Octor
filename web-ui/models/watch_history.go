@@ -444,7 +444,7 @@ func DeleteWatchHistory(ctx context.Context, db *pg.DB, userID uuid.UUID, resour
 	return nil
 }
 
-func DeleteAllWatchHistoryForResource(ctx context.Context, db *pg.DB, userID uuid.UUID, resourceID string) error {
+func DeleteAllWatchHistoryForResource(ctx context.Context, db pg.DBI, userID uuid.UUID, resourceID string) error {
 	_, err := db.Model((*WatchHistory)(nil)).
 		Context(ctx).
 		Where("user_id = ? AND resource_id = ?", userID, resourceID).
@@ -455,7 +455,7 @@ func DeleteAllWatchHistoryForResource(ctx context.Context, db *pg.DB, userID uui
 	return nil
 }
 
-func DeleteAllWatchHistory(ctx context.Context, db *pg.DB, userID uuid.UUID) error {
+func DeleteAllWatchHistory(ctx context.Context, db pg.DBI, userID uuid.UUID) error {
 	_, err := db.Model((*WatchHistory)(nil)).
 		Context(ctx).
 		Where("user_id = ?", userID).

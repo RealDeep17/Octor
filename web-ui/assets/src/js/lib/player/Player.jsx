@@ -687,7 +687,7 @@ export async function initPlayer(target) {
     wireTrackHandlers(target);
 
     // Wire subtitle size handlers
-    wireSubtitleSizeHandlers(target, playerContainer);
+    const onStorageChange = wireSubtitleSizeHandlers(target, playerContainer);
 
     // Wire embed copy button
     wireEmbedCopy(target);
@@ -705,7 +705,7 @@ export async function initPlayer(target) {
         controlsMountEl
     );
 
-    _currentPlayer = { mountEl, playerContainer, videoEl, controlsMountEl };
+    _currentPlayer = { mountEl, playerContainer, videoEl, controlsMountEl, onStorageChange };
 }
 
 // Ensure a <track> with id=<trackID> exists inside <video>. The server
@@ -859,14 +859,16 @@ function wireTrackHandlers(container) {
 
 function wireSubtitleSizeHandlers(container, playerContainer) {
     const picker = container.querySelector('#subtitle-size-picker');
-    if (!picker) return;
+    if (!picker) return null;
 
     const SUBTITLE_SIZE_KEY = 'wt_subtitle_size';
     const savedSize = localStorage.getItem(SUBTITLE_SIZE_KEY) || 'medium';
 
-    const setSize = (size) => {
+    const setSize = (size, skipStorageWrite) => {
         playerContainer.setAttribute('data-subtitle-size', size);
-        localStorage.setItem(SUBTITLE_SIZE_KEY, size);
+        if (!skipStorageWrite) {
+            localStorage.setItem(SUBTITLE_SIZE_KEY, size);
+        }
         
         // Update visual state of buttons
         picker.querySelectorAll('.subtitle-size').forEach(btn => {
@@ -885,6 +887,14 @@ function wireSubtitleSizeHandlers(container, playerContainer) {
         if (!btn) return;
         setSize(btn.getAttribute('data-size'));
     });
+
+    const onStorageChange = (e) => {
+        if (e.key === SUBTITLE_SIZE_KEY && e.newValue) {
+            setSize(e.newValue, true);
+        }
+    };
+    window.addEventListener('storage', onStorageChange);
+    return onStorageChange;
 }
 
 function markTrack(container, el, type) {
@@ -941,7 +951,11 @@ function wireLogo(container, playerContainer) {
  */
 export function destroyPlayer() {
     if (!_currentPlayer) return;
-    const { mountEl, playerContainer, videoEl, controlsMountEl } = _currentPlayer;
+    const { mountEl, playerContainer, videoEl, controlsMountEl, onStorageChange } = _currentPlayer;
+
+    if (onStorageChange) {
+        window.removeEventListener('storage', onStorageChange);
+    }
 
     // Halt video playback and clear resources immediately to release network & CPU decoders
     if (videoEl) {
