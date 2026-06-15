@@ -47,10 +47,19 @@ func (d *DedupStream) GetStreams(ctx context.Context, contentType, contentID str
 
 	// Track seen combinations of infohash and file index
 	seen := make(map[dedupKey]bool)
+	counts := make(map[string]int)
 	var dedupedStreams []StreamItem
 
 	// Process streams in order, keeping only the first occurrence of each unique combination
 	for _, stream := range response.Streams {
+		// Hard limit on streams per infohash to prevent O(N^2) exhaustion from malicious addons
+		if stream.InfoHash != "" {
+			counts[stream.InfoHash]++
+			if counts[stream.InfoHash] > 50 {
+				continue
+			}
+		}
+
 		key := dedupKey{
 			InfoHash: stream.InfoHash,
 			//Filename: stream.BehaviorHints.Filename,

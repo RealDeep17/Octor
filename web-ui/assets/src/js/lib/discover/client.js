@@ -317,7 +317,10 @@ export class StremioClient {
         }
         const rest = `catalog/${type}/${catalogId}/${path}.json`;
         const url = needsProxy(baseUrl) ? proxyUrl(baseUrl, rest) : `${baseUrl}/${rest}`;
-        const res = await fetchWithTimeout(url, signal, 8000);
+        // Increase timeout to 15s to accommodate slower third-party indexers.
+        // Can be overridden via window._env.SEARCH_TIMEOUT.
+        const timeout = window._env?.SEARCH_TIMEOUT ? parseInt(window._env.SEARCH_TIMEOUT) : 15000;
+        const res = await fetchWithTimeout(url, signal, timeout);
         if (!res.ok) throw new Error('Search failed');
         const data = await res.json();
         return data.metas || [];

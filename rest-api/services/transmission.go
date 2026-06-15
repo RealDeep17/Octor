@@ -239,7 +239,7 @@ func effectiveWantedIndices(fileCount int, wantedIndices, unwantedIndices []int)
 	return wanted, false
 }
 
-func dummyTemplatePath(name string) string {
+func dummyTemplatePath(name string) (string, error) {
 	candidates := []string{
 		getInfraDataPath(name),
 		filepath.Join("./rest-api/assets/dummy", name),
@@ -248,10 +248,10 @@ func dummyTemplatePath(name string) string {
 	}
 	for _, candidate := range candidates {
 		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+			return candidate, nil
 		}
 	}
-	return candidates[0]
+	return "", fmt.Errorf("dummy template %s not found in any of %v", name, candidates)
 }
 
 func getDownloadsDir() string {
@@ -1652,6 +1652,11 @@ func extractMagnetHash(magnet string) (hash, name string) {
 	if dn := q.Get("dn"); dn != "" {
 		name = dn
 	} else if hash != "" {
+		name = hash
+	}
+	return
+}
+sh != "" {
 		name = hash
 	}
 	return

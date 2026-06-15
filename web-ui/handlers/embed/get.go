@@ -3,6 +3,7 @@ package embed
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/webtor-io/web-ui/services/web"
 	"net/http"
@@ -31,6 +32,8 @@ func (s *Handler) get(c *gin.Context) {
 }
 
 func (s *Handler) generateCheckScript(code string, id string) string {
+	codeJSON, _ := json.Marshal(code)
+	idJSON, _ := json.Marshal(id)
 	return fmt.Sprintf(`
 		var found = false;
 		var scripts = document.getElementsByTagName('script');
@@ -39,10 +42,10 @@ func (s *Handler) generateCheckScript(code string, id string) string {
 					scripts[i].src.includes('https://cdn.jsdelivr.net/npm/@octor/') ||
 					scripts[i].src.includes('http://localhost:9009/')
 				) {
-					found = '%v';
+					found = %s;
 				}
 			}
-		var f = window.frames['octor-%v'];
-		f.contentWindow.postMessage({id: '%v', name: 'check', data: found}, '*');
-	`, code, id, id)
+		var f = window.frames['octor-' + %s];
+		f.contentWindow.postMessage({id: %s, name: 'check', data: found}, '*');
+	`, string(codeJSON), string(idJSON), string(idJSON))
 }

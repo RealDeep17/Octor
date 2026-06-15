@@ -155,6 +155,31 @@ func TestDedupStreamService_GetStreams_InnerServiceError(t *testing.T) {
 	}
 }
 
+func TestDedupStreamService_GetStreams_HardLimit(t *testing.T) {
+	var streams []StreamItem
+	// Add 60 streams with same infohash
+	for i := 0; i < 60; i++ {
+		streams = append(streams, StreamItem{
+			Title:    "Stream",
+			InfoHash: "hash1",
+			Url:      "http://example.com/" + string(rune(i)),
+		})
+	}
+
+	inner := &dedupMockStreamService{streams: streams}
+	dedup := NewDedupStream(inner)
+
+	result, err := dedup.GetStreams(context.Background(), "movie", "test")
+
+	if err != nil {
+		t.Fatalf("GetStreams() error = %v", err)
+	}
+
+	if len(result.Streams) != 50 {
+		t.Errorf("Expected 50 streams (hard limit), got %d", len(result.Streams))
+	}
+}
+
 func TestDedupStreamService_GetStreams_EmptyInfoHashAndFileIdx(t *testing.T) {
 	streams := []StreamItem{
 		{Title: "Stream 1", InfoHash: "", FileIdx: 0},

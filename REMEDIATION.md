@@ -54,3 +54,30 @@ We eliminated cloud storage leaks, fixed violent socket teardowns dropping DMCA 
 - **Bug 66 (Piece Completion O(N) Mutex Starvation):**
   - **Target File:** `torrent-web-seeder/server/services/piece_completion.go`
   - **Remediation:** Refactored `GetCompletedFiles()` and the completions struct. Extracted the `s.pieces` verification into a lock-free structure using an atomic bitset (`[]int32` manipulated via `sync/atomic`). This drastically narrowed the scope of `s.mux.Lock()` so it no longer wraps the O(N) piece iteration array, successfully eliminating the severe mutex starvation that starved other concurrent status and stream queries.
+---
+
+## Phase 5: Non-Essential Backlog
+We fixed brittle heuristics, API constraints, logic bombs, and UI/UX edge cases that break functionality without bringing down the host OS.
+
+### Architectural Cluster 1: Brittle Heuristics & Regex Over-Truncation
+- **Bug 150 (Torrent Parser Over-Truncation Database Brick):**
+  - **Target File:** `web-ui/services/parse_torrent_name/main.go`
+  - **Remediation:** Added a fallback condition in the `Parse` function. If regex stripping leaves the Title string empty (e.g., for a movie titled "2012" where the year matcher consumes the whole string), the parser now reverts to the original unmodified filename. This ensures the NOT NULL database constraint is always satisfied, preventing ingestion failure for numeric-titled movies.
+
+- **Bug 37 (Dummy File Blind Array Access Panic):**
+  - **Target File:** `rest-api/services/transmission.go`
+  - **Remediation:** Updated `dummyTemplatePath` to verify file existence on disk and return a proper error if no template is found. Updated `ensureDummyFiles` to check for this error and fallback to creating an empty 0-byte file. This prevents the system from attempting to open non-existent template paths, which previously resulted in unhandled `fs.PathError` panics that broke the torrent ingestion pipeline.
+
+### Architectural Cluster 2: External API Constraints & DoS Fallbacks
+- **Bug 95 (8-Second Hardcoded Stream Discovery DoS):**
+  - **Target File:** `web-ui/assets/src/js/lib/discover/client.js`
+  - **Remediation:** Increased the hardcoded search timeout from 8 seconds to 15 seconds to accommodate slower, high-quality third-party indexers. Added support for overrides via the `window._env.SEARCH_TIMEOUT` environment variable for easier production tuning.
+
+- **Bug 73 (Dedup Stream Service O(N^2) Exhaustion):**
+  - **Target File:** `web-ui/services/stremio/dedup_stream.go`
+  - **Remediation:** Implemented a hard limit of 50 streams processed per infohash in the deduplication logic. This prevents O(N^2) memory and CPU exhaustion attacks where a malicious addon could inject thousands of slightly randomized stream URLs for a single infohash.
+
+### Architectural Cluster 3: UI Glitches & Frontend Injections
+- **Bug 87 (Cross-Site Scripting (XSS) via Unsanitized fmt.Sprintf Injection):**
+  - **Target File:** `web-ui/handlers/embed/get.go`
+  - **Remediation:** Refactored `generateCheckScript` to use `json.Marshal` for all strings injected into the raw JavaScript template. This ensures that any crafted payloads containing single quotes or other control characters are properly escaped, preventing arbitrary JavaScript execution in the user's browser context.

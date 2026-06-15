@@ -187,6 +187,12 @@ func Parse(tor *TorrentInfo, filename string) (*TorrentInfo, error) {
 
 	tor.Map(ms)
 
+	// Fallback: If title is empty (e.g. movie titled "2012" where year matcher eats the whole title),
+	// revert to the original string to satisfy NOT NULL database constraints.
+	if tor.Title == "" {
+		tor.Title = filename
+	}
+
 	return tor, nil
 }
 
