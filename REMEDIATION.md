@@ -79,6 +79,6 @@ We fixed brittle heuristics, API constraints, logic bombs, and UI/UX edge cases 
   - **Remediation:** Implemented a hard limit of 50 streams processed per infohash in the deduplication logic to prevent O(N^2) memory and CPU exhaustion.
 
 ### Architectural Cluster 3: UI Glitches & Frontend Injections
-- **Bug 87 (Cross-Site Scripting (XSS) via Unsanitized fmt.Sprintf Injection):**
-  - **Target File:** web-ui/handlers/embed/get.go
-  - **Remediation:** Refactored generateCheckScript to use json.Marshal for all strings injected into the raw JavaScript template, preventing arbitrary JavaScript execution.
+- Bug 87 (Cross-Site Scripting (XSS) via Unsanitized fmt.Sprintf Injection):
+  - Target File: web-ui/handlers/embed/get.go
+  - Remediation: Refactored generateCheckScript to use json.Marshal for all strings injected into the raw JavaScript template, preventing arbitrary JavaScript execution.

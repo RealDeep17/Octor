@@ -49,6 +49,7 @@ badger_data/ badger-data/
 /scratch/
 /sidecar/test/cache/
 /sidecar/test/*.log
+/OCTOR_CODEBASE_V2/
 # Compiled binaries
 /caddy-custom
 
