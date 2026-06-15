@@ -10,6 +10,7 @@ This document serves as the official record of all stabilization, security, and 
 5. [Phase 5: Functional Backlog & Heuristics](#phase-5-functional-backlog--heuristics)
 6. [Phase 6: Core Feature Completion & Compliance](#phase-6-core-feature-completion--compliance)
 7. [Phase 7: Knowledge Base & CI Sync](#phase-7-knowledge-base--ci-sync)
+8. [Stremio Integration Hardening (Tier 1)](#stremio-integration-hardening-tier-1)
 
 ---
 
@@ -88,3 +89,13 @@ This document serves as the official record of all stabilization, security, and 
 *   **NotebookLM Integration:** Automated the synchronization of the full codebase and remediation logs to NotebookLM for deep technical auditing.
 *   **Exclusion Logic:** Implemented strict exclusion rules for sensitive or irrelevant content (adult/streamio patterns) during the concatenation process.
 *   **Documentation Finalization:** Restructured `REMEDIATION.md` into a comprehensive architectural log.
+
+---
+
+## Stremio Integration Hardening (Tier 1)
+**Goal:** Eradicate SSRF gateways, prevent JSON-based OOM attacks, and move secrets to environment configuration.
+
+*   **JSON OOM Protection:** Wrapped manifest response bodies in `io.LimitReader` (5MB) in `addon_validator.go` to prevent infinite stream memory exhaustion.
+*   **SSRF Prevention:** Injected a custom `net.Dialer` into the Stremio HTTP client to explicitly reject all internal/private IP ranges (RFC1918).
+*   **Secret Management:** Migrated hardcoded cryptographic signatures from `manifest.go` to the `STREMIO_ADDONS_SIGNATURE` environment variable.
+*   **Discovery Reliability:** Increased stream discovery timeouts to 20s and enabled environment overrides to support high-latency DHT scraping.
