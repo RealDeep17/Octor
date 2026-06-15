@@ -73,6 +73,37 @@
         {{ template "profile/embed_domains" (withContext $ .Data) }}
     </div>
     {{ end }}
+
+    <!-- Privacy & Data -->
+    <div class="flex items-center gap-3 mt-12 mb-4">
+        <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">{{ t $.Lang "profile.privacy.title" }}</h2>
+        <div class="flex-1 h-px bg-o-line/50"></div>
+    </div>
+    <div class="bg-base-300/50 border border-o-line rounded-2xl p-6 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex-1">
+                <h3 class="text-sm font-semibold mb-1">{{ t $.Lang "profile.privacy.watchProfileTitle" }}</h3>
+                <p class="text-xs text-o-muted leading-relaxed">
+                    {{ t $.Lang "profile.privacy.watchProfileDesc" }}
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ langPath $.Lang "/profile/export-data" }}" class="btn btn-soft btn-sm" data-umami-event="profile-export">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    {{ t $.Lang "profile.privacy.exportData" }}
+                </a>
+                <button type="button" class="btn btn-outline btn-error btn-sm" data-umami-event="profile-clear-data" onclick="document.getElementById('delete-data-modal').showModal()">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
+                    {{ t $.Lang "profile.privacy.clearHistory" }}
+                </button>
+            </div>
+        </div>
+    </div>
+
     {{ if .IsAdmin }}
     <div class="flex items-center gap-3 mt-12 mb-4">
         <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">Admin Controls</h2>
@@ -234,6 +265,26 @@
               </form>
               <form method="post" action="{{ langPath $.Lang "/profile/delete" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('delete-account-modal').close()">
                   <button type="submit" class="btn btn-sm btn-error">Delete</button>
+              </form>
+          </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  {{/* ── Custom Delete Data Confirmation Modal ── */}}
+  <dialog id="delete-data-modal" class="modal">
+      <div class="modal-box max-w-sm bg-base-300 border border-o-line rounded-2xl shadow-xl">
+          <h3 class="text-lg font-bold text-error flex items-center gap-2 mb-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              {{ t $.Lang "profile.privacy.clearConfirmTitle" }}
+          </h3>
+          <p class="text-sm text-o-muted leading-relaxed mb-4">{{ t $.Lang "profile.privacy.clearConfirmDesc" }}</p>
+          <div class="modal-action justify-end gap-2">
+              <form method="dialog" class="inline">
+                  <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
+              </form>
+              <form method="post" action="{{ langPath $.Lang "/profile/delete-data" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('delete-data-modal').close()">
+                  <button type="submit" class="btn btn-sm btn-error">Clear All</button>
               </form>
           </div>
       </div>

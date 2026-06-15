@@ -324,6 +324,8 @@ av(async function () {
                 matchesStatus = item.getAttribute('data-vault-error') === 'true';
             } else if (status === 'notinlib') {
                 matchesStatus = item.getAttribute('data-vault-in-library') === 'false';
+            } else if (status === 'expiring') {
+                matchesStatus = item.getAttribute('data-vault-funded') === 'false';
             } else {
                 matchesStatus = rowStatus === status;
             }
@@ -345,6 +347,37 @@ av(async function () {
         }
         if (window.updateVaultBracketCounts) window.updateVaultBracketCounts();
         if (window.updateVaultBulkBar) window.updateVaultBulkBar();
+    };
+
+    const bindStatCards = () => {
+        const vaultedCard = root.querySelector('#stat-vaulted');
+        const processingCard = root.querySelector('#stat-processing');
+        const expiringCard = root.querySelector('#stat-expiring');
+
+        if (vaultedCard) {
+            vaultedCard.onclick = () => {
+                if (statusSelect) {
+                    statusSelect.value = 'vaulted';
+                    statusSelect.dispatchEvent(new Event('change'));
+                }
+            };
+        }
+        if (processingCard) {
+            processingCard.onclick = () => {
+                if (statusSelect) {
+                    statusSelect.value = 'vaulting';
+                    statusSelect.dispatchEvent(new Event('change'));
+                }
+            };
+        }
+        if (expiringCard) {
+            expiringCard.onclick = () => {
+                if (statusSelect) {
+                    statusSelect.value = 'expiring';
+                    statusSelect.dispatchEvent(new Event('change'));
+                }
+            };
+        }
     };
 
     const sortItems = () => {
@@ -419,6 +452,23 @@ av(async function () {
     // Trigger filter and sort immediately on load
     filterItems();
     sortItems();
+    bindStatCards();
+
+    // Auto-refresh stats container
+    const statsWrapper = root.querySelector('#vault-stats-wrapper');
+    if (statsWrapper && statsWrapper.getAttribute('data-async-interval')) {
+        const interval = parseInt(statsWrapper.getAttribute('data-async-interval'));
+        const statsTimer = setInterval(() => {
+            if (document.body.contains(statsWrapper) && statsWrapper.reload) {
+                statsWrapper.reload({ noScroll: true }).then(() => {
+                    // Re-bind click handlers after reload
+                    bindStatCards();
+                });
+            } else {
+                clearInterval(statsTimer);
+            }
+        }, interval);
+    }
 
     const rows = root.querySelectorAll('[data-vault-progress]');
     if (!rows.length) return;

@@ -1170,5 +1170,19 @@
     "profile.addons.refresh": "Refresh",
     "profile.addons.refreshed": "Addon refreshed",
     "profile.addons.refreshFailed": "Failed to refresh addon",
-    "home.searchSubtitle": "Search and find movies, series, and torrents from top public indexers instantly."
+    "home.searchSubtitle": "Search and find movies, series, and torrents from top public indexers instantly.",
+    "profile.dataDeleted": "All watch history and ratings have been erased.",
+    "profile.privacy.title": "Privacy & Data",
+    "profile.privacy.watchProfileTitle": "Your Watch Profile",
+    "profile.privacy.watchProfileDesc": "Download a copy of your watch history, ratings, and personalization settings, or erase them permanently. Erasing your data will reset your recommendation engine signals.",
+    "profile.privacy.exportData": "Export Data",
+    "profile.privacy.clearHistory": "Clear Watch History",
+    "profile.privacy.clearConfirmTitle": "Clear Watch History?",
+    "profile.privacy.clearConfirmDesc": "Are you sure you want to erase all your watch history and ratings? This action is permanent and cannot be undone.",
+    "action.stream.subtitleSize": "Subtitle Size",
+    "action.stream.sizeSmall": "Small",
+    "action.stream.sizeMedium": "Medium",
+    "action.stream.sizeLarge": "Large",
+    "action.stream.sizeExtraLarge": "Extra Large"
+}
 }

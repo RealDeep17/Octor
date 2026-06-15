@@ -50,11 +50,18 @@
                 </div>
                 <div class="flex-1">
                     <h3 class="font-bold text-lg">{{ t $.Lang "action.stream.subtitles" }}</h3>
-                    <ul class="flex flex-wrap">
+                    <ul class="flex flex-wrap mb-4">
                         {{ range $otherSubs }}
                         <li data-id="{{ .ID }}" data-mp-id="{{ .MPID }}" data-srclang="{{ .SrcLang }}" data-provider="{{ .Provider }}" {{ if .Default }}data-default="true" {{ end }} class="subtitle cursor-pointer pr-3{{ if .Default }} text-primary underline{{ end }}">{{ .Label }}</li>
                         {{ end }}
                     </ul>
+                    <h3 class="font-bold text-sm text-o-muted uppercase tracking-wider mb-2">{{ t $.Lang "action.stream.subtitleSize" }}</h3>
+                    <div class="flex gap-2" id="subtitle-size-picker">
+                        <button type="button" class="btn btn-xs btn-outline subtitle-size" data-size="small">{{ t $.Lang "action.stream.sizeSmall" }}</button>
+                        <button type="button" class="btn btn-xs btn-outline subtitle-size" data-size="medium">{{ t $.Lang "action.stream.sizeMedium" }}</button>
+                        <button type="button" class="btn btn-xs btn-outline subtitle-size" data-size="large">{{ t $.Lang "action.stream.sizeLarge" }}</button>
+                        <button type="button" class="btn btn-xs btn-outline subtitle-size" data-size="extra-large">{{ t $.Lang "action.stream.sizeExtraLarge" }}</button>
+                    </div>
                 </div>
             </div>
             <div class="flex hidden" id="opensubtitles">

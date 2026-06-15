@@ -686,6 +686,9 @@ export async function initPlayer(target) {
     // Wire track handlers on original modals (stay outside player, no overflow issues)
     wireTrackHandlers(target);
 
+    // Wire subtitle size handlers
+    wireSubtitleSizeHandlers(target, playerContainer);
+
     // Wire embed copy button
     wireEmbedCopy(target);
 
@@ -852,6 +855,36 @@ function wireTrackHandlers(container) {
             }
         });
     }
+}
+
+function wireSubtitleSizeHandlers(container, playerContainer) {
+    const picker = container.querySelector('#subtitle-size-picker');
+    if (!picker) return;
+
+    const SUBTITLE_SIZE_KEY = 'wt_subtitle_size';
+    const savedSize = localStorage.getItem(SUBTITLE_SIZE_KEY) || 'medium';
+
+    const setSize = (size) => {
+        playerContainer.setAttribute('data-subtitle-size', size);
+        localStorage.setItem(SUBTITLE_SIZE_KEY, size);
+        
+        // Update visual state of buttons
+        picker.querySelectorAll('.subtitle-size').forEach(btn => {
+            const isActive = btn.getAttribute('data-size') === size;
+            btn.classList.toggle('btn-active', isActive);
+            btn.classList.toggle('btn-primary', isActive);
+            btn.classList.toggle('btn-outline', !isActive);
+        });
+    };
+
+    // Apply initial size
+    setSize(savedSize);
+
+    picker.addEventListener('click', (e) => {
+        const btn = e.target.closest('.subtitle-size');
+        if (!btn) return;
+        setSize(btn.getAttribute('data-size'));
+    });
 }
 
 function markTrack(container, el, type) {

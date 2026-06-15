@@ -491,6 +491,23 @@ video::cue {
     padding: 0.125rem 0.375rem;
 }
 
+/* Subtitle Size Overrides */
+.wt-player[data-subtitle-size="small"] video::cue {
+    font-size: 0.75em;
+}
+
+.wt-player[data-subtitle-size="medium"] video::cue {
+    font-size: 1em;
+}
+
+.wt-player[data-subtitle-size="large"] video::cue {
+    font-size: 1.25em;
+}
+
+.wt-player[data-subtitle-size="extra-large"] video::cue {
+    font-size: 1.5em;
+}
+
 /* Loading spinner animation */
 @keyframes wt-spin {
     to { transform: rotate(360deg); }

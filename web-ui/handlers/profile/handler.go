@@ -75,6 +75,8 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	gr := r.Group("/profile")
 	gr.Use(auth.HasAuth)
 	gr.POST("/delete", h.delete)
+	gr.GET("/export-data", h.exportData)
+	gr.POST("/delete-data", h.deleteData)
 	gr.POST("/skin", h.updateSkin)
 	gr.POST("/grid-density", h.updateGridDensity)
 	gr.POST("/settings", h.settingsSave)
@@ -194,6 +196,37 @@ func (s *Handler) delete(c *gin.Context) {
 		return
 	}
 	c.Redirect(http.StatusFound, "/logout")
+}
+
+func (s *Handler) exportData(c *gin.Context) {
+	u := auth.GetUserFromContext(c)
+	db := s.pg.Get()
+	if db == nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("database connection is not available"))
+		return
+	}
+	export, err := models.ExportVideoStatus(c.Request.Context(), db, u.ID)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	c.Header("Content-Disposition", "attachment; filename=octor_data_export.json")
+	c.JSON(http.StatusOK, export)
+}
+
+func (s *Handler) deleteData(c *gin.Context) {
+	u := auth.GetUserFromContext(c)
+	db := s.pg.Get()
+	if db == nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("database connection is not available"))
+		return
+	}
+	if err := models.DeleteAllVideoStatus(c.Request.Context(), db, u.ID); err != nil {
+		web.RedirectWithError(c, err)
+		return
+	}
+	web.RedirectWithSuccessAndMessage(c, "profile.dataDeleted")
 }
 
 func (s *Handler) get(c *gin.Context) {
