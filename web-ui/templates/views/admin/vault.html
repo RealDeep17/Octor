@@ -562,33 +562,33 @@
         cbs.forEach(function(cb) { if (cb.checked) count++; });
         if (count === 0) return false;
 
+        // Clear previous dynamically added resource_ids and user_ids
+        form.querySelectorAll('input[name="resource_ids[]"]').forEach(function(el) { el.remove(); });
+        form.querySelectorAll('input[name="user_ids[]"]').forEach(function(el) { el.remove(); });
+
+        cbs.forEach(function(cb) {
+            if (cb.checked) {
+                if (formId === 'vault-bulk-retry-form' && cb.dataset.canRetry !== 'true') return;
+
+                var rInput = document.createElement('input');
+                rInput.type = 'hidden';
+                rInput.name = 'resource_ids[]';
+                rInput.value = cb.dataset.resourceId;
+                form.appendChild(rInput);
+
+                var uInput = document.createElement('input');
+                uInput.type = 'hidden';
+                uInput.name = 'user_ids[]';
+                uInput.value = cb.dataset.userId;
+                form.appendChild(uInput);
+            }
+        });
+
         if (formId === 'vault-bulk-remove-form') {
             return window.handleConfirmRemove(form, 'vault');
         }
 
         if (formId === 'vault-bulk-retry-form') {
-            // Clear previous dynamically added resource_ids and user_ids
-            form.querySelectorAll('input[name="resource_ids[]"]').forEach(function(el) { el.remove(); });
-            form.querySelectorAll('input[name="user_ids[]"]').forEach(function(el) { el.remove(); });
-
-            cbs.forEach(function(cb) {
-                if (cb.checked) {
-                    if (formId === 'vault-bulk-retry-form' && cb.dataset.canRetry !== 'true') return;
-
-                    var rInput = document.createElement('input');
-                    rInput.type = 'hidden';
-                    rInput.name = 'resource_ids[]';
-                    rInput.value = cb.dataset.resourceId;
-                    form.appendChild(rInput);
-
-                    var uInput = document.createElement('input');
-                    uInput.type = 'hidden';
-                    uInput.name = 'user_ids[]';
-                    uInput.value = cb.dataset.userId;
-                    form.appendChild(uInput);
-                }
-            });
-
             // Trigger layout selection toggle off
             if (typeof window.toggleVaultMode === 'function') {
                 window.toggleVaultMode();

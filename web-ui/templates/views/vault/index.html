@@ -514,28 +514,28 @@ window.submitVaultBulk = function(formId) {
     cbs.forEach(function(cb) { if (cb.checked) count++; });
     if (count === 0) return false;
 
+    // Clear previous dynamically added resource_ids
+    form.querySelectorAll('input[name="resource_ids[]"]').forEach(function(el) {
+        el.remove();
+    });
+
+    cbs.forEach(function(cb) {
+        if (cb.checked) {
+            if (formId === 'vault-bulk-retry-form' && cb.dataset.canRetry !== 'true') return;
+
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'resource_ids[]';
+            input.value = cb.dataset.resourceId;
+            form.appendChild(input);
+        }
+    });
+
     if (formId === 'vault-bulk-remove-form') {
         return window.handleConfirmRemove(form, 'vault');
     }
 
     if (formId === 'vault-bulk-retry-form') {
-        // Clear previous dynamically added resource_ids
-        form.querySelectorAll('input[name="resource_ids[]"]').forEach(function(el) {
-            el.remove();
-        });
-
-        cbs.forEach(function(cb) {
-            if (cb.checked) {
-                if (formId === 'vault-bulk-retry-form' && cb.dataset.canRetry !== 'true') return;
-
-                var input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'resource_ids[]';
-                input.value = cb.dataset.resourceId;
-                form.appendChild(input);
-            }
-        });
-
         // Trigger layout selection toggle off
         if (typeof window.toggleVaultMode === 'function') {
             window.toggleVaultMode();

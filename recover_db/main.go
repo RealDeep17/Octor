@@ -161,35 +161,6 @@ func main() {
 		log.Printf("Found admin user ID %s to use as fallback for orphaned session metadata", adminUserID)
 	}
 
-	// Fetch already mapped resources from library table
-	var libEntries []struct {
-		ResourceId string
-	}
-	_, err = octorDb.Query(&libEntries, `SELECT resource_id FROM library`)
-	if err != nil {
-		log.Printf("Warning: Failed to fetch library entries: %v", err)
-	}
-	libraryMapped := make(map[string]bool)
-	for _, entry := range libEntries {
-		libraryMapped[entry.ResourceId] = true
-	}
-	log.Printf("Loaded %d library entries from Octor database", len(libraryMapped))
-
-	// Fetch already mapped resources from vault.resource table
-	var vaultEntries []struct {
-		ResourceId string
-	}
-	_, err = vaultDb.Query(&vaultEntries, `SELECT resource_id FROM resource`)
-	if err != nil {
-		log.Printf("Warning: Failed to fetch vault entries: %v", err)
-	}
-	vaultMapped := make(map[string]bool)
-	for _, entry := range vaultEntries {
-		vaultMapped[entry.ResourceId] = true
-	}
-	log.Printf("Loaded %d vault entries from Vault database", len(vaultMapped))
-
-
 	// 3. Scan S3 and Rebuild
 	log.Printf("Scanning S3 Bucket: %s for torrents...", bucket)
 
@@ -202,21 +173,6 @@ func main() {
 	}
 	if vaultStoragePath == "" {
 		vaultStoragePath = "./infra-data/drive-mount-vfs"
-	}
-
-	// Pre-load all existing vault file hashes from directory listing to avoid slow sequential os.Stat calls on FUSE mount
-	vaultHashes := make(map[string]bool)
-	localVaultDir := filepath.Join(vaultStoragePath, "vault")
-	log.Printf("Pre-listing local vault directory to build hash index: %s", localVaultDir)
-	if vaultEntries, err := os.ReadDir(localVaultDir); err == nil {
-		for _, entry := range vaultEntries {
-			if entry.IsDir() {
-				vaultHashes[entry.Name()] = true
-			}
-		}
-		log.Printf("Pre-loaded %d file hashes from local vault", len(vaultHashes))
-	} else {
-		log.Printf("Warning: Failed to pre-list local vault (%v). Verification will fallback to individual os.Stat calls.", err)
 	}
 
 	localTorrentsDir := filepath.Join(vaultStoragePath, "recovery", "torrents")
@@ -237,7 +193,7 @@ func main() {
 			go func() {
 				defer wg.Done()
 				for key := range jobs {
-					res := processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, vaultStoragePath, vaultHashes, fallbackUserID, libraryMapped, vaultMapped, adminUserID)
+					res := processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, vaultStoragePath, fallbackUserID, adminUserID)
 					results <- res
 				}
 			}()
@@ -288,7 +244,7 @@ func main() {
 					continue
 				}
 				
-				if processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, "", vaultHashes, fallbackUserID, libraryMapped, vaultMapped, adminUserID) {
+				if processTorrent(svc, vaultDb, octorDb, userMap, bucket, key, *dryRun, "", fallbackUserID, adminUserID) {
 					recoveredCount++
 				}
 			}
@@ -336,7 +292,7 @@ func buildUserSessionMap(db *pg.DB) map[string]string {
 	return userMap
 }
 
-func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[string]string, bucket, key string, dryRun bool, vaultStoragePath string, vaultHashes map[string]bool, fallbackUserID string, libraryMapped map[string]bool, vaultMapped map[string]bool, adminUserID string) bool {
+func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[string]string, bucket, key string, dryRun bool, vaultStoragePath string, fallbackUserID string, adminUserID string) bool {
 	var raw []byte
 	var err error
 	localRead := false
@@ -417,8 +373,14 @@ func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[stri
 	}
 
 	// Determine if the resource existed in the original database
-	inLibrary := libraryMapped[infohash]
-	inVault := vaultMapped[infohash]
+	var inLibrary bool
+	if _, err := octorDb.QueryOne(pg.Scan(&inLibrary), `SELECT EXISTS(SELECT 1 FROM library WHERE resource_id = ?)`, infohash); err != nil {
+		log.Printf("  [ERROR] Failed to query library existence for %s: %v", infohash, err)
+	}
+	var inVault bool
+	if _, err := vaultDb.QueryOne(pg.Scan(&inVault), `SELECT EXISTS(SELECT 1 FROM resource WHERE resource_id = ?)`, infohash); err != nil {
+		log.Printf("  [ERROR] Failed to query vault resource existence for %s: %v", infohash, err)
+	}
 
 	// Determine User ID from Session ID (used if we need to fall back or verify new active uploads)
 	userID := userMap[meta.SessionID]
@@ -460,17 +422,10 @@ func processTorrent(svc *s3.S3, vaultDb *pg.DB, octorDb *pg.DB, userMap map[stri
 			if f.Hash == "" {
 				continue
 			}
-			if len(vaultHashes) > 0 {
-				if !vaultHashes[f.Hash] {
-					allExist = false
-					break
-				}
-			} else {
-				localFilePath := filepath.Join(vaultStoragePath, "vault", f.Hash, f.Hash)
-				if _, err := os.Stat(localFilePath); err != nil {
-					allExist = false
-					break
-				}
+			localFilePath := filepath.Join(vaultStoragePath, "vault", f.Hash, f.Hash)
+			if _, err := os.Stat(localFilePath); err != nil {
+				allExist = false
+				break
 			}
 		}
 		if !allExist {

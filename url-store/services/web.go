@@ -1,11 +1,13 @@
 package services
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
@@ -23,11 +25,12 @@ const (
 )
 
 type Web struct {
-	host string
-	port int
-	db   *cs.PG
-	acp  *AbuseCheckPool
-	ln   net.Listener
+	host   string
+	port   int
+	db     *cs.PG
+	acp    *AbuseCheckPool
+	ln     net.Listener
+	server *http.Server
 }
 
 func NewWeb(c *cli.Context, db *cs.PG, acp *AbuseCheckPool) *Web {
@@ -110,11 +113,14 @@ func (s *Web) Serve() error {
 		}
 	})
 	log.Infof("serving Web at %v", addr)
-	srv := &http.Server{
+	s.server = &http.Server{
 		Handler:        m,
 		MaxHeaderBytes: 1 << 20,
 	}
-	return srv.Serve(ln)
+	if err := s.server.Serve(ln); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 
 func (s *Web) Close() {
@@ -122,7 +128,14 @@ func (s *Web) Close() {
 	defer func() {
 		log.Info("Web closed")
 	}()
-	if s.ln != nil {
-		s.ln.Close()
+	if s.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := s.server.Shutdown(ctx); err != nil {
+			log.Errorf("Web graceful shutdown failed: %v", err)
+			_ = s.server.Close()
+		}
+	} else if s.ln != nil {
+		_ = s.ln.Close()
 	}
 }

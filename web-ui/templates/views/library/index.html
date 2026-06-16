@@ -201,48 +201,43 @@ window.submitLibraryBulk = function(formId) {
     cbs.forEach(cb => { if (cb.checked) count++; });
     if (count === 0) return false;
 
+    // Clear previous dynamically added inputs
+    form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
+    form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
+    form.querySelectorAll('input[name="video_ids[]"]').forEach(el => el.remove());
+    form.querySelectorAll('input[name="video_types[]"]').forEach(el => el.remove());
+
+    // Populate inputs from checked checkboxes
+    cbs.forEach(cb => {
+        if (cb.checked) {
+            if (cb.dataset.resourceId) {
+                const r = document.createElement('input');
+                r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
+                form.appendChild(r);
+            }
+            if (cb.dataset.userId) {
+                const u = document.createElement('input');
+                u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
+                form.appendChild(u);
+            }
+            if (cb.dataset.videoId) {
+                const v = document.createElement('input');
+                v.type = 'hidden'; v.name = 'video_ids[]'; v.value = cb.dataset.videoId;
+                form.appendChild(v);
+            }
+            if (cb.dataset.videoType) {
+                const t = document.createElement('input');
+                t.type = 'hidden'; t.name = 'video_types[]'; t.value = cb.dataset.videoType;
+                form.appendChild(t);
+            }
+        }
+    });
+
     if (formId === 'library-bulk-remove-form') {
         return window.handleConfirmRemove(form, 'library');
     }
 
-    if (formId === 'library-bulk-enrich-form') {
-        form.querySelectorAll('input[name="resource_ids[]"]').forEach(el => el.remove());
-        form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
-        cbs.forEach(cb => {
-            if (cb.checked) {
-                const r = document.createElement('input');
-                r.type = 'hidden'; r.name = 'resource_ids[]'; r.value = cb.dataset.resourceId;
-                form.appendChild(r);
-                if (cb.dataset.userId) {
-                    const u = document.createElement('input');
-                    u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
-                    form.appendChild(u);
-                }
-            }
-        });
-        if (window.toggleLibraryMode) window.toggleLibraryMode();
-        return true;
-    }
-
-    if (formId === 'library-bulk-toggle-form' || formId === 'library-bulk-layout-form') {
-        form.querySelectorAll('input[name="video_ids[]"]').forEach(el => el.remove());
-        form.querySelectorAll('input[name="video_types[]"]').forEach(el => el.remove());
-        form.querySelectorAll('input[name="user_ids[]"]').forEach(el => el.remove());
-        cbs.forEach(cb => {
-            if (cb.checked && cb.dataset.videoId && cb.dataset.videoType) {
-                const v = document.createElement('input');
-                v.type = 'hidden'; v.name = 'video_ids[]'; v.value = cb.dataset.videoId;
-                form.appendChild(v);
-                const t = document.createElement('input');
-                t.type = 'hidden'; t.name = 'video_types[]'; t.value = cb.dataset.videoType;
-                form.appendChild(t);
-                if (cb.dataset.userId) {
-                    const u = document.createElement('input');
-                    u.type = 'hidden'; u.name = 'user_ids[]'; u.value = cb.dataset.userId;
-                    form.appendChild(u);
-                }
-            }
-        });
+    if (formId === 'library-bulk-enrich-form' || formId === 'library-bulk-toggle-form' || formId === 'library-bulk-layout-form') {
         if (window.toggleLibraryMode) window.toggleLibraryMode();
         return true;
     }

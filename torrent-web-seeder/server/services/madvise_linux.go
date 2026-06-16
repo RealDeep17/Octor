@@ -38,3 +38,11 @@ func madviseSequential(b []byte) error {
 	}
 	return unix.Madvise(pageAlignedSlice(b), unix.MADV_SEQUENTIAL)
 }
+
+// munmap directly unmaps a byte slice from virtual address space on Linux.
+func munmap(b []byte) error {
+	if len(b) == 0 {
+		return nil
+	}
+	return unix.Munmap(b)
+}

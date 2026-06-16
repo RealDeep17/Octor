@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -27,6 +28,7 @@ type Web struct {
 	host             string
 	port             int
 	ln               net.Listener
+	server           *http.Server
 	r                *Resolver
 	pr               *HTTPProxy
 	parser           *URLParser
@@ -483,15 +485,29 @@ func (s *Web) Serve() error {
 
 	})
 	logrus.Infof("serving Web at %v", addr)
-	srv := &http.Server{
+	s.server = &http.Server{
 		Handler:        mux,
 		MaxHeaderBytes: 1 << 20,
 	}
-	return srv.Serve(ln)
+	if err := s.server.Serve(ln); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 
 func (s *Web) Close() {
-	if s.ln != nil {
+	logrus.Info("closing Web")
+	defer func() {
+		logrus.Info("Web closed")
+	}()
+	if s.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := s.server.Shutdown(ctx); err != nil {
+			logrus.Errorf("Web graceful shutdown failed: %v", err)
+			_ = s.server.Close()
+		}
+	} else if s.ln != nil {
 		_ = s.ln.Close()
 	}
 }
