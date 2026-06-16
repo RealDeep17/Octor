@@ -92,6 +92,14 @@ type MultiStatus struct {
 	SyncToken           string     `xml:"sync-token,omitempty"`
 }
 
+type MultistatusError struct {
+	Responses []Response
+}
+
+func (e *MultistatusError) Error() string {
+	return "webdav: partial failure"
+}
+
 func NewMultiStatus(resps ...Response) *MultiStatus {
 	return &MultiStatus{Responses: resps}
 }
@@ -160,7 +168,7 @@ func (resp *Response) DecodeProp(values ...interface{}) error {
 				return newPropError(name, err)
 			}
 			if err := raw.Decode(v); err != nil {
-				return newPropError(name, err)
+				return newPropError(name, fmt.Errorf("failed to decode property %s: %w", name.Local, err))
 			}
 			return nil
 		}

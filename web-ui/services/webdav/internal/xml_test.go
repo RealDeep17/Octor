@@ -23,7 +23,43 @@ const rawXML = `<?xml version="1.0" encoding="UTF-8"?>
 </bookstore>`
 
 func TestRawXMLValue(t *testing.T) {
-	// TODO: test XML namespaces too
+	// Test XML namespaces
+	{
+		const namespaceXML = `<custom:prop xmlns:custom="urn:custom-ns">text</custom:prop>`
+		var rawValue RawXMLValue
+		if err := xml.Unmarshal([]byte(namespaceXML), &rawValue); err != nil {
+			t.Fatalf("xml.Unmarshal() for namespaceXML = %v", err)
+		}
+
+		name, ok := rawValue.XMLName()
+		if !ok {
+			t.Fatalf("rawValue.XMLName() failed for namespaceXML")
+		}
+		if name.Space != "urn:custom-ns" {
+			t.Errorf("expected Space to be %q, got %q", "urn:custom-ns", name.Space)
+		}
+		if name.Local != "prop" {
+			t.Errorf("expected Local to be %q, got %q", "prop", name.Local)
+		}
+
+		b, err := xml.Marshal(&rawValue)
+		if err != nil {
+			t.Fatalf("xml.Marshal() for namespaceXML = %v", err)
+		}
+
+		var roundTrip RawXMLValue
+		if err := xml.Unmarshal(b, &roundTrip); err != nil {
+			t.Fatalf("roundtrip xml.Unmarshal() = %v", err)
+		}
+		nameRT, ok := roundTrip.XMLName()
+		if !ok {
+			t.Fatalf("roundTrip.XMLName() failed")
+		}
+		if nameRT.Space != "urn:custom-ns" || nameRT.Local != "prop" {
+			t.Errorf("roundtrip namespace/local mismatch: got space=%q, local=%q", nameRT.Space, nameRT.Local)
+		}
+	}
+
 
 	var rawValue RawXMLValue
 	if err := xml.Unmarshal([]byte(rawXML), &rawValue); err != nil {

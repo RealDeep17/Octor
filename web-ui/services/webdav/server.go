@@ -122,32 +122,48 @@ func (b *backend) HeadGet(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (b *backend) PropFind(r *http.Request, propfind *internal.PropFind, depth internal.Depth) (*internal.MultiStatus, error) {
-	// TODO: use partial error Response on error
-
 	fi, err := b.FileSystem.Stat(r.Context(), r.URL.Path)
 	if err != nil {
-		return nil, err
+		code := internal.HTTPErrorFromError(err).Code
+		resp := &internal.Response{
+			Hrefs:  []internal.Href{{Path: r.URL.Path}},
+			Status: &internal.Status{Code: code},
+		}
+		return internal.NewMultiStatus(*resp), nil
 	}
 
 	var resps []internal.Response
 	if depth != internal.DepthZero && fi.IsDir {
 		children, err := b.FileSystem.ReadDir(r.Context(), r.URL.Path, depth == internal.DepthInfinity)
 		if err != nil {
-			return nil, err
+			code := internal.HTTPErrorFromError(err).Code
+			resp := &internal.Response{
+				Hrefs:  []internal.Href{{Path: r.URL.Path}},
+				Status: &internal.Status{Code: code},
+			}
+			return internal.NewMultiStatus(*resp), nil
 		}
 
-		resps = make([]internal.Response, len(children))
-		for i, child := range children {
+		resps = make([]internal.Response, 0, len(children))
+		for _, child := range children {
 			resp, err := b.propFindFile(propfind, &child)
 			if err != nil {
-				return nil, err
+				code := internal.HTTPErrorFromError(err).Code
+				resp = &internal.Response{
+					Hrefs:  []internal.Href{{Path: child.Path}},
+					Status: &internal.Status{Code: code},
+				}
 			}
-			resps[i] = *resp
+			resps = append(resps, *resp)
 		}
 	} else {
 		resp, err := b.propFindFile(propfind, fi)
 		if err != nil {
-			return nil, err
+			code := internal.HTTPErrorFromError(err).Code
+			resp = &internal.Response{
+				Hrefs:  []internal.Href{{Path: fi.Path}},
+				Status: &internal.Status{Code: code},
+			}
 		}
 
 		resps = []internal.Response{*resp}
@@ -275,6 +291,14 @@ func (b *backend) Put(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (b *backend) Delete(r *http.Request) error {
+	ctx := r.Context()
+	path := r.URL.Path
+
+	fi, err := b.FileSystem.Stat(ctx, path)
+	if err != nil {
+		return err
+	}
+
 	ifNoneMatch := ConditionalMatch(r.Header.Get("If-None-Match"))
 	ifMatch := ConditionalMatch(r.Header.Get("If-Match"))
 
@@ -282,7 +306,57 @@ func (b *backend) Delete(r *http.Request) error {
 		IfNoneMatch: ifNoneMatch,
 		IfMatch:     ifMatch,
 	}
-	return b.FileSystem.RemoveAll(r.Context(), r.URL.Path, &opts)
+
+	if !fi.IsDir {
+		return b.FileSystem.RemoveAll(ctx, path, &opts)
+	}
+
+	var failedResponses []internal.Response
+
+	var recDelete func(string)
+	recDelete = func(p string) {
+		children, err := b.FileSystem.ReadDir(ctx, p, false)
+		if err != nil {
+			code := internal.HTTPErrorFromError(err).Code
+			failedResponses = append(failedResponses, internal.Response{
+				Hrefs:  []internal.Href{{Path: p}},
+				Status: &internal.Status{Code: code},
+			})
+			return
+		}
+
+		for _, child := range children {
+			if child.IsDir {
+				recDelete(child.Path)
+			} else {
+				err := b.FileSystem.RemoveAll(ctx, child.Path, &opts)
+				if err != nil {
+					code := internal.HTTPErrorFromError(err).Code
+					failedResponses = append(failedResponses, internal.Response{
+						Hrefs:  []internal.Href{{Path: child.Path}},
+						Status: &internal.Status{Code: code},
+					})
+				}
+			}
+		}
+
+		err = b.FileSystem.RemoveAll(ctx, p, &opts)
+		if err != nil {
+			code := internal.HTTPErrorFromError(err).Code
+			failedResponses = append(failedResponses, internal.Response{
+				Hrefs:  []internal.Href{{Path: p}},
+				Status: &internal.Status{Code: code},
+			})
+		}
+	}
+
+	recDelete(path)
+
+	if len(failedResponses) > 0 {
+		return &internal.MultistatusError{Responses: failedResponses}
+	}
+
+	return nil
 }
 
 func (b *backend) Mkcol(r *http.Request) error {

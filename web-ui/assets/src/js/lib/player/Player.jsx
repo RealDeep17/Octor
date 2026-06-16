@@ -7,6 +7,7 @@ import { createSessionSeeker } from './session-seek';
 import { Controls } from './Controls';
 import { LoadingSpinner } from './icons';
 import { init as initI18n, t, tf } from './i18n';
+import { initChromecast } from './plugins/chromecast';
 import '../../../styles/player.css';
 
 let _currentPlayer = null;
@@ -403,29 +404,8 @@ function PlayerComponent({ videoEl, settings, containerEl, showControls, fixedSi
     // Chromecast integration — mount into controls bar via ref
     const castMountRef = useRef(null);
     useEffect(() => {
-        if (!features.chromecast) return;
-        function initCast() {
-            if (!window.cast || !window.chrome?.cast) return;
-            const ctx = cast.framework.CastContext.getInstance();
-            ctx.setOptions({
-                receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-                autoJoinPolicy: chrome.cast.AutoJoinPolicy.PAGE_SCOPED,
-                androidReceiverCompatible: true,
-            });
-            // Mount cast launcher into the controls bar ref
-            if (castMountRef.current && !castMountRef.current.querySelector('google-cast-launcher')) {
-                const launcher = document.createElement('google-cast-launcher');
-                castMountRef.current.appendChild(launcher);
-            }
-        }
-        if (window.cast) {
-            initCast();
-        } else {
-            window.__onGCastApiAvailable = (available) => { if (available) initCast(); };
-            const s = document.createElement('script');
-            s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
-            document.body.appendChild(s);
-        }
+        if (!features.chromecast || !videoRef.current) return;
+        initChromecast(videoRef.current, castMountRef.current);
         return () => {
             if (castMountRef.current) castMountRef.current.innerHTML = '';
         };

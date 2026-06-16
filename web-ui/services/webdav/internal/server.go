@@ -54,9 +54,45 @@ func ServeXML(w http.ResponseWriter) *xml.Encoder {
 }
 
 func ServeMultiStatus(w http.ResponseWriter, ms *MultiStatus) error {
-	// TODO: streaming
 	w.WriteHeader(http.StatusMultiStatus)
-	return ServeXML(w).Encode(ms)
+	enc := ServeXML(w)
+
+	start := xml.StartElement{
+		Name: xml.Name{
+			Space: "DAV:",
+			Local: "multistatus",
+		},
+	}
+
+	if err := enc.EncodeToken(start); err != nil {
+		return err
+	}
+
+	for _, resp := range ms.Responses {
+		if err := enc.Encode(resp); err != nil {
+			return err
+		}
+	}
+
+	if ms.ResponseDescription != "" {
+		descStart := xml.StartElement{Name: xml.Name{Space: "DAV:", Local: "responsedescription"}}
+		if err := enc.EncodeElement(ms.ResponseDescription, descStart); err != nil {
+			return err
+		}
+	}
+
+	if ms.SyncToken != "" {
+		tokenStart := xml.StartElement{Name: xml.Name{Space: "DAV:", Local: "sync-token"}}
+		if err := enc.EncodeElement(ms.SyncToken, tokenStart); err != nil {
+			return err
+		}
+	}
+
+	if err := enc.EncodeToken(start.End()); err != nil {
+		return err
+	}
+
+	return enc.Flush()
 }
 
 type Backend interface {
@@ -88,10 +124,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPut:
 			err = h.Backend.Put(w, r)
 		case http.MethodDelete:
-			// TODO: send a multistatus in case of partial failure
 			err = h.Backend.Delete(r)
 			if err == nil {
 				w.WriteHeader(http.StatusNoContent)
+			} else if msErr, ok := err.(*MultistatusError); ok {
+				err = ServeMultiStatus(w, &MultiStatus{Responses: msErr.Responses})
 			}
 		case "PROPFIND":
 			err = h.handlePropfind(w, r)

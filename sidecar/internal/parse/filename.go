@@ -22,13 +22,14 @@ var (
 		regexp.MustCompile(`\[.*?\]`),
 		regexp.MustCompile(`\(.*?\)`),
 	}
-	rxSeparators  = regexp.MustCompile(`[-_.]+`)
-	rxWhitespace  = regexp.MustCompile(`\s+`)
-	rxTrimHyphen  = regexp.MustCompile(`^[- ]+|[- ]+$`)
-	rxExtension   = regexp.MustCompile(`(?i)\.(mp4|mkv|avi|mov|wmv|webm|ts)$`)
-	rxHyphenSplit = regexp.MustCompile(`\s+-\s+`)
-	rxLeadingSep  = regexp.MustCompile(`^[-\s._()]+`)
-	rxTrailingSep = regexp.MustCompile(`[-\s._()]+$`)
+	rxSeparators       = regexp.MustCompile(`[-_.]+`)
+	rxWhitespace       = regexp.MustCompile(`\s+`)
+	rxTrimHyphen       = regexp.MustCompile(`^[- ]+|[- ]+$`)
+	rxExtension        = regexp.MustCompile(`(?i)\.(mp4|mkv|avi|mov|wmv|webm|ts)$`)
+	rxHyphenSplit      = regexp.MustCompile(`\s+-\s+`)
+	rxLeadingSep       = regexp.MustCompile(`^[-\s._()]+`)
+	rxTrailingSep      = regexp.MustCompile(`[-\s._()]+$`)
+	rxSingleLetterSite = regexp.MustCompile(`(?i)^([bt])([.\-_ ]+)`)
 )
 
 func NameCleaner(name string) string {
@@ -61,12 +62,32 @@ func ParseAdultFilename(title string) ParsedFilename {
 		Raw: title,
 	}
 
+
+
 	var stemNoDate string
 	if dateStr, dStart, dEnd, ok := ExtractDate(stem); ok {
 		result.Date = dateStr
 		stemNoDate = stem[:dStart] + " " + stem[dEnd:]
 	} else {
 		stemNoDate = stem
+	}
+
+	// Extract single-letter studio prefixes (e.g. b. -> Blacked, t. -> Tushy)
+	// ONLY if a valid date is present (i.e. dated scene releases)
+	if result.Date != "" {
+		if match := rxSingleLetterSite.FindStringSubmatch(stem); match != nil {
+			siteLetter := strings.ToLower(match[1])
+			if siteLetter == "b" {
+				result.Site = "Blacked"
+			} else if siteLetter == "t" {
+				result.Site = "Tushy"
+			}
+			// Strip abbreviation from stemNoDate since it was derived from stem
+			matchLen := len(match[0])
+			if len(stemNoDate) >= matchLen && strings.EqualFold(stemNoDate[:matchLen], match[0]) {
+				stemNoDate = stemNoDate[matchLen:]
+			}
+		}
 	}
 
 	parts := rxHyphenSplit.Split(stemNoDate, -1)
