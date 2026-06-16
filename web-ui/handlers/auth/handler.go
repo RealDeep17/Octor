@@ -13,11 +13,9 @@ import (
 )
 
 type LoginData struct {
-	Instruction string
-	// Card is non-nil when Instruction is one of the values that maps to a
-	// rich contextual sign-in card (vault/library/discover). The template
-	// just renders the keys — all routing logic lives here in the handler.
-	Card *LoginCard
+	Instruction        string
+	Card               *LoginCard
+	InviteCodeRequired bool
 }
 
 // LoginCard carries i18n keys for the contextual info card on /login. The
@@ -79,11 +77,13 @@ type ProcessAuthData struct {
 
 type Handler struct {
 	tb template.Builder[*web.Context]
+	a  *auth.Auth
 }
 
-func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context]) {
+func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], a *auth.Auth) {
 	h := &Handler{
 		tb: tm.MustRegisterViews("auth/*").WithLayout("main"),
+		a:  a,
 	}
 
 	r.Use(func(c *gin.Context) {
@@ -100,6 +100,52 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context]) {
 	r.GET("/logout", h.logout)
 	r.GET("/auth/verify", h.verify)
 	r.GET("/auth/callback/google", h.callback)
+	r.POST("/auth/invite-code", h.setInviteCode)
+}
+
+type InviteCodeRequest struct {
+	Email      string `json:"email"`
+	InviteCode string `json:"inviteCode"`
+}
+
+func (s *Handler) setInviteCode(c *gin.Context) {
+	var req InviteCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	if s.a.IsInviteCodeRequired() {
+		isNew := true
+		if req.Email != "" {
+			var err error
+			isNew, err = s.a.IsNewUser(c.Request.Context(), req.Email)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error checking user existence"})
+				return
+			}
+		}
+
+		if isNew {
+			if req.InviteCode == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invite code is required to sign up"})
+				return
+			}
+			if !s.a.IsInviteCodeValid(req.InviteCode) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid invite code"})
+				return
+			}
+		}
+	}
+
+	session := sessions.Default(c)
+	session.Set("invite-code", req.InviteCode)
+	if err := session.Save(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save session"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 func (s *Handler) refresh(c *gin.Context) {
@@ -112,8 +158,9 @@ func (s *Handler) login(c *gin.Context) {
 		instruction = c.Query("from")
 	}
 	ld := LoginData{
-		Instruction: instruction,
-		Card:        loginCardFor(instruction),
+		Instruction:        instruction,
+		Card:               loginCardFor(instruction),
+		InviteCodeRequired: s.a.IsInviteCodeRequired(),
 	}
 	if c.Query("return-url") != "" {
 		session := sessions.Default(c)

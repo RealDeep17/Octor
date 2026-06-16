@@ -70,6 +70,8 @@ func (h *Handler) settingsIndex(c *gin.Context) {
 	autoVault := false
 	if s.AutoVault != nil {
 		autoVault = *s.AutoVault
+	} else {
+		autoVault = os.Getenv("AUTOMATION_AUTO_VAULT") == "true"
 	}
 	h.tb.Build("admin/settings").HTML(http.StatusOK, web.NewContext(c).WithData(&SettingsData{
 		AutoVaultEnabled: autoVault,

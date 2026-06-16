@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/go-pg/pg/v10"
@@ -145,3 +146,27 @@ func DeleteMoviesForResource(ctx context.Context, db *pg.DB, resourceID string) 
 		Delete()
 	return err
 }
+
+func (s *Movie) IsJav() bool {
+	if s == nil {
+		return false
+	}
+	if s.MovieMetadata != nil && s.MovieMetadata.VideoID != "" {
+		idLower := strings.ToLower(s.MovieMetadata.VideoID)
+		if strings.HasPrefix(idLower, "tpdb_jav:") || strings.HasPrefix(idLower, "tpdb_jav=") || strings.Contains(idLower, "jav.guru") {
+			return true
+		}
+	}
+	if s.Path != nil && *s.Path != "" {
+		pathLower := strings.ToLower(*s.Path)
+		if strings.Contains(pathLower, "jav") {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Movie) IsPorn() bool {
+	return !s.IsJav()
+}
+

@@ -48,7 +48,8 @@ func (h *Handler) library(c *gin.Context) {
 	section := parseSection(c)
 	q := strings.TrimSpace(c.Query("q"))
 	sort := parseSort(c)
-	items, err := h.loadLibrary(ctx, db, userID, section, sort, q)
+	subtype := strings.TrimSpace(c.Query("subtype"))
+	items, err := h.loadLibrary(ctx, db, userID, section, sort, q, subtype)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
@@ -76,6 +77,7 @@ func (h *Handler) library(c *gin.Context) {
 			Section: section,
 			Sort:    sort,
 			Query:   q,
+			Subtype: subtype,
 		},
 		Users:        users,
 		SelectedUser: selected,
@@ -321,14 +323,14 @@ func parseSection(c *gin.Context) shared.SectionType {
 	}
 }
 
-func (h *Handler) loadLibrary(ctx context.Context, db *pg.DB, userID *uuid.UUID, section shared.SectionType, sort models.SortType, q string) ([]any, error) {
+func (h *Handler) loadLibrary(ctx context.Context, db *pg.DB, userID *uuid.UUID, section shared.SectionType, sort models.SortType, q string, subtype string) ([]any, error) {
 	switch section {
 	case shared.SectionTypeMovies:
 		return h.loadMovieItems(ctx, db, userID, sort, q)
 	case shared.SectionTypeSeries:
-		return h.loadSeriesItems(ctx, db, userID, sort, q)
+		return h.loadSeriesItems(ctx, db, userID, sort, q, subtype)
 	case shared.SectionTypeAdult:
-		return h.loadAdultItems(ctx, db, userID, sort, q)
+		return h.loadAdultItems(ctx, db, userID, sort, q, subtype)
 	default:
 		return h.loadTorrentItems(ctx, db, userID, sort, q)
 	}
@@ -391,7 +393,7 @@ func (h *Handler) loadMovieItems(ctx context.Context, db *pg.DB, userID *uuid.UU
 	return items, nil
 }
 
-func (h *Handler) loadSeriesItems(ctx context.Context, db *pg.DB, userID *uuid.UUID, sort models.SortType, q string) ([]any, error) {
+func (h *Handler) loadSeriesItems(ctx context.Context, db *pg.DB, userID *uuid.UUID, sort models.SortType, q string, subtype string) ([]any, error) {
 	var list []*models.Series
 	var err error
 	if userID != nil {
@@ -413,6 +415,17 @@ func (h *Handler) loadSeriesItems(ctx context.Context, db *pg.DB, userID *uuid.U
 	}
 
 	mergedList := models.MergeSeriesByVideoID(list)
+	if subtype != "" && subtype != "all" {
+		var filtered []*models.Series
+		for _, s := range mergedList {
+			if subtype == "anime" && s.IsAnime {
+				filtered = append(filtered, s)
+			} else if subtype == "tv" && !s.IsAnime {
+				filtered = append(filtered, s)
+			}
+		}
+		mergedList = filtered
+	}
 
 	ownersByGroup := map[string]*AdminVideoItem{}
 	for _, item := range list {
@@ -665,7 +678,7 @@ func (h *Handler) loadLibraryCounts(ctx context.Context, db *pg.DB, userID *uuid
 	return
 }
 
-func (h *Handler) loadAdultItems(ctx context.Context, db *pg.DB, userID *uuid.UUID, sort models.SortType, q string) ([]any, error) {
+func (h *Handler) loadAdultItems(ctx context.Context, db *pg.DB, userID *uuid.UUID, sort models.SortType, q string, subtype string) ([]any, error) {
 	var list []*models.Movie
 	var err error
 	if userID != nil {
@@ -675,6 +688,17 @@ func (h *Handler) loadAdultItems(ctx context.Context, db *pg.DB, userID *uuid.UU
 	}
 	if err != nil {
 		return nil, err
+	}
+	if subtype != "" && subtype != "all" {
+		var filtered []*models.Movie
+		for _, m := range list {
+			if subtype == "jav" && m.IsJav() {
+				filtered = append(filtered, m)
+			} else if subtype == "porn" && m.IsPorn() {
+				filtered = append(filtered, m)
+			}
+		}
+		list = filtered
 	}
 	ids := make([]string, 0, len(list))
 	for _, item := range list {

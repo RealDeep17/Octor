@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-pg/pg/v10"
 	uuid "github.com/satori/go.uuid"
 	log "github.com/sirupsen/logrus"
 	cs "github.com/webtor-io/common-services"
@@ -18,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/supertokens/supertokens-golang/ingredients/emaildelivery"
 	"github.com/supertokens/supertokens-golang/recipe/dashboard"
@@ -40,6 +42,8 @@ const (
 	googleClientIDFlag     = "google-client-id"
 	googleClientSecretFlag = "google-client-secret"
 	overrideUserEmail      = "override-user-email"
+	InviteCodeRequiredFlag = "invite-code-required"
+	InviteCodesFlag        = "invite-codes"
 )
 
 const userEmailCacheTTL = 5 * time.Minute
@@ -72,6 +76,16 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 			Usage:  "override user email",
 			EnvVar: "OVERRIDE_USER_EMAIL",
 		},
+		cli.BoolFlag{
+			Name:   InviteCodeRequiredFlag,
+			Usage:  "require invite code for signup",
+			EnvVar: "INVITE_CODE_REQUIRED",
+		},
+		cli.StringFlag{
+			Name:   InviteCodesFlag,
+			Usage:  "comma-separated allowed invite codes",
+			EnvVar: "INVITE_CODES",
+		},
 	)
 }
 
@@ -94,7 +108,24 @@ type Auth struct {
 	googleClientSecret string
 	hasSupetokens      bool
 	overrideUserEmail  string
+	inviteCodeRequired bool
+	inviteCodes        []string
 	userEmailCache     sync.Map // userID → email, avoids repeated SuperTokens round-trips
+}
+
+func parseInviteCodes(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	var codes []string
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			codes = append(codes, trimmed)
+		}
+	}
+	return codes
 }
 
 func New(c *cli.Context, cl *http.Client, pg *cs.PG) *Auth {
@@ -112,7 +143,43 @@ func New(c *cli.Context, cl *http.Client, pg *cs.PG) *Auth {
 		googleClientID:     c.String(googleClientIDFlag),
 		googleClientSecret: c.String(googleClientSecretFlag),
 		overrideUserEmail:  c.String(overrideUserEmail),
+		inviteCodeRequired: c.Bool(InviteCodeRequiredFlag),
+		inviteCodes:        parseInviteCodes(c.String(InviteCodesFlag)),
 	}
+}
+
+func (s *Auth) IsInviteCodeRequired() bool {
+	return s.inviteCodeRequired
+}
+
+func (s *Auth) IsInviteCodeValid(code string) bool {
+	for _, c := range s.inviteCodes {
+		if c == code {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Auth) IsNewUser(ctx context.Context, email string) (bool, error) {
+	db := s.pg.Get()
+	if db == nil {
+		return false, fmt.Errorf("db is nil")
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	var user models.User
+	err := db.Model(&user).
+		Context(ctx).
+		Where("email = ?", email).
+		Limit(1).
+		Select()
+	if err == nil {
+		return false, nil // user exists
+	}
+	if defaultErrors.Is(err, pg.ErrNoRows) {
+		return true, nil // user does not exist
+	}
+	return false, err // db error
 }
 
 func (s *Auth) Init() error {
@@ -332,6 +399,44 @@ func (s *Auth) createUser(ctx context.Context, sess sessmodels.SessionContainer)
 	}
 	userID := sess.GetUserID()
 
+	var email string
+	if s.overrideUserEmail != "" {
+		email = s.overrideUserEmail
+	} else {
+		if cached, ok := s.userEmailCache.Load(userID); ok {
+			entry, ok := cached.(cachedUserEmail)
+			if ok && time.Now().Before(entry.ExpiresAt) {
+				email = entry.Email
+			}
+		}
+		if email == "" {
+			userInfo, plErr := passwordless.GetUserByID(userID)
+			if plErr == nil && userInfo != nil && userInfo.Email != nil {
+				email = *userInfo.Email
+			}
+		}
+		if email == "" {
+			tpUserInfo, tpErr := thirdparty.GetUserByID(userID)
+			if tpErr == nil && tpUserInfo != nil && tpUserInfo.Email != "" {
+				email = tpUserInfo.Email
+			}
+		}
+	}
+
+	if email != "" && s.inviteCodeRequired {
+		isNewUser, checkErr := s.IsNewUser(ctx, email)
+		if checkErr == nil && isNewUser {
+			inviteCodeVal := ctx.Value("invite-code")
+			inviteCodeStr, _ := inviteCodeVal.(string)
+
+			if !s.IsInviteCodeValid(inviteCodeStr) {
+				log.Warnf("createUser: registration blocked for email=%s, invalid/missing invite code: '%s'", email, inviteCodeStr)
+				_ = supertokens.DeleteUser(userID)
+				return nil, false, fmt.Errorf("invalid invite code")
+			}
+		}
+	}
+
 	if s.overrideUserEmail != "" {
 		return models.GetOrCreateUser(ctx, db, s.overrideUserEmail)
 	}
@@ -412,6 +517,16 @@ func (s *Auth) RegisterHandler(r *gin.Engine) {
 			c.Next()
 			return
 		}
+
+		// Inject invite-code from session into request Context so createUser can access it
+		session := sessions.Default(c)
+		inviteCodeVal := session.Get("invite-code")
+		if inviteCodeVal != nil {
+			if inviteCodeStr, ok := inviteCodeVal.(string); ok && inviteCodeStr != "" {
+				c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), "invite-code", inviteCodeStr))
+			}
+		}
+
 		supertokens.Middleware(http.HandlerFunc(
 			func(rw http.ResponseWriter, r *http.Request) {
 				c.Request = c.Request.WithContext(r.Context())

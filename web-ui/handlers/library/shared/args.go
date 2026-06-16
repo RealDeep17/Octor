@@ -28,4 +28,5 @@ type IndexArgs struct {
 	Query   string
 	IsAdmin bool
 	GroupBy GroupBy
+	Subtype string
 }

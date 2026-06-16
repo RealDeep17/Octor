@@ -123,6 +123,7 @@
                 </p>
             </div>
             <form method="post" action="{{ langPath $.Lang "/profile/settings" }}" data-async-target="main">
+                <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
                 <label class="cursor-pointer pt-0.5 flex items-center gap-2">
                     {{ if .Data.AutoVaultEnabled }}
                       <span class="badge badge-sm bg-o-primaryL/10 border-o-primaryL/30 text-o-primaryL">On</span>
@@ -150,6 +151,7 @@
                 </p>
             </div>
             <form method="post" action="{{ langPath $.Lang "/admin/enrichment/refresh" }}" data-async-target="main" class="shrink-0">
+                <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
                 <button type="submit" class="btn btn-soft btn-sm" data-umami-event="admin-enrichment-smart">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -224,6 +226,7 @@
                   <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
               </form>
               <form method="post" action="{{ langPath $.Lang "/admin/enrichment/force-all" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('force-all-modal').close()">
+                  <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
                   <button type="submit" class="btn btn-sm btn-error">Proceed</button>
               </form>
           </div>
@@ -244,6 +247,7 @@
                   <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
               </form>
               <form method="post" action="{{ langPath $.Lang "/admin/enrichment/force-everything" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('force-everything-modal').close()">
+                  <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
                   <button type="submit" class="btn btn-sm btn-error">Proceed</button>
               </form>
           </div>
@@ -264,6 +268,7 @@
                   <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
               </form>
               <form method="post" action="{{ langPath $.Lang "/profile/delete" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('delete-account-modal').close()">
+                  <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
                   <button type="submit" class="btn btn-sm btn-error">Delete</button>
               </form>
           </div>
@@ -284,6 +289,7 @@
                   <button class="btn btn-sm btn-ghost border border-o-line text-o-sub hover:border-o-purple">Cancel</button>
               </form>
               <form method="post" action="{{ langPath $.Lang "/profile/delete-data" }}" data-async-target="main" class="inline" onsubmit="document.getElementById('delete-data-modal').close()">
+                  <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
                   <button type="submit" class="btn btn-sm btn-error">Clear All</button>
               </form>
           </div>

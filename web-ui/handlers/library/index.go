@@ -68,6 +68,7 @@ func (s *Handler) bindIndexArgs(c *gin.Context) (args *shared.IndexArgs) {
 	args.Query = strings.TrimSpace(c.Query("q"))
 	args.IsAdmin = s.admin.HasAdmin(c)
 	args.GroupBy = shared.GroupBy(c.Query("group"))
+	args.Subtype = strings.TrimSpace(c.Query("subtype"))
 	return
 }
 
@@ -120,6 +121,17 @@ func (s *Handler) index(c *gin.Context) {
 			return
 		}
 		list := models.MergeSeriesByVideoID(rawList)
+		if args.Subtype != "" && args.Subtype != "all" {
+			var filtered []*models.Series
+			for _, s := range list {
+				if args.Subtype == "anime" && s.IsAnime {
+					filtered = append(filtered, s)
+				} else if args.Subtype == "tv" && !s.IsAnime {
+					filtered = append(filtered, s)
+				}
+			}
+			list = filtered
+		}
 		data.Items = make([]any, len(list))
 		for i, v := range list {
 			data.Items[i] = v
@@ -129,6 +141,17 @@ func (s *Handler) index(c *gin.Context) {
 		if err != nil {
 			_ = c.AbortWithError(http.StatusInternalServerError, err)
 			return
+		}
+		if args.Subtype != "" && args.Subtype != "all" {
+			var filtered []*models.Movie
+			for _, m := range list {
+				if args.Subtype == "jav" && m.IsJav() {
+					filtered = append(filtered, m)
+				} else if args.Subtype == "porn" && m.IsPorn() {
+					filtered = append(filtered, m)
+				}
+			}
+			list = filtered
 		}
 
 		if args.GroupBy == shared.GroupByStudio {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
@@ -307,6 +308,8 @@ func (s *Handler) get(c *gin.Context) {
 	autoVault := false
 	if err == nil && sIndex.AutoVault != nil {
 		autoVault = *sIndex.AutoVault
+	} else {
+		autoVault = os.Getenv("AUTOMATION_AUTO_VAULT") == "true"
 	}
 
 	s.tb.Build("profile/get").HTML(http.StatusOK, web.NewContext(c).WithData(&Data{

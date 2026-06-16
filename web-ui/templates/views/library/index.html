@@ -34,17 +34,17 @@
               <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-o-muted z-20 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </div>
           {{ if eq .Data.Args.Section "adult" }}
-          <select id="adult-type-select" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-28 shrink-0">
-              <option value="all">All Types</option>
-              <option value="porn">Porn</option>
-              <option value="jav">JAV</option>
+          <select id="adult-type-select" name="subtype" onchange="this.form.requestSubmit()" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-28 shrink-0">
+              <option value="all" {{ if or (eq .Data.Args.Subtype "") (eq .Data.Args.Subtype "all") }}selected{{ end }}>All Types</option>
+              <option value="porn" {{ if eq .Data.Args.Subtype "porn" }}selected{{ end }}>Porn</option>
+              <option value="jav" {{ if eq .Data.Args.Subtype "jav" }}selected{{ end }}>JAV</option>
           </select>
           {{ end }}
           {{ if eq .Data.Args.Section "series" }}
-          <select id="series-type-select" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-28 shrink-0">
-              <option value="all">All Types</option>
-              <option value="tv">TV Shows</option>
-              <option value="anime">Anime</option>
+          <select id="series-type-select" name="subtype" onchange="this.form.requestSubmit()" class="select select-sm bg-base-300 border-o-line focus:border-o-purple focus:outline-none w-28 shrink-0">
+              <option value="all" {{ if or (eq .Data.Args.Subtype "") (eq .Data.Args.Subtype "all") }}selected{{ end }}>All Types</option>
+              <option value="tv" {{ if eq .Data.Args.Subtype "tv" }}selected{{ end }}>TV Shows</option>
+              <option value="anime" {{ if eq .Data.Args.Subtype "anime" }}selected{{ end }}>Anime</option>
           </select>
           {{ end }}
           <button type="submit" class="hidden">Submit</button>

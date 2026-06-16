@@ -30,6 +30,15 @@
     </div>
     {{ end }}
 
+    {{ if .Data.InviteCodeRequired }}
+    <!-- Invite Code card -->
+    <div class="bg-w-card border border-o-line rounded-2xl p-6 mb-6">
+      <p class="text-sm text-o-sub text-center mb-1">{{ t $.Lang "auth.login.inviteCodePrompt" }}</p>
+      <p class="text-xs text-o-muted text-center mb-4">{{ t $.Lang "auth.login.inviteCodeHint" }}</p>
+      <input type="text" name="inviteCode" id="invite-code-input" class="input w-full bg-base-300 border border-o-line focus:border-o-primary focus:outline-none rounded-xl px-4 py-3 text-center" placeholder="{{ t $.Lang "auth.login.inviteCodePlaceholder" }}" />
+    </div>
+    {{ end }}
+
     <!-- OAuth buttons card -->
     <div class="bg-w-card border border-o-line rounded-2xl p-6 mb-6">
       <!-- Google -->
