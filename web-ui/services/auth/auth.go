@@ -152,6 +152,10 @@ func (s *Auth) IsInviteCodeRequired() bool {
 	return s.inviteCodeRequired
 }
 
+func (s *Auth) IsSMTPConfigured() bool {
+	return s.smtpHost != ""
+}
+
 func (s *Auth) IsInviteCodeValid(code string) bool {
 	for _, c := range s.inviteCodes {
 		if c == code {

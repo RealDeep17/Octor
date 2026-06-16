@@ -16,6 +16,7 @@ type LoginData struct {
 	Instruction        string
 	Card               *LoginCard
 	InviteCodeRequired bool
+	SMTPConfigured     bool
 }
 
 // LoginCard carries i18n keys for the contextual info card on /login. The
@@ -161,6 +162,7 @@ func (s *Handler) login(c *gin.Context) {
 		Instruction:        instruction,
 		Card:               loginCardFor(instruction),
 		InviteCodeRequired: s.a.IsInviteCodeRequired(),
+		SMTPConfigured:     s.a.IsSMTPConfigured(),
 	}
 	if c.Query("return-url") != "" {
 		session := sessions.Default(c)

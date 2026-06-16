@@ -123,16 +123,15 @@ func (s *Handler) still(c *gin.Context) {
 
 	// 4. Trigger background download, resize, and S3-caching (if S3 is configured)
 	if s.s3Cl != nil && s.posterCacheS3Bucket != "" {
-		reqCtx := c.Request.Context()
-		go func(sa *StillArgs, rCtx context.Context) {
+		go func(sa *StillArgs) {
 			select {
 			case stillResizeSemaphore <- struct{}{}:
 				defer func() { <-stillResizeSemaphore }()
-			case <-rCtx.Done():
+			case <-time.After(60 * time.Second):
 				return
 			}
 
-			detachedCtx, cancel := context.WithTimeout(rCtx, 60*time.Second)
+			detachedCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
 			resizedBuf, resizeErr := s.getResizedJPEGStill(detachedCtx, s.pg.Get(), sa)
@@ -146,7 +145,7 @@ func (s *Handler) still(c *gin.Context) {
 			} else {
 				log.Infof("still: successfully cached resized still in background for episode %s S%dE%d", sa.videoID, sa.season, sa.episode)
 			}
-		}(sa, reqCtx)
+		}(sa)
 	}
 
 	// 5. Instantly redirect browser to original CDN URL

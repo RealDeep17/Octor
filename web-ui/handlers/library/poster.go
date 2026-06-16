@@ -210,16 +210,15 @@ func (s *Handler) handlePoster(c *gin.Context, horizontal bool) {
 
 	// 4. Trigger background download, resize, and S3-caching (if S3 is configured) for standard scenes
 	if s.s3Cl != nil && s.posterCacheS3Bucket != "" {
-		reqCtx := c.Request.Context()
-		go func(pa *PosterArgs, rCtx context.Context) {
+		go func(pa *PosterArgs) {
 			select {
 			case resizeSemaphore <- struct{}{}:
 				defer func() { <-resizeSemaphore }()
-			case <-rCtx.Done():
+			case <-time.After(60 * time.Second):
 				return
 			}
 
-			detachedCtx, cancel := context.WithTimeout(rCtx, 60*time.Second)
+			detachedCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
 			resizedBuf, resizeErr := s.getResizedJPEGPoster(detachedCtx, s.pg.Get(), pa)
@@ -233,7 +232,7 @@ func (s *Handler) handlePoster(c *gin.Context, horizontal bool) {
 			} else {
 				log.Infof("poster: successfully cached resized poster in background for %s", pa.imdbID)
 			}
-		}(pa, reqCtx)
+		}(pa)
 	}
 
 	// 5. Instantly redirect browser to original CDN URL
