@@ -9,22 +9,6 @@ window.submitLoginForm = function(target, e) {
         const e = pl.inProgress('login', tf('auth.progress.sendingMagicLink', data.email));
         const supertokens = (await import('../../lib/supertokens'));
         try {
-            const inviteCodeInput = document.getElementById('invite-code-input');
-            const inviteCode = inviteCodeInput ? inviteCodeInput.value.trim() : '';
-
-            const res = await fetch('/auth/invite-code', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': window._CSRF,
-                },
-                body: JSON.stringify({ email: data.email, inviteCode: inviteCode }),
-            });
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.error || 'Verification failed');
-            }
-
             await supertokens.sendMagicLink(data, window._CSRF);
             e.done(tf('auth.progress.magicLinkSent', data.email));
         } catch (err) {
@@ -54,22 +38,6 @@ window.signInWith = function(e, provider) {
         const progressEntry = pl.inProgress('login', tf('auth.progress.redirectingTo', provider));
         const supertokens = (await import('../../lib/supertokens'));
         try {
-            const inviteCodeInput = document.getElementById('invite-code-input');
-            const inviteCode = inviteCodeInput ? inviteCodeInput.value.trim() : '';
-
-            const res = await fetch('/auth/invite-code', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': window._CSRF,
-                },
-                body: JSON.stringify({ inviteCode: inviteCode }),
-            });
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.error || 'Verification failed');
-            }
-
             await supertokens.signInWith(window._CSRF, provider);
         } catch (err) {
             console.error(err);

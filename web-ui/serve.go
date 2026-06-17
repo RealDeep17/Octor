@@ -384,7 +384,7 @@ func serve(c *cli.Context) error {
 	wa.RegisterHandler(r, tm, jobs, sapi)
 
 	// Setting ProfileHandler
-	p.RegisterHandler(c, r, tm, ats, ual, pg, uc, v)
+	p.RegisterHandler(c, r, tm, ats, ual, pg, uc, v, a)
 
 	// Setting EmbedDomainHandler
 	err = embed_domain.RegisterHandler(c, r, pg)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/pkg/errors"
@@ -57,11 +59,12 @@ type Handler struct {
 	pg            *cs.PG
 	claims        *claims.Claims
 	vault         *vault.Vault
+	auth          *auth.Auth
 	disableWebDAV bool
 	disableEmbed  bool
 }
 
-func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], at *at.AccessToken, ual *ua.UrlAlias, pg *cs.PG, cl *claims.Claims, v *vault.Vault) {
+func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Context], at *at.AccessToken, ual *ua.UrlAlias, pg *cs.PG, cl *claims.Claims, v *vault.Vault, a *auth.Auth) {
 	h := &Handler{
 		tb:            tm.MustRegisterViews("profile/*").WithLayout("main"),
 		at:            at,
@@ -69,6 +72,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 		pg:            pg,
 		claims:        cl,
 		vault:         v,
+		auth:          a,
 		disableWebDAV: c.Bool(common.DisableWebDAVFlag),
 		disableEmbed:  c.Bool(common.DisableEmbedFlag),
 	}
@@ -82,6 +86,7 @@ func RegisterHandler(c *cli.Context, r *gin.Engine, tm *template.Manager[*web.Co
 	gr.POST("/grid-density", h.updateGridDensity)
 	gr.POST("/settings", h.settingsSave)
 	gr.POST("/vault-auto-delete", h.updateVaultAutoDelete)
+	gr.POST("/upgrade", h.upgrade)
 }
 
 type skinUpdateReq struct {
@@ -359,5 +364,50 @@ func (s *Handler) updateVaultAutoDelete(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
+	web.RedirectWithSuccessAndMessage(c, "toast.settingsSaved")
+}
+
+func (s *Handler) upgrade(c *gin.Context) {
+	u := auth.GetUserFromContext(c)
+
+	// Return immediately if already upgraded
+	if u != nil && u.Tier == "pro" {
+		web.RedirectWithSuccessAndMessage(c, "toast.settingsSaved")
+		return
+	}
+
+	db := s.pg.Get()
+	if db == nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("database connection is not available"))
+		return
+	}
+
+	code := strings.TrimSpace(c.PostForm("upgrade_code"))
+	if code == "" {
+		web.RedirectWithError(c, errors.New("upgrade code is required"))
+		return
+	}
+
+	if s.auth == nil {
+		web.RedirectWithError(c, errors.New("authentication service not configured"))
+		return
+	}
+
+	if !s.auth.IsInviteCodeValid(code) {
+		time.Sleep(500 * time.Millisecond)
+		web.RedirectWithError(c, errors.New("invalid upgrade code"))
+		return
+	}
+
+	// Update user's tier to "pro"
+	user := &models.User{
+		UserID: u.ID,
+		Tier:   "pro",
+	}
+	if err := models.UpdateUserTier(c.Request.Context(), db, user); err != nil {
+		web.RedirectWithError(c, errors.WithMessage(err, "failed to upgrade user tier"))
+		return
+	}
+
 	web.RedirectWithSuccessAndMessage(c, "toast.settingsSaved")
 }

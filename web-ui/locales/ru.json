@@ -436,6 +436,8 @@
     "toast.removedFromLibrary": "Удалено из библиотеки",
     "toast.backendAdded": "Бэкенд добавлен",
     "toast.settingsSaved": "Настройки сохранены",
+    "toast.userDeleted": "Пользователь успешно удален",
+    "toast.userMigrated": "Данные пользователя успешно перенесены",
     "toast.unmarked": "Отметка снята",
     "toast.markedAsWatched": "Отмечено как просмотренное",
     "toast.ratingSaved": "Оценка сохранена",

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -382,7 +383,15 @@ func (s *Auth) myVerifySession(options *sessmodels.VerifySessionOptions, otherHa
 			u, isNew, err := s.createUser(r.Context(), sess)
 			if err != nil {
 				log.WithError(err).Error("failed to create user")
-				w.WriteHeader(500)
+				_ = sess.RevokeSession()
+				if r.Header.Get("X-Requested-With") == "XMLHttpRequest" || strings.HasPrefix(r.URL.Path, "/api/") {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					_, _ = w.Write([]byte(fmt.Sprintf(`{"error": "%s"}`, err.Error())))
+				} else {
+					http.Redirect(w, r, "/login?error="+url.QueryEscape(err.Error()), http.StatusFound)
+				}
+				return
 			} else {
 				ctx = context.WithValue(ctx, UserContext{}, u)
 				ctx = context.WithValue(ctx, IsNewContext{}, isNew)
@@ -427,18 +436,9 @@ func (s *Auth) createUser(ctx context.Context, sess sessmodels.SessionContainer)
 		}
 	}
 
-	if email != "" && s.inviteCodeRequired {
-		isNewUser, checkErr := s.IsNewUser(ctx, email)
-		if checkErr == nil && isNewUser {
-			inviteCodeVal := ctx.Value("invite-code")
-			inviteCodeStr, _ := inviteCodeVal.(string)
-
-			if !s.IsInviteCodeValid(inviteCodeStr) {
-				log.Warnf("createUser: registration blocked for email=%s, invalid/missing invite code: '%s'", email, inviteCodeStr)
-				_ = supertokens.DeleteUser(userID)
-				return nil, false, fmt.Errorf("invalid invite code")
-			}
-		}
+	if email != "" {
+		// New users are automatically created and assigned to the Free tier by default.
+		// Invite code checks during registration are removed.
 	}
 
 	if s.overrideUserEmail != "" {
@@ -528,6 +528,13 @@ func (s *Auth) RegisterHandler(r *gin.Engine) {
 		if inviteCodeVal != nil {
 			if inviteCodeStr, ok := inviteCodeVal.(string); ok && inviteCodeStr != "" {
 				c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), "invite-code", inviteCodeStr))
+			}
+		}
+
+		authModeVal := session.Get("auth-mode")
+		if authModeVal != nil {
+			if authModeStr, ok := authModeVal.(string); ok && authModeStr != "" {
+				c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), "auth-mode", authModeStr))
 			}
 		}
 

@@ -87,7 +87,7 @@ func RegisterFlags(f []cli.Flag) []cli.Flag {
 		cli.IntFlag{
 			Name:   FlagFreeDailyQuota,
 			Usage:  "daily AI recommendation quota for free tier users",
-			Value:  1,
+			Value:  5,
 			EnvVar: "AI_RECOMMENDATIONS_FREE_DAILY_QUOTA",
 		},
 		cli.IntFlag{

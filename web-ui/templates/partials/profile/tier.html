@@ -1,2 +1,139 @@
 {{ define "profile/tier" }}
+<div class="flex items-center gap-3 mb-6">
+    <h2 class="text-xs font-semibold tracking-widest uppercase text-o-muted">Instance Access Level</h2>
+    <div class="flex-1 h-px bg-o-line/50"></div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <!-- Trial Mode Card -->
+    <div class="relative bg-base-300/35 border {{ if ne .User.Tier "pro" }}border-o-primary/40 shadow-[0_0_15px_rgba(var(--color-primary-rgb,124,58,237),0.07)]{{ else }}border-o-line{{ end }} rounded-2xl p-6 flex flex-col justify-between overflow-hidden">
+        {{ if ne .User.Tier "pro" }}
+        <!-- Active Badge for Trial Mode -->
+        <div class="absolute top-0 right-0 bg-o-primary text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl tracking-wider uppercase">
+            Active Level
+        </div>
+        {{ end }}
+        
+        <div>
+            <div class="flex items-center gap-2 mb-3">
+                <div class="p-2 rounded-lg bg-base-200 border border-o-line">
+                    <svg class="w-5 h-5 text-o-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="font-extrabold text-lg text-w-text">Trial Level</h3>
+                    <p class="text-xs text-o-muted">Default tier for new accounts</p>
+                </div>
+            </div>
+            
+            <div class="my-4">
+                <span class="text-3xl font-black text-w-text">Trial</span>
+                <span class="text-xs text-o-muted"> / restricted access</span>
+            </div>
+            
+            <div class="border-t border-o-line/30 my-4"></div>
+            
+            <ul class="space-y-3 text-sm">
+                <li class="flex items-center gap-2.5 text-w-text">
+                    <svg class="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span><strong>10 Mbps</strong> Download Speed</span>
+                </li>
+                <li class="flex items-center gap-2.5 text-o-muted">
+                    <svg class="w-4 h-4 text-rose-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <span>No Vault Storage</span>
+                </li>
+                <li class="flex items-center gap-2.5 text-w-text">
+                    <svg class="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span><strong>5 Daily</strong> AI Recommendations</span>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="mt-6">
+            {{ if ne .User.Tier "pro" }}
+            <div class="w-full text-center py-2 px-4 rounded-xl bg-o-primary/10 border border-o-primary/20 text-o-primaryL font-semibold text-xs">
+                Current Access level
+            </div>
+            {{ else }}
+            <div class="w-full text-center py-2 px-4 rounded-xl bg-base-200 border border-o-line text-o-muted text-xs">
+                Upgrade completed
+            </div>
+            {{ end }}
+        </div>
+    </div>
+
+    <!-- Full Access Card -->
+    <div class="relative bg-base-300/50 border {{ if eq .User.Tier "pro" }}border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.15)]{{ else }}border-o-line hover:border-o-primary/30 transition-all duration-300{{ end }} rounded-2xl p-6 flex flex-col justify-between overflow-hidden">
+        {{ if eq .User.Tier "pro" }}
+        <!-- Active Badge for Full Access -->
+        <div class="absolute top-0 right-0 bg-amber-500 text-black text-[10px] font-extrabold px-3 py-1 rounded-bl-xl tracking-wider uppercase">
+            ★ Active Level
+        </div>
+        {{ end }}
+        
+        <div>
+            <div class="flex items-center gap-2 mb-3">
+                <div class="p-2 rounded-lg {{ if eq .User.Tier "pro" }}bg-amber-500/10 border border-amber-500/30{{ else }}bg-base-200 border border-o-line{{ end }}">
+                    <svg class="w-5 h-5 {{ if eq .User.Tier "pro" }}text-amber-500{{ else }}text-o-muted{{ end }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="font-extrabold text-lg text-w-text flex items-center gap-1.5">
+                        Full Access
+                        {{ if eq .User.Tier "pro" }}
+                        <span class="badge badge-xs bg-amber-500/10 border-amber-500/30 text-amber-500 font-bold uppercase tracking-wider">UNLOCKED</span>
+                        {{ end }}
+                    </h3>
+                    <p class="text-xs text-o-muted">All capabilities activated on this instance</p>
+                </div>
+            </div>
+            
+            <div class="my-4 flex items-baseline gap-1">
+                <span class="text-3xl font-black text-w-text">Uncapped</span>
+                <span class="text-xs text-o-muted"> / via Upgrade Code</span>
+            </div>
+            
+            <div class="border-t border-o-line/30 my-4"></div>
+            
+            <ul class="space-y-3 text-sm">
+                <li class="flex items-center gap-2.5 text-w-text font-medium">
+                    <svg class="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span><strong>Uncapped</strong> Download Speed</span>
+                </li>
+                <li class="flex items-center gap-2.5 text-w-text font-medium">
+                    <svg class="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span><strong>Full Vault Storage</strong> Access</span>
+                </li>
+                <li class="flex items-center gap-2.5 text-w-text font-medium">
+                    <svg class="w-4 h-4 text-emerald-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span><strong>Unlimited</strong> AI Recommendations</span>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="mt-6 pt-2">
+            {{ if eq .User.Tier "pro" }}
+            <div class="w-full text-center py-2.5 px-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 font-bold text-xs flex items-center justify-center gap-1">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Instance Unlocked
+            </div>
+            {{ else }}
+            <!-- Upgrade Form -->
+            <form method="post" action="{{ langPath $.Lang "/profile/upgrade" }}" data-async-target="main" class="flex flex-col gap-2">
+                <input type="hidden" name="_csrf" value="{{ $.CSRF }}">
+                <div class="flex gap-2">
+                    <input type="text" name="upgrade_code" placeholder="Enter upgrade / invite code" class="input input-sm bg-base-200 border-o-line hover:border-o-line/80 focus:border-o-primary focus:outline-none rounded-xl text-xs flex-1 px-3 py-2.5 font-medium transition-all" required />
+                    <button type="submit" class="btn btn-sm btn-o-primary rounded-xl px-4 text-xs font-bold transition-all shadow-[0_2px_8px_rgba(var(--color-primary-rgb,124,58,237),0.2)]">
+                        Unlock
+                    </button>
+                </div>
+            </form>
+            {{ end }}
+        </div>
+    </div>
+</div>
 {{ end }}

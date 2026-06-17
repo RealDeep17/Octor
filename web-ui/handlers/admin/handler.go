@@ -128,6 +128,9 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], pg *cs.P
 	gr.POST("/enrichment/refresh", h.refreshEnrichment)
 	gr.POST("/enrichment/force-all", h.forceAllEnrichment)
 	gr.POST("/enrichment/force-everything", h.forceEverythingEnrichment)
+	gr.GET("/management", h.management)
+	gr.POST("/management/delete", h.deleteUser)
+	gr.POST("/management/move", h.migrateUser)
 	gr.GET("/settings", h.settingsIndex)
 	gr.POST("/settings", h.settingsSave)
 }

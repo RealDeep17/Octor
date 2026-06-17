@@ -17,6 +17,8 @@ type LoginData struct {
 	Card               *LoginCard
 	InviteCodeRequired bool
 	SMTPConfigured     bool
+	IsSignup           bool
+	Error              string
 }
 
 // LoginCard carries i18n keys for the contextual info card on /login. The
@@ -97,6 +99,7 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], a *auth.
 	})
 
 	r.GET("/login", h.login)
+	r.GET("/signup", h.signup)
 	r.GET("/refresh", h.refresh)
 	r.GET("/logout", h.logout)
 	r.GET("/auth/verify", h.verify)
@@ -107,45 +110,10 @@ func RegisterHandler(r *gin.Engine, tm *template.Manager[*web.Context], a *auth.
 type InviteCodeRequest struct {
 	Email      string `json:"email"`
 	InviteCode string `json:"inviteCode"`
+	IsSignup   bool   `json:"isSignup"`
 }
 
 func (s *Handler) setInviteCode(c *gin.Context) {
-	var req InviteCodeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		return
-	}
-
-	if s.a.IsInviteCodeRequired() {
-		isNew := true
-		if req.Email != "" {
-			var err error
-			isNew, err = s.a.IsNewUser(c.Request.Context(), req.Email)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error checking user existence"})
-				return
-			}
-		}
-
-		if isNew {
-			if req.InviteCode == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Invite code is required to sign up"})
-				return
-			}
-			if !s.a.IsInviteCodeValid(req.InviteCode) {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid invite code"})
-				return
-			}
-		}
-	}
-
-	session := sessions.Default(c)
-	session.Set("invite-code", req.InviteCode)
-	if err := session.Save(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save session"})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
@@ -161,15 +129,22 @@ func (s *Handler) login(c *gin.Context) {
 	ld := LoginData{
 		Instruction:        instruction,
 		Card:               loginCardFor(instruction),
-		InviteCodeRequired: s.a.IsInviteCodeRequired(),
+		InviteCodeRequired: false,
 		SMTPConfigured:     s.a.IsSMTPConfigured(),
+		IsSignup:           false,
+		Error:              c.Query("error"),
 	}
+	session := sessions.Default(c)
+	session.Set("auth-mode", "login")
 	if c.Query("return-url") != "" {
-		session := sessions.Default(c)
 		session.Set("return-url", c.Query("return-url"))
-		_ = session.Save()
 	}
+	_ = session.Save()
 	s.tb.Build("auth/login").HTML(http.StatusOK, web.NewContext(c).WithData(ld))
+}
+
+func (s *Handler) signup(c *gin.Context) {
+	c.Redirect(http.StatusMovedPermanently, "/login")
 }
 
 func (s *Handler) logout(c *gin.Context) {

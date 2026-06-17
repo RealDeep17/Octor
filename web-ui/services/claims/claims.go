@@ -91,14 +91,51 @@ func (s *Claims) MakeUserClaimsFromContext(c *gin.Context) (*Data, error) {
 	r, err := s.Get(&Request{
 		Email: u.Email,
 	})
+	if err != nil {
+		return nil, err
+	}
 	if _, err := c.Cookie("test-ads"); err == nil {
 		r.Claims.Site.NoAds = false
 	} else if c.Query("test-ads") != "" {
 		r.Claims.Site.NoAds = false
 	}
-	if err != nil {
-		return nil, err
+
+	// Dynamic free/pro claims override based on DB Tier
+	if u != nil && u.HasAuth() {
+		if u.Tier == "pro" {
+			if r.Context == nil {
+				r.Context = &proto.Context{}
+			}
+			if r.Context.Tier == nil {
+				r.Context.Tier = &proto.Tier{}
+			}
+			r.Context.Tier.Name = "pro"
+			r.Context.Tier.Id = 1000
+		} else {
+			var rate uint64 = 10
+			var points uint64 = 0
+			if r.Context == nil {
+				r.Context = &proto.Context{}
+			}
+			r.Context.Tier = &proto.Tier{
+				Id:   0,
+				Name: "free",
+			}
+			if r.Claims == nil {
+				r.Claims = &proto.Claims{}
+			}
+			if r.Claims.Connection == nil {
+				r.Claims.Connection = &proto.Connection{}
+			}
+			r.Claims.Connection.Rate = &rate
+
+			if r.Claims.Vault == nil {
+				r.Claims.Vault = &proto.Vault{}
+			}
+			r.Claims.Vault.Points = &points
+		}
 	}
+
 	return r, nil
 }
 

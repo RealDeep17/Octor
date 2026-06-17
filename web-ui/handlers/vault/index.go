@@ -83,7 +83,7 @@ func filterPledges(list []PledgeDisplay, q string) []PledgeDisplay {
 
 // isFreeTier returns true when the user has no paid subscription.
 func isFreeTier(ctx *web.Context) bool {
-	return false
+	return ctx == nil || ctx.User == nil || ctx.User.Tier != "pro"
 }
 
 // buildPledgeDisplay converts enriched pledges into display rows for the table.

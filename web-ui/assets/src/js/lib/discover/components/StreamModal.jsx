@@ -7,7 +7,7 @@ import { loadPrefs, savePrefs } from '../prefs';
 import { chipClass } from './discoverUtils';
 import { t, tf } from '../i18n';
 
-export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, onBackToEpisodes, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, onLoadMore, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings = {} }) {
+export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, onBackToEpisodes, onSeasonChange, hasStreamAddons, onSetupAddons, onRetryStreams, onLoadMore, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings = {} }) {
     const dialogRef = useRef(null);
 
     useEffect(() => {
@@ -55,7 +55,7 @@ export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, on
                     </button>
                 </div>
                 <div class="overflow-y-auto px-3 sm:px-6 pb-4 sm:pb-6">
-                    <ModalBody modal={modal} onClose={handleClose} onEpisodeSelect={onEpisodeSelect} onStreamClick={onStreamClick} onSeasonChange={onSeasonChange} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} onLoadMore={onLoadMore} userStatuses={userStatuses} watchlistIds={watchlistIds} onToggleWatched={onToggleWatched} onRate={onRate} onToggleWatchlist={onToggleWatchlist} stremioSettings={stremioSettings} />
+                    <ModalBody modal={modal} onClose={handleClose} onEpisodeSelect={onEpisodeSelect} onStreamClick={onStreamClick} onSeasonChange={onSeasonChange} hasStreamAddons={hasStreamAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} onLoadMore={onLoadMore} userStatuses={userStatuses} watchlistIds={watchlistIds} onToggleWatched={onToggleWatched} onRate={onRate} onToggleWatchlist={onToggleWatchlist} stremioSettings={stremioSettings} />
                 </div>
             </div>
             <form method="dialog" class="modal-backdrop">
@@ -65,7 +65,7 @@ export function StreamModal({ modal, onClose, onEpisodeSelect, onStreamClick, on
     );
 }
 
-function ModalBody({ modal, onClose, onEpisodeSelect, onStreamClick, onSeasonChange, hasCustomAddons, onSetupAddons, onRetryStreams, onLoadMore, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings }) {
+function ModalBody({ modal, onClose, onEpisodeSelect, onStreamClick, onSeasonChange, hasStreamAddons, onSetupAddons, onRetryStreams, onLoadMore, userStatuses, watchlistIds, onToggleWatched, onRate, onToggleWatchlist, stremioSettings }) {
     const videoId = modal.metaId || modal.itemId;
     const videoType = modal.itemType;
     const isImdb = videoId && videoId.startsWith('tt') && !videoId.includes(':');
@@ -107,7 +107,7 @@ function ModalBody({ modal, onClose, onEpisodeSelect, onStreamClick, onSeasonCha
     }
 
     if (modal.view === 'streams') {
-        return <StreamContent modal={modal} onStreamClick={onStreamClick} hasCustomAddons={hasCustomAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} onLoadMore={onLoadMore} statusButtons={statusButtons} headerMeta={headerMeta} stremioSettings={stremioSettings} />;
+        return <StreamContent modal={modal} onStreamClick={onStreamClick} hasStreamAddons={hasStreamAddons} onSetupAddons={onSetupAddons} onRetryStreams={onRetryStreams} onLoadMore={onLoadMore} statusButtons={statusButtons} headerMeta={headerMeta} stremioSettings={stremioSettings} />;
     }
 
     return null;
@@ -630,7 +630,7 @@ function getLabelGroup(label) {
     return null;
 }
 
-function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, onRetryStreams, onLoadMore, statusButtons, headerMeta, stremioSettings = {} }) {
+function StreamContent({ modal, onStreamClick, hasStreamAddons, onSetupAddons, onRetryStreams, onLoadMore, statusButtons, headerMeta, stremioSettings = {} }) {
     const { title, poster, streams, error, failedAddons } = modal;
     const failed = failedAddons || [];
     const [retrying, setRetrying] = useState(false);
@@ -921,7 +921,7 @@ function StreamContent({ modal, onStreamClick, hasCustomAddons, onSetupAddons, o
                     <p class="text-w-muted text-sm">
                         {error || t('discover.noStreams')}
                     </p>
-                    {!hasCustomAddons && (
+                    {!hasStreamAddons && (
                         <>
                             <p class="text-w-sub text-xs mt-2 mb-4">
                                 {t('discover.installAddonsHint')}

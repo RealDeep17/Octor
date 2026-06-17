@@ -138,7 +138,70 @@ type Manager[K GinContext] struct {
 func NewManager[K GinContext](re multitemplate.Renderer) *Manager[K] {
 	return &Manager[K]{
 		re:    re,
-		funcs: FuncMap{},
+		funcs: FuncMap{
+			"add": func(a, b any) int {
+				var intA, intB int
+				switch v := a.(type) {
+				case int:
+					intA = v
+				case int8:
+					intA = int(v)
+				case int16:
+					intA = int(v)
+				case int32:
+					intA = int(v)
+				case int64:
+					intA = int(v)
+				case uint:
+					intA = int(v)
+				case uint8:
+					intA = int(v)
+				case uint16:
+					intA = int(v)
+				case uint32:
+					intA = int(v)
+				case uint64:
+					intA = int(v)
+				case float32:
+					intA = int(v)
+				case float64:
+					intA = int(v)
+				}
+				switch v := b.(type) {
+				case int:
+					intB = v
+				case int8:
+					intB = int(v)
+				case int16:
+					intB = int(v)
+				case int32:
+					intB = int(v)
+				case int64:
+					intB = int(v)
+				case uint:
+					intB = int(v)
+				case uint8:
+					intB = int(v)
+				case uint16:
+					intB = int(v)
+				case uint32:
+					intB = int(v)
+				case uint64:
+					intB = int(v)
+				case float32:
+					intB = int(v)
+				case float64:
+					intB = int(v)
+				}
+				return intA + intB
+			},
+			"upper": func(s string) string {
+				return strings.ToUpper(s)
+			},
+			"lower": func(s string) string {
+				return strings.ToLower(s)
+			},
+		},
 		base:  "templates/",
 	}
 }
