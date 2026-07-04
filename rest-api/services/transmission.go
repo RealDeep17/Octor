@@ -25,6 +25,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	cs "github.com/webtor-io/common-services"
+	lm "github.com/webtor-io/lazymap"
 	_ "modernc.org/sqlite"
 )
 
@@ -39,6 +40,8 @@ type TransmissionService struct {
 	httpClient     *http.Client
 	torrentsLock   sync.RWMutex
 	trackedTorrent map[string]TrackedTorrent // Key: infoHash
+	resolveSem     chan struct{}             // Semaphore to limit concurrent background resolutions
+	saveLock       sync.Mutex                // Protects file system writes to persistFile
 }
 
 type TrackedTorrent struct {
@@ -119,6 +122,7 @@ func NewTransmissionService(c *cli.Context, rm *ResourceMap, db *pg.DB) *Transmi
 		persistFile:    filepath.Join(transmissionPersistDir, "transmission_torrents.json"),
 		httpClient:     &http.Client{Timeout: 30 * time.Second},
 		trackedTorrent: make(map[string]TrackedTorrent),
+		resolveSem:     make(chan struct{}, 4), // Limit background resolutions to 4 concurrently
 	}
 
 	if err := s.loadTorrents(); err != nil {
@@ -155,6 +159,9 @@ func (s *TransmissionService) loadTorrents() error {
 }
 
 func (s *TransmissionService) saveTorrents() error {
+	s.saveLock.Lock()
+	defer s.saveLock.Unlock()
+
 	s.torrentsLock.RLock()
 	var list []TrackedTorrent
 	for _, t := range s.trackedTorrent {
@@ -380,17 +387,12 @@ func (s *TransmissionService) deferredAutoVault(infoHash string, delay time.Dura
 		tracked.vaultTimer.Stop()
 	}
 	tracked.vaultTimer = time.AfterFunc(delay, func() {
-		// Safety: verify torrent still exists (could have been removed during the delay)
-		s.torrentsLock.RLock()
-		_, stillExists := s.trackedTorrent[infoHash]
-		s.torrentsLock.RUnlock()
-		if !stillExists {
-			log.Infof("auto-vault: deferred trigger cancelled — torrent %s was removed during delay", infoHash)
+		// Timer fired — resolve wanted files and trigger vault
+		selectedFiles, exists := s.resolveWantedFiles(infoHash)
+		if !exists {
+			log.Infof("auto-vault: deferred trigger cancelled — torrent %s no longer exists", infoHash)
 			return
 		}
-
-		// Timer fired — resolve wanted files and trigger vault
-		selectedFiles := s.resolveWantedFiles(infoHash)
 		if len(selectedFiles) > 0 {
 			log.Infof("auto-vault: deferred trigger for %s with %d selected files", infoHash, len(selectedFiles))
 		} else {
@@ -405,20 +407,20 @@ func (s *TransmissionService) deferredAutoVault(infoHash string, delay time.Dura
 // resolveWantedFiles translates the integer file indices stored in
 // TrackedTorrent.WantedFiles into the actual file path strings that the
 // vault worker expects in its selected_files field.
-func (s *TransmissionService) resolveWantedFiles(infoHash string) []string {
+func (s *TransmissionService) resolveWantedFiles(infoHash string) ([]string, bool) {
 	s.torrentsLock.RLock()
 	tracked, exists := s.trackedTorrent[infoHash]
 	s.torrentsLock.RUnlock()
 
 	if !exists {
-		return nil
+		return nil, false
 	}
 
 	// Fetch the torrent's file list from the resource map
 	res, err := s.rm.Get(context.Background(), []byte(infoHash))
 	if err != nil || res == nil {
 		log.WithError(err).Warnf("resolveWantedFiles: failed to get resource for %s", infoHash)
-		return nil
+		return nil, true
 	}
 
 	// Build a set of wanted indices for O(1) lookup
@@ -429,7 +431,7 @@ func (s *TransmissionService) resolveWantedFiles(infoHash string) []string {
 
 	// If all files are wanted, skip selective vaulting
 	if len(wantedSet) >= len(res.Files) {
-		return nil
+		return nil, true
 	}
 
 	var paths []string
@@ -438,7 +440,7 @@ func (s *TransmissionService) resolveWantedFiles(infoHash string) []string {
 			paths = append(paths, strings.Join(f.Path, "/"))
 		}
 	}
-	return paths
+	return paths, true
 }
 
 func (s *TransmissionService) getVaultStatus(ctx context.Context, hash string) (stored int64, total int64, completed bool) {
@@ -620,8 +622,13 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 			capturedTargetEmails := targetEmails
 			capturedFastHash := fastHash
 			go func() {
+				s.resolveSem <- struct{}{}
+				defer func() { <-s.resolveSem }()
+
 				log.Infof("torrent-add fast-path: resolving %s in background", capturedFastHash)
-				res, err := s.rm.Get(context.Background(), capturedPayload)
+				ctx, cancel := context.WithTimeout(context.Background(), 3 * time.Minute)
+				defer cancel()
+				res, err := s.rm.Get(ctx, capturedPayload)
 				if err != nil {
 					log.WithError(err).Warnf("torrent-add fast-path: rm.Get() failed for %s", capturedFastHash)
 					return
@@ -779,8 +786,17 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 
 			filesList := []interface{}{}
 			fileStatsList := []interface{}{}
-			if res, err := s.rm.Get(g.Request.Context(), []byte(tracked.InfoHash)); err == nil && res != nil {
-				wantedSet, allWanted := effectiveWantedIndexSet(len(res.Files), tracked.WantedFiles, tracked.UnwantedFiles)
+
+			shouldGetResource := false
+			if status, loaded := s.rm.Status(tracked.InfoHash); loaded && status == lm.Done {
+				shouldGetResource = true
+			} else if completed {
+				shouldGetResource = true
+			}
+
+			if shouldGetResource {
+				if res, err := s.rm.Get(g.Request.Context(), []byte(tracked.InfoHash)); err == nil && res != nil {
+					wantedSet, allWanted := effectiveWantedIndexSet(len(res.Files), tracked.WantedFiles, tracked.UnwantedFiles)
 				for i, f := range res.Files {
 					fPath := strings.Join(f.Path, "/")
 					_, isWanted := wantedSet[i]
@@ -806,6 +822,7 @@ func (s *TransmissionService) HandleRPC(g *gin.Context) {
 					})
 				}
 			}
+		}
 
 			torrentInfo := map[string]interface{}{
 				"id":            id,
@@ -1382,6 +1399,14 @@ func (s *TransmissionService) removeDummyFiles(ctx context.Context, infoHash str
 	m, _ := filepath.Glob(filepath.Join(getDownloadsDir(), ".octor_dummy_"+infoHash+"*"))
 	for _, f := range m {
 		_ = os.Remove(f)
+	}
+
+	shouldGetResource := false
+	if status, loaded := s.rm.Status(infoHash); loaded && status == lm.Done {
+		shouldGetResource = true
+	}
+	if !shouldGetResource {
+		return
 	}
 
 	res, err := s.rm.Get(ctx, []byte(infoHash))
